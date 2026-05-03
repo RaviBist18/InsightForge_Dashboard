@@ -6,11 +6,9 @@ import type { NextRequest } from 'next/server'
 export async function GET(request: NextRequest) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
-
     const next = searchParams.get('next') ?? '/'
 
     if (code) {
-        // NEXT.JS 15 FIX: Accessing cookies must be awaited
         const cookieStore = await cookies()
 
         const supabase = createServerClient(
@@ -34,11 +32,16 @@ export async function GET(request: NextRequest) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
 
         if (!error) {
-            // This builds the full URL: https://your-site.vercel.app/dashboard
-            return NextResponse.redirect(`${origin}${next}`)
+            const forwardedHost = request.headers.get('x-forwarded-host')
+            const isLocalEnv = process.env.NODE_ENV === 'development'
+
+            if (isLocalEnv) {
+                return NextResponse.redirect(`${origin}${next}`)
+            } else {
+                return NextResponse.redirect(`https://${forwardedHost}${next}`)
+            }
         }
     }
 
-    // Redirect to an error page if the handshake fails
     return NextResponse.redirect(`${origin}/auth/auth-code-error`)
 }
