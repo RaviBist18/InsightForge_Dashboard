@@ -15,6 +15,7 @@ Current dashboard data:
 - Highlight: Asia Pacific showing 3x growth in hardware sales
 Keep responses concise and actionable. Max 3-4 sentences or bullet points.`;
 
+console.log('ALL ENV KEYS:', Object.keys(process.env).filter(k => k.includes('GEMINI')));
 export async function POST(req: NextRequest) {
     try {
         const { message, history } = await req.json();
