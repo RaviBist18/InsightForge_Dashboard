@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 
 const SYSTEM_CONTEXT = `You are InsightForge AI, a smart business intelligence assistant embedded in the InsightForge dashboard.
@@ -15,44 +14,46 @@ Current dashboard data:
 - Highlight: Asia Pacific showing 3x growth in hardware sales
 Keep responses concise and actionable. Max 3-4 sentences or bullet points.`;
 
-console.log('ALL ENV KEYS:', Object.keys(process.env).filter(k => k.includes('GEMINI')));
 export async function POST(req: NextRequest) {
     try {
         const { message, history } = await req.json();
 
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
-            return NextResponse.json({ reply: 'API key not configured.' }, { status: 500 });
+            return NextResponse.json({ reply: 'Groq API key not configured.' }, { status: 500 });
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const messages = [
+            { role: 'system', content: SYSTEM_CONTEXT },
+            ...(history || []).slice(-6).map((m: { role: string; content: string }) => ({
+                role: m.role,
+                content: m.content,
+            })),
+            { role: 'user', content: message },
+        ];
 
-        const historyText = (history || [])
-            .slice(-6)
-            .map((m: { role: string; content: string }) =>
-                `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-            ).join('\n');
-
-        const prompt = `${SYSTEM_CONTEXT}\n\n${historyText ? `Previous conversation:\n${historyText}\n\n` : ''}User: ${message}\nAssistant:`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-001',
-            contents: prompt,
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: 'llama-3.1-8b-instant',
+                messages,
+                max_tokens: 300,
+                temperature: 0.7,
+            }),
         });
 
-        const reply = response.text;
+        const groqData = await groqRes.json();
+        console.log('Groq response:', JSON.stringify(groqData));
 
-        if (!reply) {
-            return NextResponse.json({ reply: 'No response generated.' });
-        }
-
+        const reply = groqData?.choices?.[0]?.message?.content ?? 'No response generated.';
         return NextResponse.json({ reply });
 
     } catch (err: any) {
-        console.error('Gemini error:', err?.message ?? err);
-        return NextResponse.json(
-            { reply: 'Sorry, something went wrong. Please try again.' },
-            { status: 500 }
-        );
+        console.error('Groq error:', err?.message);
+        return NextResponse.json({ reply: 'Error occurred. Please try again.' }, { status: 500 });
     }
 }
