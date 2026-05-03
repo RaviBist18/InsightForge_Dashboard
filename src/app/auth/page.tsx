@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle, CheckCircle2, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-// ─── Google Icon SVG ──────────────────────────────────────────────────────────
+const VERCEL_URL = 'https://insight-forge-dashboard.vercel.app';
+
+// ─── Google Icon ──────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -16,7 +19,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// ─── Input Field Component ────────────────────────────────────────────────────
+// ─── Input Field ──────────────────────────────────────────────────────────────
 const InputField = ({
   id, label, type, value, onChange, placeholder, autoComplete, rightElement, error
 }: {
@@ -70,6 +73,7 @@ const Divider = ({ label }: { label: string }) => (
 
 // ─── Auth Page ────────────────────────────────────────────────────────────────
 export default function AuthPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -82,7 +86,6 @@ export default function AuthPage() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; confirm?: string }>({});
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Clear errors on mode switch
   useEffect(() => {
     setError(null);
     setFieldErrors({});
@@ -91,7 +94,16 @@ export default function AuthPage() {
     setConfirmPassword('');
   }, [mode]);
 
-  // ── Validation ──
+  const getRedirectURL = () => {
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost';
+      return isLocal
+        ? 'http://localhost:3000/auth/callback'
+        : `${VERCEL_URL}/auth/callback`;
+    }
+    return `${VERCEL_URL}/auth/callback`;
+  };
+
   const validate = () => {
     const errs: typeof fieldErrors = {};
     if (!email.includes('@')) errs.email = 'Enter a valid email address';
@@ -109,7 +121,7 @@ export default function AuthPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: getRedirectURL(),
           queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       });
@@ -120,7 +132,7 @@ export default function AuthPage() {
     }
   };
 
-  // ── Email/Password Auth ──
+  // ── Email/Password ──
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -129,7 +141,7 @@ export default function AuthPage() {
       setLoading(true);
       try {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings`,
+          redirectTo: `${getRedirectURL()}?next=/dashboard/settings`,
         });
         if (error) throw error;
         setSuccessMsg('Check your email for a password reset link.');
@@ -148,11 +160,11 @@ export default function AuthPage() {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        window.location.href = '/';
+        router.push('/');
+        router.refresh();
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        // Auto-create profile row
         if (data.user) {
           await supabase.from('profiles').upsert({
             id: data.user.id,
@@ -160,9 +172,9 @@ export default function AuthPage() {
             role: 'user',
           });
         }
-        // If email confirmation required, show message; otherwise redirect
         if (data.session) {
-          window.location.href = '/';
+          router.push('/');
+          router.refresh();
         } else {
           setSuccessMsg('Account created! Check your email to confirm before signing in.');
         }
@@ -186,19 +198,15 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden">
 
-      {/* ── Mesh background ── */}
+      {/* Mesh background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-sky-500/[0.07] blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full bg-indigo-500/[0.06] blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-sky-400/[0.03] blur-3xl" />
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.015]"
+        <div className="absolute inset-0 opacity-[0.015]"
           style={{
             backgroundImage: 'linear-gradient(rgba(148,163,184,1) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,1) 1px, transparent 1px)',
             backgroundSize: '40px 40px',
-          }}
-        />
+          }} />
       </div>
 
       <motion.div
@@ -207,18 +215,16 @@ export default function AuthPage() {
         transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
         className="relative w-full max-w-md"
       >
-        {/* Card */}
         <div className="relative rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl overflow-hidden shadow-2xl">
-          {/* Top accent glow line */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent" />
 
           <div className="p-8">
-            {/* Logo + Brand */}
+            {/* Logo */}
             <div className="flex flex-col items-center mb-8">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.1, duration: 0.4 }}
+                transition={{ delay: 0.1 }}
                 className="w-12 h-12 rounded-2xl bg-sky-500 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-sky-500/40 mb-4"
               >
                 IF
@@ -231,26 +237,22 @@ export default function AuthPage() {
               </p>
             </div>
 
-            {/* ── Success message ── */}
+            {/* Success */}
             <AnimatePresence>
               {successMsg && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-6"
-                >
+                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-6">
                   <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[12px] text-emerald-400 font-medium leading-relaxed">{successMsg}</p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* ── Error message ── */}
+            {/* Error */}
             <AnimatePresence>
               {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="flex items-start gap-3 bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 mb-6"
-                >
+                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="flex items-start gap-3 bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 mb-6">
                   <AlertCircle size={16} className="text-rose-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[12px] text-rose-400 font-medium leading-relaxed">{error}</p>
                 </motion.div>
@@ -260,16 +262,15 @@ export default function AuthPage() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={mode}
-                initial={{ opacity: 0, x: mode === 'forgot' ? -20 : 0, y: mode !== 'forgot' ? 8 : 0 }}
-                animate={{ opacity: 1, x: 0, y: 0 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
+                transition={{ duration: 0.2 }}
               >
-                {/* ── FORGOT PASSWORD MODE ── */}
                 {mode === 'forgot' ? (
                   <div className="space-y-5">
                     <p className="text-[12px] text-slate-400 leading-relaxed text-center">
-                      Enter your email and we'll send you a link to reset your password.
+                      Enter your email and we'll send you a reset link.
                     </p>
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <InputField
@@ -279,11 +280,9 @@ export default function AuthPage() {
                         error={fieldErrors.email}
                         rightElement={<Mail size={14} className="text-slate-600" />}
                       />
-                      <motion.button
-                        type="submit" disabled={loading}
+                      <motion.button type="submit" disabled={loading}
                         whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                        className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[13px] font-black tracking-wide transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
+                        className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[13px] font-black transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                         {loading ? <><Loader2 size={14} className="animate-spin" /> Sending...</> : 'Send Reset Link'}
                       </motion.button>
                     </form>
@@ -291,76 +290,50 @@ export default function AuthPage() {
                       ← Back to Sign In
                     </button>
                   </div>
-
                 ) : (
-                  /* ── LOGIN / SIGNUP MODE ── */
                   <div className="space-y-4">
-
-                    {/* Google OAuth Button */}
-                    <motion.button
-                      type="button"
-                      onClick={handleGoogle}
+                    {/* Google */}
+                    <motion.button type="button" onClick={handleGoogle}
                       disabled={googleLoading || loading}
-                      whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.07)' }}
-                      whileTap={{ scale: 0.98 }}
-                      className="w-full flex items-center justify-center gap-3 py-3 bg-white/[0.05] border border-white/[0.1] rounded-xl text-[13px] font-bold text-white transition-all disabled:opacity-50"
-                    >
-                      {googleLoading
-                        ? <Loader2 size={14} className="animate-spin text-slate-400" />
-                        : <GoogleIcon />
-                      }
-                      {googleLoading ? 'Redirecting...' : `Continue with Google`}
+                      whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                      className="w-full flex items-center justify-center gap-3 py-3 bg-white/[0.05] border border-white/[0.1] rounded-xl text-[13px] font-bold text-white transition-all disabled:opacity-50">
+                      {googleLoading ? <Loader2 size={14} className="animate-spin text-slate-400" /> : <GoogleIcon />}
+                      {googleLoading ? 'Redirecting...' : 'Continue with Google'}
                     </motion.button>
 
                     <Divider label="or" />
 
-                    {/* Email / Password Form */}
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <InputField
-                        id="email" label="Email" type="email"
+                      <InputField id="email" label="Email" type="email"
                         value={email} onChange={setEmail}
                         placeholder="you@example.com" autoComplete="email"
-                        error={fieldErrors.email}
-                      />
-                      <InputField
-                        id="password" label="Password" type={showPassword ? 'text' : 'password'}
+                        error={fieldErrors.email} />
+                      <InputField id="password" label="Password"
+                        type={showPassword ? 'text' : 'password'}
                         value={password} onChange={setPassword}
                         placeholder="••••••••"
                         autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                         error={fieldErrors.password}
-                        rightElement={eyeBtn(showPassword, () => setShowPassword(v => !v))}
-                      />
+                        rightElement={eyeBtn(showPassword, () => setShowPassword(v => !v))} />
                       {mode === 'signup' && (
-                        <InputField
-                          id="confirm" label="Confirm Password" type={showConfirm ? 'text' : 'password'}
+                        <InputField id="confirm" label="Confirm Password"
+                          type={showConfirm ? 'text' : 'password'}
                           value={confirmPassword} onChange={setConfirmPassword}
                           placeholder="••••••••" autoComplete="new-password"
                           error={fieldErrors.confirm}
-                          rightElement={eyeBtn(showConfirm, () => setShowConfirm(v => !v))}
-                        />
+                          rightElement={eyeBtn(showConfirm, () => setShowConfirm(v => !v))} />
                       )}
-
-                      {/* Forgot password link */}
                       {mode === 'login' && (
                         <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setMode('forgot')}
-                            className="text-[11px] font-bold text-slate-600 hover:text-sky-400 transition-colors"
-                          >
+                          <button type="button" onClick={() => setMode('forgot')}
+                            className="text-[11px] font-bold text-slate-600 hover:text-sky-400 transition-colors">
                             Forgot password?
                           </button>
                         </div>
                       )}
-
-                      {/* Submit */}
-                      <motion.button
-                        type="submit"
-                        disabled={loading || googleLoading}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[13px] font-black tracking-wide transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 flex items-center justify-center gap-2 mt-1"
-                      >
+                      <motion.button type="submit" disabled={loading || googleLoading}
+                        whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                        className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[13px] font-black transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
                         {loading
                           ? <><Loader2 size={14} className="animate-spin" /> {mode === 'login' ? 'Signing in...' : 'Creating account...'}</>
                           : <>{mode === 'login' ? 'Sign In' : 'Create Account'} <ArrowRight size={14} /></>
@@ -368,26 +341,22 @@ export default function AuthPage() {
                       </motion.button>
                     </form>
 
-                    {/* Terms (signup only) */}
                     {mode === 'signup' && (
                       <p className="text-[10px] text-slate-700 text-center leading-relaxed">
                         By creating an account, you agree to our{' '}
-                        <span className="text-slate-500 hover:text-slate-300 cursor-pointer transition-colors">Terms of Service</span>
+                        <span className="text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">Terms of Service</span>
                         {' '}and{' '}
-                        <span className="text-slate-500 hover:text-slate-300 cursor-pointer transition-colors">Privacy Policy</span>.
+                        <span className="text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">Privacy Policy</span>.
                       </p>
                     )}
 
-                    {/* Toggle login/signup */}
                     <div className="pt-2 border-t border-white/[0.05] text-center">
                       <span className="text-[12px] text-slate-600">
                         {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
                       </span>
-                      <button
-                        type="button"
+                      <button type="button"
                         onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                        className="text-[12px] font-black text-sky-400 hover:text-sky-300 transition-colors"
-                      >
+                        className="text-[12px] font-black text-sky-400 hover:text-sky-300 transition-colors">
                         {mode === 'login' ? 'Sign up' : 'Sign in'}
                       </button>
                     </div>
@@ -398,7 +367,6 @@ export default function AuthPage() {
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-[10px] text-slate-700 mt-6 font-bold uppercase tracking-widest">
           © 2026 InsightForge Intelligence Systems
         </p>
