@@ -1,7 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 const SYSTEM_CONTEXT = `You are InsightForge AI, a smart business intelligence assistant embedded in the InsightForge dashboard.
 You help users understand their business data and metrics.
@@ -25,12 +23,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ reply: 'Gemini API key not configured.' }, { status: 500 });
         }
 
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-        // Build conversation history for context
-        const historyText = history
-            .slice(-6) // last 6 messages for context
+        const historyText = (history || [])
+            .slice(-6)
             .map((m: { role: string; content: string }) =>
                 `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
             ).join('\n');
@@ -41,8 +37,12 @@ ${historyText ? `Previous conversation:\n${historyText}\n` : ''}
 User: ${message}
 Assistant:`;
 
-        const result = await model.generateContent(prompt);
-        const reply = result.response.text();
+        const response = await genAI.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: prompt,
+        });
+
+        const reply = response.text;
 
         return NextResponse.json({ reply });
 
