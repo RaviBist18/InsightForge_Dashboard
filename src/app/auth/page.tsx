@@ -172,8 +172,7 @@ export default function AuthPage() {
           });
         }
         if (data.session) {
-          router.push('/');
-          router.refresh();
+          window.location.href = '/';
         } else {
           setSuccessMsg('Account created! Check your email to confirm before signing in.');
         }
