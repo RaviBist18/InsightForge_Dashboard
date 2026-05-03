@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
+import { AIChat } from './AIChat';
 import { motion, AnimatePresence } from 'framer-motion';
-
 import { usePathname } from 'next/navigation';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -15,16 +15,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-[#020617] font-sans overflow-hidden selection:bg-sky-500/30 selection:text-white relative">
       <div className="mesh-bg" />
-      <Sidebar 
-        collapsed={sidebarCollapsed} 
+      <Sidebar
+        collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
         mobileOpen={isMobileMenuOpen}
         setMobileOpen={setIsMobileMenuOpen}
       />
-      
+
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <Navbar onMenuClick={() => setIsMobileMenuOpen(true)} />
-        
+
         <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
           <div className="max-w-[1600px] mx-auto p-4 md:p-8">
             <AnimatePresence mode="wait">
@@ -40,7 +40,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
                 <footer className="mt-16 pb-8 border-t border-white/5 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                    &copy; 2024 InsightForge Intelligence Systems. All rights reserved.
+                    &copy; 2026 InsightForge Intelligence Systems. All rights reserved.
                   </p>
                   <div className="flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                     <button className="hover:text-sky-400 transition-colors cursor-pointer text-left">Privacy</button>
@@ -53,6 +53,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+
+      {/* AI Chat — available on every page */}
+      <AIChat />
     </div>
   );
 }
