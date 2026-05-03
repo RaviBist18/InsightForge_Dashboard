@@ -6,10 +6,13 @@ import type { NextRequest } from 'next/server'
 export async function GET(request: NextRequest) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
-    const next = searchParams.get('next') ?? '/'
+
+    // CHANGE: Update '/dashboard' to your actual folder name if it is different
+    // For example, if your folder is named 'command-center', use '/command-center'
+    const next = searchParams.get('next') ?? '/dashboard'
 
     if (code) {
-        // FIX: Add 'await' here because cookies() is async in Next.js 15
+        // NEXT.JS 15 FIX: Accessing cookies must be awaited
         const cookieStore = await cookies()
 
         const supabase = createServerClient(
@@ -31,10 +34,13 @@ export async function GET(request: NextRequest) {
         )
 
         const { error } = await supabase.auth.exchangeCodeForSession(code)
+
         if (!error) {
+            // This builds the full URL: https://your-site.vercel.app/dashboard
             return NextResponse.redirect(`${origin}${next}`)
         }
     }
 
+    // Redirect to an error page if the handshake fails
     return NextResponse.redirect(`${origin}/auth/auth-code-error`)
 }
