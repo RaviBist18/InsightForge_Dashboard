@@ -45,8 +45,7 @@ Assistant:`;
 
         console.log('Gemini response:', response);
 
-        const reply = response.candidates?.[0]?.content?.parts?.[0]?.text
-            ?? 'I could not generate a response.';
+        const reply = response.text ?? 'I could not generate a response.';
 
         return NextResponse.json({ reply });
 
