@@ -1,0 +1,7 @@
+{
+  "/(dashboard)/dashboard/data-sources/page": "app/(dashboard)/dashboard/data-sources/page.js",
+  "/(dashboard)/dashboard/[category]/page": "app/(dashboard)/dashboard/[category]/page.js",
+  "/(dashboard)/dashboard/reports/page": "app/(dashboard)/dashboard/reports/page.js",
+  "/(dashboard)/dashboard/saved-views/page": "app/(dashboard)/dashboard/saved-views/page.js",
+  "/(dashboard)/dashboard/settings/page": "app/(dashboard)/dashboard/settings/page.js"
+}
