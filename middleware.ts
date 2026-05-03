@@ -5,14 +5,10 @@ const PUBLIC_ROUTES = ['/auth', '/auth/callback', '/auth/auth-code-error'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   })
 
   const isPublic = PUBLIC_ROUTES.some(r => request.nextUrl.pathname.startsWith(r));
-
-  // Skip middleware entirely for public routes
   if (isPublic) return response;
 
   try {
@@ -42,10 +38,10 @@ export async function middleware(request: NextRequest) {
       }
     )
 
-    const { data: { session } } = await supabase.auth.getSession();
+    // Use getUser() not getSession() — more reliable on Vercel
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Not logged in → redirect to /auth
-    if (!session) {
+    if (!user) {
       const redirectUrl = new URL('/auth', request.url);
       redirectUrl.searchParams.set('next', request.nextUrl.pathname);
       return NextResponse.redirect(redirectUrl);
@@ -54,7 +50,6 @@ export async function middleware(request: NextRequest) {
     return response;
 
   } catch {
-    // On any error let request through — avoids infinite loops
     return response;
   }
 }
