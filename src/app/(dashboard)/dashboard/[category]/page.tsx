@@ -26,42 +26,42 @@ const DataTable = React.memo(({ data }: { data: any[] }) => {
   }, []);
 
   return (
-  <div className="overflow-x-auto mt-4 border border-white/5 rounded-xl">
-    <table className="w-full text-left text-xs">
-      <thead className="bg-white/5 border-b border-white/5">
-        <tr className="text-slate-500 font-bold uppercase tracking-widest">
-          <th className="px-6 py-4">ID</th>
-          <th className="px-6 py-4">Name</th>
-          <th className="px-6 py-4">Email</th>
-          <th className="px-6 py-4">Join Date</th>
-          <th className="px-6 py-4">Status</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-white/5">
-        {data.map((user) => {
-          const searchString = `${user.id} ${user.name} ${user.email} ${user.status}`.toLowerCase();
-          const isMatch = searchQuery === '' || searchString.includes(searchQuery);
-          
-          return (
-          <tr key={user.id} className={cn("hover:bg-white/[0.03] transition-all", !isMatch && "opacity-30 grayscale")}>
-            <td className="px-6 py-4 font-mono text-sky-400">{user.id}</td>
-            <td className="px-6 py-4 font-semibold text-slate-200">{user.name}</td>
-            <td className="px-6 py-4 text-slate-400">{user.email}</td>
-            <td className="px-6 py-4 text-slate-400">{user.joinDate}</td>
-            <td className="px-6 py-4">
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight",
-                user.status === 'Active' ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-500/10 text-slate-400"
-              )}>
-                {user.status}
-              </span>
-            </td>
+    <div className="overflow-x-auto mt-4 border border-white/5 rounded-xl">
+      <table className="w-full text-left text-xs">
+        <thead className="bg-white/5 border-b border-white/5">
+          <tr className="text-slate-500 font-bold uppercase tracking-widest">
+            <th className="px-6 py-4">ID</th>
+            <th className="px-6 py-4">Name</th>
+            <th className="px-6 py-4">Email</th>
+            <th className="px-6 py-4">Join Date</th>
+            <th className="px-6 py-4">Status</th>
           </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {data.map((user) => {
+            const searchString = `${user.id} ${user.name} ${user.email} ${user.status}`.toLowerCase();
+            const isMatch = searchQuery === '' || searchString.includes(searchQuery);
+
+            return (
+              <tr key={user.id} className={cn("hover:bg-white/[0.03] transition-all", !isMatch && "opacity-30 grayscale")}>
+                <td className="px-6 py-4 font-mono text-sky-400">{user.id}</td>
+                <td className="px-6 py-4 font-semibold text-slate-200">{user.name}</td>
+                <td className="px-6 py-4 text-slate-400">{user.email}</td>
+                <td className="px-6 py-4 text-slate-400">{user.joinDate}</td>
+                <td className="px-6 py-4">
+                  <span className={cn(
+                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight",
+                    user.status === 'Active' ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-500/10 text-slate-400"
+                  )}>
+                    {user.status}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 });
 DataTable.displayName = 'DataTable';
@@ -87,7 +87,7 @@ const RadialChartComponent = React.memo(({ data }: { data: any }) => (
   <div className="w-full lg:w-1/2 h-[300px]">
     <ResponsiveContainer width="100%" height="100%">
       <RadialBarChart innerRadius="60%" outerRadius="100%" data={[{ name: 'Margin', value: data.marginPercentage, fill: '#10b981' }, { name: 'Cost', value: 100 - data.marginPercentage, fill: '#f43f5e' }]} startAngle={90} endAngle={-270}>
-        <RadialBar background clockWise dataKey="value" cornerRadius={10} />
+        <RadialBar background dataKey="value" cornerRadius="{10}" />
         <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontWeight: 'bold' }} />
         <Legend />
       </RadialBarChart>
@@ -101,9 +101,9 @@ const BarChartComponent = React.memo(({ data, primaryColor }: { data: any[], pri
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}} dy={10} />
-        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}} dx={-10} />
-        <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontWeight: 'bold' }} />
+        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} dy={10} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} dx={-10} />
+        <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontWeight: 'bold' }} />
         <Bar dataKey="value" fill={primaryColor} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
@@ -117,13 +117,13 @@ const AreaChartComponent = React.memo(({ data, primaryColor }: { data: any[], pr
       <AreaChart data={data}>
         <defs>
           <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={primaryColor} stopOpacity={0.3}/>
-            <stop offset="95%" stopColor={primaryColor} stopOpacity={0}/>
+            <stop offset="5%" stopColor={primaryColor} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}} dy={10} />
-        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 600}} dx={-10} />
+        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} dy={10} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} dx={-10} />
         <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontWeight: 'bold' }} />
         <Area type="monotone" dataKey="value" stroke={primaryColor} strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" dot={{ r: 4, fill: primaryColor, strokeWidth: 2, className: "animate-pulse" }} activeDot={{ r: 8 }} />
       </AreaChart>
@@ -136,7 +136,7 @@ export default function CategoryPage({ params }: { params: Promise<{ category: s
   const resolvedParams = use(params);
   const { category } = resolvedParams;
   const [data, setData] = useState<any | null>(null);
-  
+
   useEffect(() => {
     let isMounted = true;
     getAnalyticsByCategory(category).then((res) => {
@@ -167,7 +167,7 @@ export default function CategoryPage({ params }: { params: Promise<{ category: s
     switch (category) {
       case 'active-users':
         return <DataTable data={data.userData} />;
-      
+
       case 'profit-margin':
         return (
           <div className="flex flex-col lg:flex-row gap-8 mt-4">
@@ -230,9 +230,9 @@ export default function CategoryPage({ params }: { params: Promise<{ category: s
           Total {category === 'profit-margin' ? 'Margin' : category === 'churn-rate' ? 'Rate' : 'Value'}
         </h3>
         <p className="text-4xl font-black text-white tracking-tight mb-8">
-          {category === 'active-users' ? data.totalValue.toLocaleString() : 
-           category === 'profit-margin' || category === 'churn-rate' ? `${data.totalValue}%` : 
-           `$${data.totalValue.toLocaleString()}`}
+          {category === 'active-users' ? data.totalValue.toLocaleString() :
+            category === 'profit-margin' || category === 'churn-rate' ? `${data.totalValue}%` :
+              `$${data.totalValue.toLocaleString()}`}
         </p>
 
         {renderContent()}
