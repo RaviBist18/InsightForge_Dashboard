@@ -11,18 +11,20 @@ Current dashboard data:
 - Churn Rate: 1.2% (-0.3%)
 - Top regions: North America (45%), Europe (30%), Asia Pacific (15%), Latin America (10%)
 - Top categories: SaaS, Infrastructure, Research, Cloud, Fintech
-- Recent anomaly: Profit dropped in West region due to aggressive discounting (avg 45%)
+- Recent anomaly: Profit dropped in West region due to aggressive discounting
 - Highlight: Asia Pacific showing 3x growth in hardware sales
-Keep responses concise, insightful, and actionable. Use bullet points when listing multiple items. Max 3-4 sentences or bullet points.`;
+Keep responses concise and actionable. Max 3-4 sentences or bullet points.`;
 
 export async function POST(req: NextRequest) {
     try {
         const { message, history } = await req.json();
 
         const apiKey = process.env.GEMINI_API_KEY;
-        console.log('API Key exists:', !!apiKey);
+        if (!apiKey) {
+            return NextResponse.json({ reply: 'API key not configured.' }, { status: 500 });
+        }
 
-        const genAI = new GoogleGenAI({ apiKey: apiKey! });
+        const ai = new GoogleGenAI({ apiKey });
 
         const historyText = (history || [])
             .slice(-6)
@@ -30,29 +32,25 @@ export async function POST(req: NextRequest) {
                 `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
             ).join('\n');
 
-        const prompt = `${SYSTEM_CONTEXT}
+        const prompt = `${SYSTEM_CONTEXT}\n\n${historyText ? `Previous conversation:\n${historyText}\n\n` : ''}User: ${message}\nAssistant:`;
 
-${historyText ? `Previous conversation:\n${historyText}\n` : ''}
-User: ${message}
-Assistant:`;
-
-        console.log('Calling Gemini...');
-
-        const response = await genAI.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash-001',
+            contents: prompt,
         });
 
-        console.log('Gemini response:', response);
+        const reply = response.text;
 
-        const reply = response.text ?? 'I could not generate a response.';
+        if (!reply) {
+            return NextResponse.json({ reply: 'No response generated.' });
+        }
 
         return NextResponse.json({ reply });
 
     } catch (err: any) {
-        console.error('Gemini error full:', err?.message, err?.status, JSON.stringify(err));
+        console.error('Gemini error:', err?.message ?? err);
         return NextResponse.json(
-            { reply: 'Sorry, I encountered an error. Please try again.' },
+            { reply: 'Sorry, something went wrong. Please try again.' },
             { status: 500 }
         );
     }
