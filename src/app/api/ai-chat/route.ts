@@ -1,5 +1,7 @@
+
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+
 
 const SYSTEM_CONTEXT = `You are InsightForge AI, a smart business intelligence assistant embedded in the InsightForge dashboard.
 You help users understand their business data and metrics.
@@ -15,13 +17,10 @@ Current dashboard data:
 - Highlight: Asia Pacific showing 3x growth in hardware sales
 Keep responses concise, insightful, and actionable. Use bullet points when listing multiple items. Max 3-4 sentences or bullet points.`;
 
+
 export async function POST(req: NextRequest) {
     try {
         const { message, history } = await req.json();
-
-        if (!process.env.GEMINI_API_KEY) {
-            return NextResponse.json({ reply: 'Gemini API key not configured.' }, { status: 500 });
-        }
 
         const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
