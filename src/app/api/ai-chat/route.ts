@@ -1,7 +1,5 @@
-
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-
 
 const SYSTEM_CONTEXT = `You are InsightForge AI, a smart business intelligence assistant embedded in the InsightForge dashboard.
 You help users understand their business data and metrics.
@@ -17,12 +15,14 @@ Current dashboard data:
 - Highlight: Asia Pacific showing 3x growth in hardware sales
 Keep responses concise, insightful, and actionable. Use bullet points when listing multiple items. Max 3-4 sentences or bullet points.`;
 
-
 export async function POST(req: NextRequest) {
     try {
         const { message, history } = await req.json();
 
-        const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const apiKey = process.env.GEMINI_API_KEY;
+        console.log('API Key exists:', !!apiKey);
+
+        const genAI = new GoogleGenAI({ apiKey: apiKey! });
 
         const historyText = (history || [])
             .slice(-6)
@@ -36,17 +36,22 @@ ${historyText ? `Previous conversation:\n${historyText}\n` : ''}
 User: ${message}
 Assistant:`;
 
+        console.log('Calling Gemini...');
+
         const response = await genAI.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
+            model: 'gemini-2.0-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
         });
 
-        const reply = response.text;
+        console.log('Gemini response:', response);
+
+        const reply = response.candidates?.[0]?.content?.parts?.[0]?.text
+            ?? 'I could not generate a response.';
 
         return NextResponse.json({ reply });
 
     } catch (err: any) {
-        console.error('Gemini API error:', err);
+        console.error('Gemini error full:', err?.message, err?.status, JSON.stringify(err));
         return NextResponse.json(
             { reply: 'Sorry, I encountered an error. Please try again.' },
             { status: 500 }
