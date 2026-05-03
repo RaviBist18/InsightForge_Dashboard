@@ -7,9 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
 
-    // CHANGE: Update '/dashboard' to your actual folder name if it is different
-    // For example, if your folder is named 'command-center', use '/command-center'
-    const next = searchParams.get('next') ?? '/dashboard'
+    const next = searchParams.get('next') ?? '/'
 
     if (code) {
         // NEXT.JS 15 FIX: Accessing cookies must be awaited
