@@ -97,7 +97,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
         )}
 
-        {/* Active left accent */}
         {active && (
           <motion.div
             layoutId="sidebar-accent"
@@ -133,7 +132,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Mobile overlay */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
@@ -154,26 +152,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           mobileOpen ? 'flex fixed inset-y-0 left-0' : 'hidden lg:flex'
         )}
       >
-        {/* Subtle top glow */}
         <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-sky-400/[0.04] to-transparent pointer-events-none" />
 
-        {/* Logo */}
+        {/* Logo wrapped with Link[cite: 1] */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30">
-            IF
-          </div>
-          <AnimatePresence>
-            {(!collapsed || mobileOpen) && (
-              <motion.span
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="font-black text-white text-[15px] tracking-tight whitespace-nowrap"
-              >
-                InsightForge
-              </motion.span>
-            )}
-          </AnimatePresence>
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30 group-hover:bg-sky-400 transition-colors">
+              IF
+            </div>
+            <AnimatePresence>
+              {(!collapsed || mobileOpen) && (
+                <motion.span
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="font-black text-white text-[15px] tracking-tight whitespace-nowrap"
+                >
+                  InsightForge
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
 
-          {/* Mobile close */}
           {mobileOpen && (
             <button onClick={() => setMobileOpen?.(false)} className="ml-auto text-slate-500 hover:text-white">
               <X size={18} />
@@ -181,14 +179,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto no-scrollbar">
-          {/* Main nav */}
           <div className="space-y-0.5">
             {NAV_ITEMS.map(renderNavItem)}
           </div>
 
-          {/* Analytics section */}
           <div>
             <AnimatePresence>
               {(!collapsed || mobileOpen) && (
@@ -206,9 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </nav>
 
-        {/* User + Collapse */}
         <div className="px-3 pb-4 pt-3 border-t border-white/[0.06] space-y-2">
-          {/* User menu */}
           <div className="relative">
             <AnimatePresence>
               {showUserMenu && (!collapsed || mobileOpen) && (
@@ -260,7 +253,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          {/* Collapse toggle (desktop only) */}
           <button
             onClick={() => { setCollapsed(!collapsed); setShowUserMenu(false); }}
             className="hidden lg:flex w-full items-center justify-center gap-2 p-2 rounded-xl text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all text-[11px] font-bold"

@@ -3,13 +3,13 @@ import { FiltersPanel } from '@/components/dashboard/FiltersPanel';
 import { ChartsSection } from '@/components/dashboard/ChartsSection';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
-import { 
-  getTransactions, 
-  getInsights, 
-  getDashboardStats, 
-  getRevenueData, 
-  getCategoryData, 
-  getRegionData 
+import {
+  getTransactions,
+  getInsights,
+  getDashboardStats,
+  getRevenueData,
+  getCategoryData,
+  getRegionData
 } from '@/lib/data';
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ range?: string, category?: string }> }) {
@@ -58,10 +58,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <FiltersPanel />
 
         {/* Charts visualization */}
-        <ChartsSection 
-          revenueData={revenueData} 
-          categoryData={categoryData} 
-          regionData={regionData} 
+        <ChartsSection
+          revenueData={revenueData}
+          categoryData={categoryData}
+          regionData={regionData}
         />
 
         {/* AI Generated Insights */}
