@@ -8,7 +8,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Supabase](https://img.shields.io/badge/Supabase-DB%20%26%20Auth-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
-[![Vercel]((https://insight-forge-dashboard.vercel.app))](https://vercel.com)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-black?style=for-the-badge&logo=vercel)](https://insight-forge-dashboard.vercel.app)
 [![Groq](https://img.shields.io/badge/Groq-AI%20Powered-orange?style=for-the-badge)](https://groq.com)
 
 > **A world-class enterprise analytics dashboard** featuring real-time KPI tracking,
