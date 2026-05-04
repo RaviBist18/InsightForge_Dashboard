@@ -14,10 +14,7 @@
 > **A world-class enterprise analytics dashboard** featuring real-time KPI tracking,
 > AI-powered insights via Groq + Llama 3.1, Google OAuth, and a stunning glassmorphism dark UI.
 
-[🚀 **Live Demo**](https://insight-forge-dashboard.vercel.app) &nbsp;·&nbsp; [🐛 **Report Bug**](https://github.com/YOUR_USERNAME/insightforge-dashboard/issues) &nbsp;·&nbsp; [✨ **Request Feature**](https://github.com/YOUR_USERNAME/insightforge-dashboard/issues)
-
-![GitHub last commit](https://img.shields.io/github/last-commit/YOUR_USERNAME/insightforge-dashboard?style=flat-square&color=0ea5e9)
-![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/insightforge-dashboard?style=flat-square&color=0ea5e9)
+[🚀 **Live Demo**](https://insight-forge-dashboard.vercel.app) &nbsp;·&nbsp; [🐛 **Report Bug**](https://github.com/RaviBist18/insightforge-dashboard/issues) &nbsp;·&nbsp; [✨ **Request Feature**](https://github.com/RaviBist18/insightforge-dashboard/issues)
 
 </div>
 _______________________________________________________________________________________________________________________________________________________
@@ -206,18 +203,12 @@ This project is deployed on **Vercel** with automatic deployments on every push 
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/insightforge-dashboard)
 
-### Deploy Your Own
+## Deploy Your Own
 1. Fork this repo
 2. Import to [Vercel](https://vercel.com)
 3. Add environment variables
 4. Click Deploy ✅
 
----
-## 📄 License
-
-MIT License — feel free to use this project for your portfolio or as a base for your own dashboard.
-
----
 
 <div align="center">
 
