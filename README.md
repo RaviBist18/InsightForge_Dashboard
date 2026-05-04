@@ -181,19 +181,19 @@ ________________________________________________________________________________
 ## 📸 Screenshots
 
 ### Dashboard with KPI cards, charts, and AI insights panel
-![Dashboard](<img width="1588" height="705" alt="Image" src="https://github.com/user-attachments/assets/6a05be40-5bb5-453a-be3f-24eecdba459e" />)
+![Dashboard](https://github.com/user-attachments/assets/6a05be40-5bb5-453a-be3f-24eecdba459e)
 
 ### KPI Detail page with trend analysis and export
-![KPI Detail](<img width="1568" height="712" alt="Image" src="https://github.com/user-attachments/assets/bd2f0376-3684-4c17-98ef-32f241b09d31" />)
+![KPI Detail](https://github.com/user-attachments/assets/bd2f0376-3684-4c17-98ef-32f241b09d31)
 
 ### AI Chat widget powered by Groq + Llama 3.1
-![AI Chat](<img width="453" height="646" alt="Image" src="https://github.com/user-attachments/assets/3fe92e3a-2bef-4b25-b2b8-8baa01e9bc3c" />)
+![AI Chat](https://github.com/user-attachments/assets/3fe92e3a-2bef-4b25-b2b8-8baa01e9bc3c)
 
 ### Auth page with Google OAuth and email/password
-![Auth](<img width="561" height="750" alt="Image" src="https://github.com/user-attachments/assets/faa29463-77d8-40dd-a793-b8d2fc46fc1f" />)
+![Auth](https://github.com/user-attachments/assets/faa29463-77d8-40dd-a793-b8d2fc46fc1f)
 
 ### Revenue Charts and Bar Section
-![Charts](<img width="1536" height="875" alt="Image" src="https://github.com/user-attachments/assets/a0ac5ed4-6768-414e-baf1-f377ace6bbc7" />)
+![Charts](https://github.com/user-attachments/assets/a0ac5ed4-6768-414e-baf1-f377ace6bbc7)
 
 _______________________________________________________________________________________________________________________________________________________
 
