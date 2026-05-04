@@ -223,8 +223,8 @@ MIT License — feel free to use this project for your portfolio or as a base fo
 
 ### Built with ❤️ by Ravi
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)]([https://linkedin.com/in/YOUR_LINKEDIN](https://www.linkedin.com/in/ravi-bist-378a48251/))
-[![GitHub](https://img.shields.io/badge/GitHub-Follow-black?style=for-the-badge&logo=github)]([https://github.com/YOUR_USERNAME](https://github.com/RaviBist18))
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/ravi-bist-378a48251/)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-black?style=for-the-badge&logo=github)](https://github.com/RaviBist18)
 
 ⭐ **Star this repo if you found it helpful!**
 
