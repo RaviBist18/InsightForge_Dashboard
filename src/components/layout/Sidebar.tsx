@@ -7,10 +7,12 @@ import { supabase } from '@/lib/supabase';
 import {
   LayoutDashboard, Database, FileText, Bookmark, Settings,
   ChevronLeft, ChevronRight, X,
-  DollarSign, TrendingUp, Users, Percent, ShoppingCart, Activity
+  DollarSign, TrendingUp, Users, Percent, ShoppingCart, Activity,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
+import { useUserRole } from '@/hooks/useUserRole';
 
 const getInitials = (nameOrEmail: string) => {
   if (!nameOrEmail) return '??';
@@ -21,10 +23,18 @@ const getInitials = (nameOrEmail: string) => {
     : nameOrEmail.substring(0, 2).toUpperCase();
 };
 
-const NAV_ITEMS = [
+// Admin only nav items
+const ADMIN_NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Database, label: 'Data Sources', href: '/dashboard/data-sources' },
   { icon: FileText, label: 'Reports', href: '/dashboard/reports' },
+  { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
+  { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
+];
+
+// User nav items — limited
+const USER_NAV_ITEMS = [
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
   { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
 ];
@@ -36,6 +46,12 @@ const ANALYTICS_ITEMS = [
   { label: 'Profit Margin', href: '/dashboard/profit-margin', icon: Percent, color: '#a78bfa' },
   { label: 'Total Orders', href: '/dashboard/total-orders', icon: ShoppingCart, color: '#fb923c' },
   { label: 'Churn Rate', href: '/dashboard/churn-rate', icon: Activity, color: '#f472b6' },
+];
+
+// User sees only these analytics
+const USER_ANALYTICS_ITEMS = [
+  { label: 'Total Revenue', href: '/dashboard/total-revenue', icon: DollarSign, color: '#38bdf8' },
+  { label: 'Active Users', href: '/dashboard/active-users', icon: Users, color: '#38bdf8' },
 ];
 
 interface SidebarProps {
@@ -50,29 +66,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
-  const [currentUser, setCurrentUser] = React.useState<{ name: string; role: string; email: string } | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const { role, name, email, loading: roleLoading } = useUserRole();
+
+  const isAdmin = role === 'admin';
+  const navItems = isAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
+  const analyticsItems = isAdmin ? ANALYTICS_ITEMS : USER_ANALYTICS_ITEMS;
 
   React.useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role, full_name')
-            .eq('id', user.id)
-            .single();
-          setCurrentUser({
-            name: profile?.full_name || user.email || 'User',
-            role: profile?.role || 'Admin',
-            email: user.email || '',
-          });
-        }
-      } catch { /* silent */ } finally { setLoading(false); }
-    };
-    fetchUser();
-  }, []);
+    if (!roleLoading) setLoading(false);
+  }, [roleLoading]);
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -96,7 +99,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
           />
         )}
-
         {active && (
           <motion.div
             layoutId="sidebar-accent"
@@ -105,14 +107,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
           />
         )}
-
         <item.icon
           className={cn('w-4 h-4 flex-shrink-0 relative z-10 transition-colors duration-200',
             active ? 'text-sky-400' : 'text-slate-600 group-hover:text-slate-400'
           )}
           style={active && item.color ? { color: item.color } : {}}
         />
-
         <AnimatePresence>
           {(!collapsed || mobileOpen) && (
             <motion.span
@@ -154,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-sky-400/[0.04] to-transparent pointer-events-none" />
 
-        {/* Logo wrapped with Link[cite: 1] */}
+        {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
           <Link href="/" className="flex items-center gap-3 group">
             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30 group-hover:bg-sky-400 transition-colors">
@@ -171,7 +171,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </AnimatePresence>
           </Link>
-
           {mobileOpen && (
             <button onClick={() => setMobileOpen?.(false)} className="ml-auto text-slate-500 hover:text-white">
               <X size={18} />
@@ -179,9 +178,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
+        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto no-scrollbar">
           <div className="space-y-0.5">
-            {NAV_ITEMS.map(renderNavItem)}
+            {navItems.map(renderNavItem)}
           </div>
 
           <div>
@@ -196,11 +196,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </AnimatePresence>
             <div className="space-y-0.5">
-              {ANALYTICS_ITEMS.map(renderNavItem)}
+              {analyticsItems.map(renderNavItem)}
             </div>
           </div>
         </nav>
 
+        {/* User section */}
         <div className="px-3 pb-4 pt-3 border-t border-white/[0.06] space-y-2">
           <div className="relative">
             <AnimatePresence>
@@ -213,7 +214,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className="absolute bottom-full left-0 right-0 mb-2 bg-[#0b1629] border border-white/[0.1] rounded-xl overflow-hidden shadow-2xl z-50"
                 >
                   <div className="px-4 py-3 border-b border-white/[0.06]">
-                    <p className="text-[11px] font-bold text-white truncate">{currentUser?.email}</p>
+                    <p className="text-[11px] font-bold text-white truncate">{email}</p>
+                    <div className={cn(
+                      'mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest',
+                      isAdmin
+                        ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20'
+                        : 'bg-slate-500/15 text-slate-400 border border-slate-500/20'
+                    )}>
+                      <Shield size={8} />
+                      {role}
+                    </div>
                   </div>
                   <button
                     onClick={async () => { await supabase.auth.signOut(); window.location.href = '/auth'; }}
@@ -235,18 +245,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {loading ? (
                 <div className="w-7 h-7 rounded-full bg-slate-800 animate-pulse border border-white/10 flex-shrink-0" />
               ) : (
-                <div className="w-7 h-7 flex-shrink-0 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-[10px] font-black text-white border border-white/10">
-                  {getInitials(currentUser?.name ?? '')}
+                <div className={cn(
+                  'w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black text-white border border-white/10',
+                  isAdmin
+                    ? 'bg-gradient-to-br from-sky-400 to-blue-600'
+                    : 'bg-gradient-to-br from-slate-500 to-slate-700'
+                )}>
+                  {getInitials(name)}
                 </div>
               )}
               <AnimatePresence>
-                {(!collapsed || mobileOpen) && !loading && currentUser && (
+                {(!collapsed || mobileOpen) && !loading && (
                   <motion.div
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="flex flex-col items-start overflow-hidden"
                   >
-                    <span className="text-[12px] font-bold text-white truncate max-w-[150px]">{currentUser.name}</span>
-                    <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{currentUser.role} Account</span>
+                    <span className="text-[12px] font-bold text-white truncate max-w-[150px]">{name}</span>
+                    <span className={cn(
+                      'text-[9px] font-black uppercase tracking-widest',
+                      isAdmin ? 'text-sky-600' : 'text-slate-600'
+                    )}>
+                      {role} Account
+                    </span>
                   </motion.div>
                 )}
               </AnimatePresence>
