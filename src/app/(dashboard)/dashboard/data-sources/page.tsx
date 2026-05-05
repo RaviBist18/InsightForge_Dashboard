@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { RoleGuard } from '@/components/common/RoleGuard';
 
 interface DataSource {
   id: string;
@@ -30,7 +31,7 @@ const STATUS_STYLE = {
   syncing: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
 };
 
-export default function DataSourcesPage() {
+function DataSourcesContent() {
   const [sources, setSources] = useState<DataSource[]>(MOCK_SOURCES);
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -43,16 +44,11 @@ export default function DataSourcesPage() {
   const [apiTestResult, setApiTestResult] = useState<'success' | 'error' | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // ── CSV Upload ──
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.endsWith('.csv')) { setUploadError('Only CSV files are supported.'); return; }
-
-    setUploading(true);
-    setUploadError(null);
-    setUploadSuccess(null);
-
+    setUploading(true); setUploadError(null); setUploadSuccess(null);
     try {
       const text = await file.text();
       const lines = text.trim().split('\n');
@@ -61,8 +57,6 @@ export default function DataSourcesPage() {
         const vals = line.split(',').map(v => v.replace(/"/g, '').trim());
         return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] }), {} as Record<string, string>);
       });
-
-      // Try insert into Supabase
       const { error } = await supabase.from('transactions').insert(
         rows.map(r => ({
           customer: r.entity || r.customer || r.name || 'Unknown',
@@ -73,84 +67,43 @@ export default function DataSourcesPage() {
           created_at: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
         }))
       );
-
       if (error) throw new Error(error.message);
-
-      const newSource: DataSource = {
-        id: Date.now().toString(),
-        name: file.name,
-        type: 'csv',
-        status: 'connected',
-        lastSync: 'Just now',
-        records: rows.length,
-      };
-      setSources(prev => [newSource, ...prev]);
+      setSources(prev => [{ id: Date.now().toString(), name: file.name, type: 'csv', status: 'connected', lastSync: 'Just now', records: rows.length }, ...prev]);
       setUploadSuccess(`${rows.length} records imported from ${file.name}`);
-    } catch (err: any) {
-      // Even if Supabase fails, show as locally parsed
+    } catch {
       setUploadSuccess(`CSV parsed (${file.name}) — Supabase not configured yet.`);
-      const newSource: DataSource = {
-        id: Date.now().toString(),
-        name: file.name,
-        type: 'csv',
-        status: 'connected',
-        lastSync: 'Just now',
-        records: 0,
-      };
-      setSources(prev => [newSource, ...prev]);
+      setSources(prev => [{ id: Date.now().toString(), name: file.name, type: 'csv', status: 'connected', lastSync: 'Just now', records: 0 }, ...prev]);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
   };
 
-  // ── Sync source ──
   const handleSync = async (id: string) => {
     setSyncingId(id);
     await new Promise(r => setTimeout(r, 1800));
-    setSources(prev => prev.map(s =>
-      s.id === id ? { ...s, status: 'connected', lastSync: 'Just now' } : s
-    ));
+    setSources(prev => prev.map(s => s.id === id ? { ...s, status: 'connected', lastSync: 'Just now' } : s));
     setSyncingId(null);
   };
 
-  // ── Delete source ──
-  const handleDelete = (id: string) => {
-    setSources(prev => prev.filter(s => s.id !== id));
-  };
-
-  // ── Test API ──
   const handleTestAPI = async () => {
     if (!apiUrl.startsWith('http')) { setApiTestResult('error'); return; }
-    setTestingAPI(true);
-    setApiTestResult(null);
+    setTestingAPI(true); setApiTestResult(null);
     try {
       const res = await fetch(apiUrl);
       setApiTestResult(res.ok ? 'success' : 'error');
-    } catch {
-      setApiTestResult('error');
-    } finally {
-      setTestingAPI(false);
-    }
+    } catch { setApiTestResult('error'); }
+    finally { setTestingAPI(false); }
   };
 
   const handleAddAPI = () => {
     if (!apiName || !apiUrl) return;
-    setSources(prev => [{
-      id: Date.now().toString(),
-      name: apiName,
-      type: 'api',
-      status: apiTestResult === 'success' ? 'connected' : 'error',
-      lastSync: 'Never',
-      records: 0,
-    }, ...prev]);
-    setShowAddAPI(false);
-    setApiName(''); setApiUrl(''); setApiTestResult(null);
+    setSources(prev => [{ id: Date.now().toString(), name: apiName, type: 'api', status: apiTestResult === 'success' ? 'connected' : 'error', lastSync: 'Never', records: 0 }, ...prev]);
+    setShowAddAPI(false); setApiName(''); setApiUrl(''); setApiTestResult(null);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 mb-3">
           <span>Dashboard</span><span className="opacity-30">/</span>
@@ -162,20 +115,14 @@ export default function DataSourcesPage() {
             <p className="text-slate-500 text-[12px] mt-1">Connect and manage your data pipelines.</p>
           </div>
           <div className="flex gap-2">
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[11px] font-black text-slate-300 hover:text-white hover:border-white/[0.16] transition-all"
-            >
-              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-              Upload CSV
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[11px] font-black text-slate-300 hover:text-white hover:border-white/[0.16] transition-all">
+              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Upload CSV
             </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
               onClick={() => setShowAddAPI(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white transition-all shadow-lg shadow-sky-500/25"
-            >
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white transition-all shadow-lg shadow-sky-500/25">
               <Plus size={13} /> Add API Source
             </motion.button>
           </div>
@@ -183,7 +130,6 @@ export default function DataSourcesPage() {
         </div>
       </div>
 
-      {/* Alerts */}
       <AnimatePresence>
         {uploadSuccess && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -203,27 +149,20 @@ export default function DataSourcesPage() {
         )}
       </AnimatePresence>
 
-      {/* Sources List */}
       <div className="space-y-3">
         {sources.length === 0 && (
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-12 text-center">
             <Database className="w-10 h-10 text-slate-700 mx-auto mb-3" />
             <p className="text-slate-500 font-bold text-sm">No data sources yet</p>
-            <p className="text-slate-700 text-[11px] mt-1">Upload a CSV or connect an API to get started</p>
           </div>
         )}
         {sources.map((source, i) => {
           const Icon = TYPE_ICON[source.type];
           const isSyncing = syncingId === source.id;
           return (
-            <motion.div
-              key={source.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ delay: i * 0.05 }}
-              className="flex items-center justify-between gap-4 p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] transition-all"
-            >
+            <motion.div key={source.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: -20 }} transition={{ delay: i * 0.05 }}
+              className="flex items-center justify-between gap-4 p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] transition-all">
               <div className="flex items-center gap-4">
                 <div className="p-2.5 rounded-xl bg-sky-400/10 border border-sky-400/15">
                   <Icon className="w-4 h-4 text-sky-400" />
@@ -243,7 +182,7 @@ export default function DataSourcesPage() {
                   className="p-2 rounded-lg text-slate-600 hover:text-sky-400 hover:bg-sky-400/10 transition-all disabled:opacity-40">
                   <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
                 </button>
-                <button onClick={() => handleDelete(source.id)}
+                <button onClick={() => setSources(prev => prev.filter(s => s.id !== source.id))}
                   className="p-2 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-400/10 transition-all">
                   <Trash2 size={14} />
                 </button>
@@ -253,7 +192,6 @@ export default function DataSourcesPage() {
         })}
       </div>
 
-      {/* Add API Modal */}
       <AnimatePresence>
         {showAddAPI && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -262,10 +200,9 @@ export default function DataSourcesPage() {
             <motion.div initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 12 }}
               onClick={e => e.stopPropagation()}
               className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#080f1f] overflow-hidden shadow-2xl">
-              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/40 to-transparent" />
               <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
                 <h3 className="font-black text-white text-sm">Add API Source</h3>
-                <button onClick={() => setShowAddAPI(false)} className="text-slate-600 hover:text-white transition-colors"><X size={16} /></button>
+                <button onClick={() => setShowAddAPI(false)} className="text-slate-600 hover:text-white"><X size={16} /></button>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -280,9 +217,7 @@ export default function DataSourcesPage() {
                 </div>
                 {apiTestResult && (
                   <div className={cn('flex items-center gap-2 p-3 rounded-xl border text-[12px] font-bold',
-                    apiTestResult === 'success'
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                      : 'bg-rose-500/10 border-rose-500/20 text-rose-400')}>
+                    apiTestResult === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400')}>
                     {apiTestResult === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                     {apiTestResult === 'success' ? 'Connection successful!' : 'Could not reach endpoint.'}
                   </div>
@@ -303,5 +238,13 @@ export default function DataSourcesPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function DataSourcesPage() {
+  return (
+    <RoleGuard allowedRoles={['admin']}>
+      <DataSourcesContent />
+    </RoleGuard>
   );
 }

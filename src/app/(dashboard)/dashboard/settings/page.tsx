@@ -8,14 +8,20 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useUserRole } from '@/hooks/useUserRole';
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
 
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+const ALL_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'security', label: 'Security', icon: Lock },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+];
+
+// Users only see Profile tab
+const USER_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'profile', label: 'Profile', icon: User },
 ];
 
 const Toast = ({ msg, type }: { msg: string; type: 'success' | 'error' }) => (
@@ -36,17 +42,20 @@ const Toast = ({ msg, type }: { msg: string; type: 'success' | 'error' }) => (
 );
 
 export default function SettingsPage() {
+  const { role, loading: roleLoading } = useUserRole();
+  const isAdmin = role === 'admin';
+  const tabs = isAdmin ? ALL_TABS : USER_TABS;
+
   const [tab, setTab] = useState<Tab>('profile');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // Profile
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('');
+  const [userRole, setUserRole] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Security
-  const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -54,10 +63,7 @@ export default function SettingsPage() {
 
   // Notifications
   const [notifSettings, setNotifSettings] = useState({
-    emailAlerts: true,
-    weeklyReport: true,
-    churnAlerts: false,
-    revenueAlerts: true,
+    emailAlerts: true, weeklyReport: true, churnAlerts: false, revenueAlerts: true,
   });
 
   // Appearance
@@ -81,20 +87,23 @@ export default function SettingsPage() {
         setEmail(user.email || '');
         const { data: profile } = await supabase
           .from('profiles').select('full_name, role').eq('id', user.id).single();
-        if (profile) { setFullName(profile.full_name || ''); setRole(profile.role || 'user'); }
+        if (profile) { setFullName(profile.full_name || ''); setUserRole(profile.role || 'user'); }
       } catch { /* silent */ }
     };
     load();
   }, []);
 
-  // ── Save profile ──
+  // Reset to profile tab if user and currently on admin-only tab
+  useEffect(() => {
+    if (!isAdmin && tab !== 'profile') setTab('profile');
+  }, [isAdmin, tab]);
+
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase.from('profiles')
-        .upsert({ id: user.id, full_name: fullName, role });
+      const { error } = await supabase.from('profiles').upsert({ id: user.id, full_name: fullName, role: userRole });
       if (error) throw error;
       showToast('Profile updated successfully!', 'success');
     } catch (err: any) {
@@ -102,7 +111,6 @@ export default function SettingsPage() {
     } finally { setSavingProfile(false); }
   };
 
-  // ── Change password ──
   const handleChangePassword = async () => {
     if (newPw !== confirmPw) { showToast('Passwords do not match', 'error'); return; }
     if (newPw.length < 6) { showToast('Password must be 6+ characters', 'error'); return; }
@@ -110,14 +118,13 @@ export default function SettingsPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPw });
       if (error) throw error;
-      setCurrentPw(''); setNewPw(''); setConfirmPw('');
+      setNewPw(''); setConfirmPw('');
       showToast('Password changed successfully!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Failed to change password', 'error');
     } finally { setSavingPw(false); }
   };
 
-  // ── Delete account ──
   const handleDeleteAccount = async () => {
     if (deleteConfirm !== 'DELETE') return;
     setDeletingAccount(true);
@@ -131,7 +138,7 @@ export default function SettingsPage() {
 
   const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
     <button onClick={onChange}
-      className={cn('relative w-10 h-5.5 h-[22px] rounded-full transition-all duration-300 flex-shrink-0',
+      className={cn('relative w-10 h-[22px] rounded-full transition-all duration-300 flex-shrink-0',
         checked ? 'bg-sky-500' : 'bg-white/[0.1]')}>
       <div className={cn('absolute top-0.5 w-[18px] h-[18px] rounded-full bg-white shadow transition-all duration-300',
         checked ? 'left-[22px]' : 'left-0.5')} />
@@ -150,6 +157,14 @@ export default function SettingsPage() {
 
   const ACCENT_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fb923c', '#f472b6', '#fbbf24'];
 
+  if (roleLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <Loader2 className="w-6 h-6 text-sky-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
@@ -158,14 +173,29 @@ export default function SettingsPage() {
           <span>Dashboard</span><span className="opacity-30">/</span>
           <span className="text-sky-400">Settings</span>
         </div>
-        <h1 className="text-2xl font-black text-white tracking-tight">Settings</h1>
-        <p className="text-slate-500 text-[12px] mt-1">Manage your account and preferences.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Settings</h1>
+            <p className="text-slate-500 text-[12px] mt-1">
+              {isAdmin ? 'Manage your account and preferences.' : 'Update your profile information.'}
+            </p>
+          </div>
+          {/* Role badge */}
+          <div className={cn(
+            'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest',
+            isAdmin
+              ? 'bg-sky-500/10 border-sky-500/20 text-sky-400'
+              : 'bg-slate-500/10 border-slate-500/20 text-slate-400'
+          )}>
+            {role} Account
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-6">
         {/* Sidebar tabs */}
         <div className="w-44 flex-shrink-0 space-y-1">
-          {TABS.map(t => (
+          {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition-all text-left',
                 tab === t.id
@@ -175,6 +205,21 @@ export default function SettingsPage() {
               {t.label}
             </button>
           ))}
+
+          {/* Show locked tabs hint for users */}
+          {!isAdmin && (
+            <div className="pt-3 px-3">
+              <p className="text-[9px] font-black text-slate-700 uppercase tracking-widest">
+                Admin only
+              </p>
+              {ALL_TABS.filter(t => t.id !== 'profile').map(t => (
+                <div key={t.id} className="flex items-center gap-3 px-0 py-2 text-[12px] font-bold text-slate-700 opacity-40 cursor-not-allowed">
+                  <t.icon className="w-4 h-4" />
+                  {t.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -189,21 +234,18 @@ export default function SettingsPage() {
               {tab === 'profile' && (
                 <div className="p-6 space-y-5">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Profile Information</h2>
-
-                  {/* Avatar */}
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-xl font-black text-white border border-white/10">
                       {fullName ? fullName[0].toUpperCase() : email[0]?.toUpperCase() || '?'}
                     </div>
                     <div>
                       <p className="text-[12px] font-black text-white">{fullName || email}</p>
-                      <p className="text-[10px] text-slate-600 capitalize mt-0.5">{role} Account</p>
+                      <p className="text-[10px] text-slate-600 capitalize mt-0.5">{userRole} Account</p>
                     </div>
                   </div>
-
                   <div className="space-y-4">
                     {[
-                      { label: 'Full Name', value: fullName, onChange: setFullName, placeholder: 'Jane Doe', type: 'text' },
+                      { label: 'Full Name', value: fullName, onChange: setFullName, placeholder: 'Jane Doe', type: 'text', disabled: false },
                       { label: 'Email', value: email, onChange: () => { }, placeholder: '', type: 'email', disabled: true },
                     ].map(f => (
                       <div key={f.label}>
@@ -218,7 +260,6 @@ export default function SettingsPage() {
                       </div>
                     ))}
                   </div>
-
                   <motion.button onClick={handleSaveProfile} disabled={savingProfile}
                     whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white disabled:opacity-50 transition-all shadow-lg shadow-sky-500/20">
@@ -227,20 +268,20 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── SECURITY TAB ── */}
-              {tab === 'security' && (
+              {/* ── SECURITY TAB — Admin only ── */}
+              {tab === 'security' && isAdmin && (
                 <div className="p-6 space-y-5">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Change Password</h2>
                   <div className="space-y-4">
                     {[
-                      { label: 'New Password', value: newPw, onChange: setNewPw, ac: 'new-password' },
-                      { label: 'Confirm Password', value: confirmPw, onChange: setConfirmPw, ac: 'new-password' },
+                      { label: 'New Password', value: newPw, onChange: setNewPw },
+                      { label: 'Confirm Password', value: confirmPw, onChange: setConfirmPw },
                     ].map(f => (
                       <div key={f.label}>
                         <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 block mb-1.5">{f.label}</label>
                         <div className="relative">
                           <input type={showPw ? 'text' : 'password'} value={f.value}
-                            onChange={e => f.onChange(e.target.value)} autoComplete={f.ac}
+                            onChange={e => f.onChange(e.target.value)} autoComplete="new-password"
                             placeholder="••••••••"
                             className="w-full px-4 pr-10 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-[13px] text-white placeholder-slate-700 focus:outline-none focus:border-sky-500/50 transition-all" />
                           <button type="button" onClick={() => setShowPw(v => !v)}
@@ -257,16 +298,14 @@ export default function SettingsPage() {
                     {savingPw ? <><Loader2 size={12} className="animate-spin" /> Updating...</> : <><Lock size={12} /> Update Password</>}
                   </motion.button>
 
-                  {/* Danger zone */}
+                  {/* Danger zone — Admin only */}
                   <div className="mt-6 pt-6 border-t border-rose-500/20">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 mb-4">Danger Zone</h3>
                     <p className="text-[12px] text-slate-500 mb-3">Type <span className="font-black text-white">DELETE</span> to permanently delete your account.</p>
                     <div className="flex gap-2">
-                      <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
-                        placeholder="Type DELETE"
+                      <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="Type DELETE"
                         className="flex-1 px-4 py-2.5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-[13px] text-white placeholder-rose-900 focus:outline-none focus:border-rose-500/50 transition-all" />
-                      <button onClick={handleDeleteAccount}
-                        disabled={deleteConfirm !== 'DELETE' || deletingAccount}
+                      <button onClick={handleDeleteAccount} disabled={deleteConfirm !== 'DELETE' || deletingAccount}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/15 border border-rose-500/25 text-[11px] font-black text-rose-400 hover:bg-rose-500/25 disabled:opacity-30 transition-all">
                         {deletingAccount ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                         Delete
@@ -276,8 +315,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── NOTIFICATIONS TAB ── */}
-              {tab === 'notifications' && (
+              {/* ── NOTIFICATIONS TAB — Admin only ── */}
+              {tab === 'notifications' && isAdmin && (
                 <div className="p-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Notification Preferences</h2>
                   <div>
@@ -295,8 +334,7 @@ export default function SettingsPage() {
                       </SettingRow>
                     ))}
                   </div>
-                  <motion.button
-                    onClick={() => showToast('Notification preferences saved!', 'success')}
+                  <motion.button onClick={() => showToast('Notification preferences saved!', 'success')}
                     whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
                     className="mt-5 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white transition-all shadow-lg shadow-sky-500/20">
                     <Save size={12} /> Save Preferences
@@ -304,8 +342,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── APPEARANCE TAB ── */}
-              {tab === 'appearance' && (
+              {/* ── APPEARANCE TAB — Admin only ── */}
+              {tab === 'appearance' && isAdmin && (
                 <div className="p-6 space-y-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Appearance</h2>
                   <div>
@@ -327,8 +365,7 @@ export default function SettingsPage() {
                       Dark Only
                     </span>
                   </SettingRow>
-                  <motion.button
-                    onClick={() => showToast('Appearance settings saved!', 'success')}
+                  <motion.button onClick={() => showToast('Appearance settings saved!', 'success')}
                     whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white transition-all shadow-lg shadow-sky-500/20">
                     <Save size={12} /> Save Appearance
@@ -340,7 +377,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Toast */}
       <AnimatePresence>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
       </AnimatePresence>

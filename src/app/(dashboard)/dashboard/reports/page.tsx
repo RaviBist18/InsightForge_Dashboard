@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Download, Loader2, CheckCircle2, Calendar, BarChart2, Users, TrendingUp, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TRANSACTIONS, INSIGHTS } from '@/data/mockData';
+import { RoleGuard } from '@/components/common/RoleGuard';
 
 interface Report {
   id: string;
@@ -34,12 +35,13 @@ const generateCSV = (type: string): string => {
     case 'insights':
       return 'Title,Type,Priority,Description\n' +
         INSIGHTS.map(i => `"${i.title}","${i.type}","${i.priority}","${i.description}"`).join('\n');
-    default:
-      return '';
+    default: return '';
   }
 };
 
-export default function ReportsPage() {
+const TYPE_ICON_MAP = { revenue: TrendingUp, transactions: FileText, users: Users, insights: BarChart2 };
+
+function ReportsContent() {
   const [reports, setReports] = useState<Report[]>([
     { id: '1', name: 'Revenue Report', type: 'revenue', generatedAt: 'May 2, 2026', size: '4.2 KB', status: 'ready' },
     { id: '2', name: 'Transaction Export', type: 'transactions', generatedAt: 'May 1, 2026', size: '18.7 KB', status: 'ready' },
@@ -50,16 +52,12 @@ export default function ReportsPage() {
   const handleGenerate = async (type: typeof REPORT_TYPES[0]) => {
     setGenerating(type.id);
     await new Promise(r => setTimeout(r, 1600));
-
-    const newReport: Report = {
-      id: Date.now().toString(),
-      name: type.label,
+    setReports(prev => [{
+      id: Date.now().toString(), name: type.label,
       type: type.id as Report['type'],
       generatedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      size: `${(Math.random() * 20 + 2).toFixed(1)} KB`,
-      status: 'ready',
-    };
-    setReports(prev => [newReport, ...prev]);
+      size: `${(Math.random() * 20 + 2).toFixed(1)} KB`, status: 'ready',
+    }, ...prev]);
     setGenerating(null);
   };
 
@@ -74,13 +72,8 @@ export default function ReportsPage() {
     a.click();
   };
 
-  const handleDelete = (id: string) => setReports(prev => prev.filter(r => r.id !== id));
-
-  const TYPE_ICON_MAP = { revenue: TrendingUp, transactions: FileText, users: Users, insights: BarChart2 };
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 mb-3">
           <span>Dashboard</span><span className="opacity-30">/</span>
@@ -91,7 +84,6 @@ export default function ReportsPage() {
             <h1 className="text-2xl font-black text-white tracking-tight">Reports</h1>
             <p className="text-slate-500 text-[12px] mt-1">Generate and download data reports.</p>
           </div>
-          {/* Date range filter */}
           <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.07] rounded-xl p-1">
             {['7d', '30d', '90d'].map(r => (
               <button key={r} onClick={() => setDateRange(r)}
@@ -104,7 +96,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Generate New Report */}
       <div>
         <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3">Generate New Report</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -112,19 +103,11 @@ export default function ReportsPage() {
             const Icon = type.icon;
             const isGenerating = generating === type.id;
             return (
-              <motion.button
-                key={type.id}
-                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                onClick={() => handleGenerate(type)}
-                disabled={!!generating}
-                className="flex items-center gap-4 p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04] text-left transition-all disabled:opacity-50 group"
-              >
-                <div className="p-2.5 rounded-xl border flex-shrink-0 transition-all"
-                  style={{ background: `${type.color}15`, borderColor: `${type.color}25` }}>
-                  {isGenerating
-                    ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: type.color }} />
-                    : <Icon className="w-4 h-4" style={{ color: type.color }} />
-                  }
+              <motion.button key={type.id} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                onClick={() => handleGenerate(type)} disabled={!!generating}
+                className="flex items-center gap-4 p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04] text-left transition-all disabled:opacity-50 group">
+                <div className="p-2.5 rounded-xl border flex-shrink-0" style={{ background: `${type.color}15`, borderColor: `${type.color}25` }}>
+                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: type.color }} /> : <Icon className="w-4 h-4" style={{ color: type.color }} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-black text-white">{type.label}</p>
@@ -139,22 +122,16 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Generated Reports */}
       <div>
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3">
-          Generated Reports ({reports.length})
-        </h2>
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3">Generated Reports ({reports.length})</h2>
         <div className="space-y-2">
           <AnimatePresence>
             {reports.map((report, i) => {
               const Icon = TYPE_ICON_MAP[report.type] ?? FileText;
               return (
-                <motion.div
-                  key={report.id}
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] transition-all"
-                >
+                <motion.div key={report.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -20 }} transition={{ delay: i * 0.04 }}
+                  className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] transition-all">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                       <Icon className="w-4 h-4 text-slate-400" />
@@ -174,7 +151,7 @@ export default function ReportsPage() {
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-[10px] font-black text-sky-400 hover:bg-sky-500/20 transition-all">
                       <Download size={11} /> Download
                     </button>
-                    <button onClick={() => handleDelete(report.id)}
+                    <button onClick={() => setReports(prev => prev.filter(r => r.id !== report.id))}
                       className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-400/10 transition-all">
                       <Trash2 size={13} />
                     </button>
@@ -192,5 +169,13 @@ export default function ReportsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <RoleGuard allowedRoles={['admin']}>
+      <ReportsContent />
+    </RoleGuard>
   );
 }
