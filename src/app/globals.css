@@ -107,3 +107,11 @@ body {
 .compact h1 {
   font-size: 1.25rem !important;
 }
+
+.sidebar-accent-line {
+  background: var(--accent) !important;
+}
+
+.accent-btn {
+  background: var(--accent) !important;
+}
