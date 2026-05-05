@@ -257,7 +257,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── SECURITY TAB — Admin only ── */}
+              {/* ── SECURITY TAB — */}
               {tab === 'security' && (
                 <div className="p-6 space-y-5">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Change Password</h2>
@@ -306,8 +306,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── NOTIFICATIONS TAB — Admin only ── */}
-              {tab === 'notifications' && isAdmin && (
+              {/* ── NOTIFICATIONS TAB —  */}
+              {tab === 'notifications' && (
                 <div className="p-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Notification Preferences</h2>
                   <div>
@@ -333,8 +333,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── APPEARANCE TAB — Admin only ── */}
-              {tab === 'appearance' && isAdmin && (
+              {/* ── APPEARANCE TAB —  */}
+              {tab === 'appearance' && (
                 <div className="p-6 space-y-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Appearance</h2>
                   <div>
