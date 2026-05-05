@@ -22,6 +22,9 @@ const ALL_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // Users only see Profile tab
 const USER_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'profile', label: 'Profile', icon: User },
+  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
 const Toast = ({ msg, type }: { msg: string; type: 'success' | 'error' }) => (
@@ -206,20 +209,6 @@ export default function SettingsPage() {
             </button>
           ))}
 
-          {/* Show locked tabs hint for users */}
-          {!isAdmin && (
-            <div className="pt-3 px-3">
-              <p className="text-[9px] font-black text-slate-700 uppercase tracking-widest">
-                Admin only
-              </p>
-              {ALL_TABS.filter(t => t.id !== 'profile').map(t => (
-                <div key={t.id} className="flex items-center gap-3 px-0 py-2 text-[12px] font-bold text-slate-700 opacity-40 cursor-not-allowed">
-                  <t.icon className="w-4 h-4" />
-                  {t.label}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Content */}
@@ -269,7 +258,7 @@ export default function SettingsPage() {
               )}
 
               {/* ── SECURITY TAB — Admin only ── */}
-              {tab === 'security' && isAdmin && (
+              {tab === 'security' && (
                 <div className="p-6 space-y-5">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Change Password</h2>
                   <div className="space-y-4">
@@ -299,19 +288,21 @@ export default function SettingsPage() {
                   </motion.button>
 
                   {/* Danger zone — Admin only */}
-                  <div className="mt-6 pt-6 border-t border-rose-500/20">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 mb-4">Danger Zone</h3>
-                    <p className="text-[12px] text-slate-500 mb-3">Type <span className="font-black text-white">DELETE</span> to permanently delete your account.</p>
-                    <div className="flex gap-2">
-                      <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="Type DELETE"
-                        className="flex-1 px-4 py-2.5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-[13px] text-white placeholder-rose-900 focus:outline-none focus:border-rose-500/50 transition-all" />
-                      <button onClick={handleDeleteAccount} disabled={deleteConfirm !== 'DELETE' || deletingAccount}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/15 border border-rose-500/25 text-[11px] font-black text-rose-400 hover:bg-rose-500/25 disabled:opacity-30 transition-all">
-                        {deletingAccount ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                        Delete
-                      </button>
+                  {isAdmin && (
+                    <div className="mt-6 pt-6 border-t border-rose-500/20">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 mb-4">Danger Zone</h3>
+                      <p className="text-[12px] text-slate-500 mb-3">Type <span className="font-black text-white">DELETE</span> to permanently delete your account.</p>
+                      <div className="flex gap-2">
+                        <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="Type DELETE"
+                          className="flex-1 px-4 py-2.5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-[13px] text-white placeholder-rose-900 focus:outline-none focus:border-rose-500/50 transition-all" />
+                        <button onClick={handleDeleteAccount} disabled={deleteConfirm !== 'DELETE' || deletingAccount}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/15 border border-rose-500/25 text-[11px] font-black text-rose-400 hover:bg-rose-500/25 disabled:opacity-30 transition-all">
+                          {deletingAccount ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
