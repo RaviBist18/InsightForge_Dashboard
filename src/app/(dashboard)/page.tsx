@@ -3,6 +3,7 @@ import { FiltersPanel } from '@/components/dashboard/FiltersPanel';
 import { ChartsSection } from '@/components/dashboard/ChartsSection';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
+import { RealTimeDashboard } from '@/components/dashboard/RealTimeDashboard';
 import {
   getTransactions,
   getInsights,
@@ -66,6 +67,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
         {/* AI Generated Insights */}
         <InsightsPanel insights={insights} />
+
+        {/* Real-Time Intelligence */}
+        <RealTimeDashboard />
 
         {/* Transaction Table */}
         <DataTable transactions={transactions} />
