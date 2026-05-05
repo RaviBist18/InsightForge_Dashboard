@@ -103,12 +103,24 @@ export default function SettingsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase.from('profiles').upsert({ id: user.id, full_name: fullName, role: userRole });
+
+      // We only update the full_name to stay compliant with your new policy
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: fullName
+        })
+        .eq('id', user.id);
+
       if (error) throw error;
+
       showToast('Profile updated successfully!', 'success');
     } catch (err: any) {
+      // If you still see an error here, check the Supabase logs
       showToast(err.message || 'Failed to update profile', 'error');
-    } finally { setSavingProfile(false); }
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -206,20 +218,6 @@ export default function SettingsPage() {
             </button>
           ))}
 
-          {/* Show locked tabs hint for users */}
-          {!isAdmin && (
-            <div className="pt-3 px-3">
-              <p className="text-[9px] font-black text-slate-700 uppercase tracking-widest">
-                Admin only
-              </p>
-              {ALL_TABS.filter(t => t.id !== 'profile').map(t => (
-                <div key={t.id} className="flex items-center gap-3 px-0 py-2 text-[12px] font-bold text-slate-700 opacity-40 cursor-not-allowed">
-                  <t.icon className="w-4 h-4" />
-                  {t.label}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Content */}
