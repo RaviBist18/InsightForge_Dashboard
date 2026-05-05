@@ -19,7 +19,7 @@ const ALL_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
-// Users only see Profile tab
+// Users see all tabs except danger zone is hidden inside Security
 const USER_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'security', label: 'Security', icon: Lock },
@@ -96,10 +96,7 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  // Reset to profile tab if user and currently on admin-only tab
-  useEffect(() => {
-    if (!isAdmin && tab !== 'profile') setTab('profile');
-  }, [isAdmin, tab]);
+
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
@@ -209,6 +206,20 @@ export default function SettingsPage() {
             </button>
           ))}
 
+          {/* Show locked tabs hint for users */}
+          {!isAdmin && (
+            <div className="pt-3 px-3">
+              <p className="text-[9px] font-black text-slate-700 uppercase tracking-widest">
+                Admin only
+              </p>
+              {ALL_TABS.filter(t => t.id !== 'profile').map(t => (
+                <div key={t.id} className="flex items-center gap-3 px-0 py-2 text-[12px] font-bold text-slate-700 opacity-40 cursor-not-allowed">
+                  <t.icon className="w-4 h-4" />
+                  {t.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -257,7 +268,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── SECURITY TAB — */}
+              {/* ── SECURITY TAB — All users ── */}
               {tab === 'security' && (
                 <div className="p-6 space-y-5">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Change Password</h2>
@@ -306,7 +317,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── NOTIFICATIONS TAB —  */}
+              {/* ── NOTIFICATIONS TAB — All users ── */}
               {tab === 'notifications' && (
                 <div className="p-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Notification Preferences</h2>
@@ -333,7 +344,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── APPEARANCE TAB —  */}
+              {/* ── APPEARANCE TAB — All users ── */}
               {tab === 'appearance' && (
                 <div className="p-6 space-y-6">
                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Appearance</h2>
