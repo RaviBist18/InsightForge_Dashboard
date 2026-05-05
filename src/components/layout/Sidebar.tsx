@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
-  LayoutDashboard, Database, FileText, Bookmark, Settings,
+  LayoutDashboard, Database, FileText, Bookmark, Settings, UserCog,
   ChevronLeft, ChevronRight, X,
   DollarSign, TrendingUp, Users, Percent, ShoppingCart, Activity,
   Shield
@@ -30,6 +30,7 @@ const ADMIN_NAV_ITEMS = [
   { icon: FileText, label: 'Reports', href: '/dashboard/reports' },
   { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
   { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
+  { icon: UserCog, label: 'User Management', href: '/dashboard/admin/users' },
 ];
 
 // User nav items — limited
