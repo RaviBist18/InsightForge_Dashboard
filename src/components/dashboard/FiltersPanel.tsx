@@ -113,7 +113,8 @@ export const FiltersPanel: React.FC = () => {
                 {isActive && (
                   <motion.div
                     layoutId="filter-range-bg"
-                    className="absolute inset-0 rounded-[10px] bg-sky-500"
+                    className="absolute inset-0 rounded-[10px]"
+                    style={{ background: 'var(--accent)' }}
                     transition={{ type: 'spring', bounce: 0.18, duration: 0.5 }}
                   />
                 )}
@@ -150,7 +151,8 @@ export const FiltersPanel: React.FC = () => {
         <div className="flex items-center gap-3 ml-1">
           <button
             onClick={handleApply}
-            className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400 hover:text-sky-300 transition-colors duration-200"
+            className="text-[10px] font-black uppercase tracking-[0.16em] transition-colors duration-200"
+            style={{ color: 'var(--accent)' }}
           >
             Apply Filters
           </button>
@@ -171,11 +173,12 @@ export const FiltersPanel: React.FC = () => {
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.97 }}
         className={cn(
-          "relative flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 overflow-hidden",
+          "relative flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 overflow-hidden text-white",
           exported
-            ? "bg-emerald-500 shadow-lg shadow-emerald-500/25 text-white"
-            : "bg-sky-500 hover:bg-sky-400 shadow-lg shadow-sky-500/25 text-white"
+            ? "bg-emerald-500 shadow-lg shadow-emerald-500/25"
+            : "hover:opacity-90 shadow-lg"
         )}
+        style={!exported ? { background: 'var(--accent)' } : {}}
       >
         <AnimatePresence mode="wait">
           {isExporting ? (

@@ -115,3 +115,20 @@ body {
 .accent-btn {
   background: var(--accent) !important;
 }
+
+/* Accent color system */
+.accent-color {
+  color: var(--accent) !important;
+}
+
+.accent-bg {
+  background: var(--accent) !important;
+}
+
+.accent-border {
+  border-color: var(--accent) !important;
+}
+
+.accent-glow {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 30%, transparent) !important;
+}

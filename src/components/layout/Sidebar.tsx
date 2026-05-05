@@ -23,7 +23,6 @@ const getInitials = (nameOrEmail: string) => {
     : nameOrEmail.substring(0, 2).toUpperCase();
 };
 
-// Admin only nav items
 const ADMIN_NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Database, label: 'Data Sources', href: '/dashboard/data-sources' },
@@ -33,7 +32,6 @@ const ADMIN_NAV_ITEMS = [
   { icon: UserCog, label: 'User Management', href: '/dashboard/admin/users' },
 ];
 
-// User nav items — limited
 const USER_NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
@@ -49,7 +47,6 @@ const ANALYTICS_ITEMS = [
   { label: 'Churn Rate', href: '/dashboard/churn-rate', icon: Activity, color: '#f472b6' },
 ];
 
-// User sees only these analytics
 const USER_ANALYTICS_ITEMS = [
   { label: 'Total Revenue', href: '/dashboard/total-revenue', icon: DollarSign, color: '#38bdf8' },
   { label: 'Active Users', href: '/dashboard/active-users', icon: Users, color: '#38bdf8' },
@@ -104,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <motion.div
             layoutId="sidebar-accent"
             className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5 rounded-r-full"
-            style={{ background: item.color ?? '#38bdf8' }}
+            style={{ background: 'var(--accent)' }} // FIX 1: Applied dynamic accent
             transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
           />
         )}
@@ -155,10 +152,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-sky-400/[0.04] to-transparent pointer-events-none" />
 
-        {/* Logo */}
+        {/* Logo Section */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30 group-hover:bg-sky-400 transition-colors">
+            {/* FIX 2: Applied dynamic accent background to the IF logo icon */}
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-black text-white shadow-lg transition-all group-hover:opacity-90"
+              style={{ background: 'var(--accent)' }}
+            >
               IF
             </div>
             <AnimatePresence>
@@ -179,7 +180,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto no-scrollbar">
           <div className="space-y-0.5">
             {navItems.map(renderNavItem)}
@@ -202,7 +202,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </nav>
 
-        {/* User section */}
         <div className="px-3 pb-4 pt-3 border-t border-white/[0.06] space-y-2">
           <div className="relative">
             <AnimatePresence>
