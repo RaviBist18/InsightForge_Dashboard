@@ -9,6 +9,8 @@ import {
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useUserRole } from '@/hooks/useUserRole';
+import { AppearanceTab } from '@/components/dashboard/AppearanceTab';
+
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance';
 
@@ -342,35 +344,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* ── APPEARANCE TAB — All users ── */}
               {tab === 'appearance' && (
-                <div className="p-6 space-y-6">
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Appearance</h2>
-                  <div>
-                    <p className="text-[13px] font-bold text-white mb-1">Accent Color</p>
-                    <p className="text-[11px] text-slate-500 mb-3">Choose your dashboard accent color.</p>
-                    <div className="flex gap-3">
-                      {ACCENT_COLORS.map(c => (
-                        <button key={c} onClick={() => setAccentColor(c)}
-                          className={cn('w-8 h-8 rounded-full border-2 transition-all', accentColor === c ? 'border-white scale-110' : 'border-transparent hover:scale-105')}
-                          style={{ background: c }} />
-                      ))}
-                    </div>
-                  </div>
-                  <SettingRow label="Compact Mode" desc="Reduce spacing for more data density">
-                    <Toggle checked={compactMode} onChange={() => setCompactMode(v => !v)} />
-                  </SettingRow>
-                  <SettingRow label="Theme" desc="Dark mode is always active for InsightForge">
-                    <span className="px-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                      Dark Only
-                    </span>
-                  </SettingRow>
-                  <motion.button onClick={() => showToast('Appearance settings saved!', 'success')}
-                    whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-[11px] font-black text-white transition-all shadow-lg shadow-sky-500/20">
-                    <Save size={12} /> Save Appearance
-                  </motion.button>
-                </div>
+                <AppearanceTab showToast={showToast} />
               )}
             </motion.div>
           </AnimatePresence>
