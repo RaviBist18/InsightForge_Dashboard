@@ -157,8 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Link href="/" className="flex items-center gap-3 group">
             {/* FIX 2: Applied dynamic accent background to the IF logo icon */}
             <div
-              className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-black text-white shadow-lg transition-all group-hover:opacity-90"
-              style={{ background: 'var(--accent)' }}
+              className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30 group-hover:bg-sky-400 transition-colors"
             >
               IF
             </div>
