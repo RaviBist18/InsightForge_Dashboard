@@ -24,7 +24,7 @@ let cache: { data: RealTimeData; ts: number } | null = null;
 const CACHE_TTL = 60 * 1000; // 60 seconds
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
-const generateSparkline = (base: number, points = 7, volatility = 0.05) =>
+const generateSparkline = (base: number, points = 7, volatility = 0.15) =>
     Array.from({ length: points }, (_, i) =>
         Math.round(base * (1 + (Math.random() - 0.5) * volatility) * 100) / 100
     );

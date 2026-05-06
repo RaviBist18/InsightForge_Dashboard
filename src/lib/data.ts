@@ -47,7 +47,7 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
     })).slice(0, limit) as unknown as Transaction[];
 
   } catch (err) {
-    console.error("CoinGecko API failed, falling back to Supabase:", err);
+
     try {
       const { data, error } = await supabase
         .from('transactions')
@@ -55,7 +55,7 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error("Supabase fetch error:", error.message);
+
         return [];
       }
 
@@ -70,7 +70,6 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
         })
       })).slice(0, limit) as Transaction[];
     } catch (supabaseErr) {
-      console.error("Failed to fetch transactions from Supabase:", supabaseErr);
       return [];
     }
   }

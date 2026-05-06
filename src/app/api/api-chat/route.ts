@@ -47,13 +47,13 @@ export async function POST(req: NextRequest) {
         });
 
         const groqData = await groqRes.json();
-        console.log('Groq response:', JSON.stringify(groqData));
+
 
         const reply = groqData?.choices?.[0]?.message?.content ?? 'No response generated.';
         return NextResponse.json({ reply });
 
     } catch (err: any) {
-        console.error('Groq error:', err?.message);
+        // silent fail — error returned to client
         return NextResponse.json({ reply: 'Error occurred. Please try again.' }, { status: 500 });
     }
 }
