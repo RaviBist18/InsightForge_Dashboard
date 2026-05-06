@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Database, FileText, Bookmark, Settings, UserCog,
   ChevronLeft, ChevronRight, X,
   DollarSign, TrendingUp, Users, Percent, ShoppingCart, Activity,
-  Shield
+  Shield, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -30,12 +30,14 @@ const ADMIN_NAV_ITEMS = [
   { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
   { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
   { icon: UserCog, label: 'User Management', href: '/dashboard/admin/users' },
+  { icon: Briefcase, label: 'Workspace', href: '/dashboard/workspace' },
 ];
 
 const USER_NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
   { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
+  { icon: Briefcase, label: 'Workspace', href: '/dashboard/workspace' },
 ];
 
 const ANALYTICS_ITEMS = [
