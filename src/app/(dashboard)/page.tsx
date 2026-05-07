@@ -15,7 +15,7 @@ import {
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ range?: string, category?: string }> }) {
   const resolvedSearchParams = await searchParams;
-  const range = resolvedSearchParams.range || '30d';
+  const range = resolvedSearchParams.range || 'monthly';
   const category = resolvedSearchParams.category || '';
 
   // Parallel fetching using the DAL
@@ -63,6 +63,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           revenueData={revenueData}
           categoryData={categoryData}
           regionData={regionData}
+          category={category}
+          range={range}
         />
 
         {/* AI Generated Insights */}

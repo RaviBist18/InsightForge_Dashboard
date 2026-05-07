@@ -193,9 +193,9 @@ export const KPISection: React.FC<KPISectionProps> = ({ stats, category = '', ra
   const [searchQuery, setSearchQuery] = useState('');
   const searchParams = useSearchParams();
 
-  const clientRange = searchParams.get('range') || '30d';
-  const clientCategory = searchParams.get('category') || '';
-  const isFetching = clientRange !== range || clientCategory !== category;
+  // Check if we have actual data to display
+  const hasData = stats && (stats.totalRevenue > 0 || stats.activeUsers > 0);
+  const isFetching = !hasData;
 
   useEffect(() => {
     const handleSearch = (e: any) => setSearchQuery(e.detail || '');

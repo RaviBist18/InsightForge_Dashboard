@@ -68,7 +68,7 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `insightforge_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `insightforge_mrr_export_${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       setExportState('done');
       setTimeout(() => setExportState('idle'), 2500);
@@ -119,7 +119,7 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={handleSearchFocus}
               onKeyDown={e => { if (e.key === 'Escape') setSearchQuery(''); }}
-              placeholder="Search records (Press Esc to clear)..."
+              placeholder="Search intelligence, users, or metrics..."
               className="w-full pl-9 pr-4 py-2 bg-white/[0.04] border border-white/[0.07] rounded-xl text-[12px] text-white placeholder-slate-600 focus:outline-none focus:bg-white/[0.06] transition-all"
               style={{ borderColor: searchQuery ? 'var(--accent-alpha)' : 'rgba(255,255,255,0.07)' }}
             />
@@ -174,7 +174,7 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
           {/* Notifications */}
           <div className="relative" data-dropdown>
             <button
-              onClick={() => { setShowNotifications(v => !v); setShowProfile(false); }}
+              onClick={() => { router.push('/dashboard/settings'); }}
               className="relative p-2 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.05] transition-all"
             >
               <Bell size={16} />
