@@ -17,7 +17,10 @@ const GROSS_MARGIN = 0.78;
 const BENCHMARK_LINE = 33; // 33% average tier distribution
 
 // ─── AI Insights per chart ────────────────────────────────────────────────────
-const TIER_AI_INSIGHT = "Internal data suggests stability. Pro tier growing fastest — consider upsell campaign targeting Starter users showing high engagement.";
+const TIER_AI_INSIGHT = "Pro growth peaking; squeeze Starter upgrades to protect margins.";
+
+const TIER_INSIGHTS = [TIER_AI_INSIGHT];
+
 const REGION_AI_INSIGHTS: Record<string, { insight: string; sentiment: 'positive' | 'negative' | 'neutral' }> = {
   'North America': { insight: 'Strong enterprise renewals in Q2. NASDAQ correlation suggests continued SaaS budget growth.', sentiment: 'positive' },
   'Europe': { insight: 'External market volatility in Europe may impact Enterprise renewals. Monitor GDPR compliance costs.', sentiment: 'negative' },
@@ -124,7 +127,6 @@ const CustomAreaTooltip = ({ active, payload, label }: any) => {
 
   return (
     <div className="px-4 py-3 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl min-w-[200px]">
-      {/* Full date label from tooltip field */}
       <p className="text-[10px] font-black text-slate-400 mb-1">{dataPoint?.tooltip || label}</p>
       <div className="border-b border-white/[0.05] mb-2 pb-1.5">
         {payload.map((item: any, idx: number) => (
@@ -137,12 +139,10 @@ const CustomAreaTooltip = ({ active, payload, label }: any) => {
           </div>
         ))}
       </div>
-      {/* Gross Margin */}
       <div className="flex items-center justify-between mb-1">
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Gross Margin</span>
         <span className="text-[11px] font-black text-emerald-400">{margin}%</span>
       </div>
-      {/* AI Marker */}
       {marker && (
         <div className="mt-2 pt-2 border-t border-white/[0.05] flex items-start gap-1.5">
           <Zap size={9} className="flex-shrink-0 mt-0.5" style={{ color: marker.color }} />
@@ -226,7 +226,6 @@ interface ChartsSectionProps {
 export const ChartsSection: React.FC<ChartsSectionProps> = ({
   revenueData, categoryData, regionData, category: categoryProp = '', range: rangeProp = 'monthly'
 }) => {
-  // Read directly from URL — updates instantly on filter change
   const searchParams = useSearchParams();
   const range = searchParams.get('range') || rangeProp || 'monthly';
   const category = searchParams.get('category') || categoryProp || '';
@@ -238,21 +237,18 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
 
   const tierMultiplier = category === 'starter' ? 0.3 : category === 'pro' ? 0.6 : category === 'enterprise' ? 1.4 : 1;
 
-  // Regenerate chart data when range or tier changes
   const regenerate = useCallback(() => {
     setChartData(generateChartData(range, revenueData, tierMultiplier));
   }, [range, revenueData, tierMultiplier]);
 
   useEffect(() => { regenerate(); }, [regenerate]);
 
-  // Live clock tick for daily view
   useEffect(() => {
     if (range !== 'daily') return;
-    const t = setInterval(() => regenerate(), 60000); // refresh every minute
+    const t = setInterval(() => regenerate(), 60000);
     return () => clearInterval(t);
   }, [range, regenerate]);
 
-  // Supabase realtime
   useEffect(() => {
     const channel = supabase
       .channel('charts-realtime')
@@ -278,7 +274,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
     return () => { supabase.removeChannel(channel); };
   }, [range]);
 
-  // ── Live tier data from Supabase ──
   const [tierData, setTierData] = useState(DEFAULT_TIER_DATA);
 
   useEffect(() => {
@@ -312,10 +307,9 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
     value: Math.round(d.value * tierMultiplier),
   }));
 
-  // ── Region sentiment (mock NewsAPI — swap with real endpoint when key added) ──
   const regionSentiment: Record<string, 'positive' | 'negative' | 'neutral'> = {
     'North America': 'positive',
-    'Europe': 'negative', // warning glow
+    'Europe': 'negative',
     'Asia Pacific': 'positive',
     'Latin America': 'neutral',
   };
@@ -331,7 +325,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
     daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', annually: 'Annual',
   };
 
-  // ─── Operational Efficiency Logic (Profit Forge) ───
   const calculateProfitStats = () => {
     const totalRevenue = chartData.reduce((acc, curr) => acc + (curr.revenue || 0), 0);
     const userCount = saasCategories.reduce((acc, curr) => acc + curr.value, 0);
@@ -355,7 +348,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         className="col-span-1 lg:col-span-2"
         badge={
           <div className="flex flex-wrap items-center gap-4">
-            {/* Profit Forge Metrics */}
             <div className="hidden md:flex items-center gap-4 pr-4 border-r border-white/10">
               <div>
                 <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Net Efficiency</p>
@@ -366,8 +358,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
                 <p className="text-[12px] font-mono font-bold text-white">${(netProfit / 1000).toFixed(1)}k</p>
               </div>
             </div>
-
-            {/* Existing Live and Tier Badges... */}
             <AnimatePresence>
               {isLive && (
                 <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
@@ -376,20 +366,14 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
                 </motion.span>
               )}
             </AnimatePresence>
-
-            {/* Range badge */}
             <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-[9px] font-black text-sky-400 uppercase">
               {rangeLabel[range] || 'Monthly'}
             </span>
-
-            {/* Tier badge */}
             {category && (
               <span className="px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-[9px] font-black text-violet-400 uppercase">
                 {category} tier
               </span>
             )}
-
-            {/* Legend */}
             <div className="flex gap-3">
               {[{ label: 'MRR', color: '#38bdf8' }, { label: 'Gross Profit', color: '#10b981' }].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
@@ -401,7 +385,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
           </div>
         }
       >
-        {/* Live event feed */}
         <AnimatePresence>
           {liveEvents.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -443,7 +426,7 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* ── Subscription Tier Distribution ── */}
+      {/* ── Subscription Tier Distribution (Optimized Overlaid Insight) ── */}
       <ChartCard
         title="Subscription Tier Distribution"
         icon={BarChart2}
@@ -452,30 +435,28 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         id="tier-chart"
         badge={
           <div className="group relative">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-[9px] font-black text-violet-400 cursor-help">
+            {/* The Trigger Badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-[9px] font-black text-violet-400 cursor-help transition-all group-hover:opacity-0">
               <Zap size={9} /> AI Insight
             </div>
-            {/* Hover tooltip */}
-            <div className="absolute right-0 top-full mt-2 w-64 p-3 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-              <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1">Gemini AI</p>
-              <p className="text-[10px] text-slate-300 leading-relaxed">{TIER_AI_INSIGHT}</p>
-              {/* Hover tooltip with Strategic Action */}
-              <div className="absolute right-0 top-full mt-2 w-64 p-4 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1">Gemini AI</p>
-                <p className="text-[10px] text-slate-300 leading-relaxed mb-3">{TIER_AI_INSIGHT}</p>
-                <button
-                  onClick={() => alert('Initiating Upsell Campaign...')}
-                  className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-[9px] font-black uppercase tracking-widest text-white transition-colors"
-                >
-                  Launch Tier-Specific Campaign
-                </button>
+
+            {/* The Overlay Box: covers the badge exactly on hover */}
+            <div className="absolute inset-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
+              <div className="absolute right-0 top-0 w-64 p-3 rounded-xl border border-violet-400/30 bg-slate-950/95 backdrop-blur-xl shadow-2xl flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <Zap size={10} className="text-violet-400 animate-pulse" />
+                  <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest">Gemini AI Insight</p>
+                </div>
+                <p className="text-[10px] text-slate-200 leading-relaxed font-semibold italic">
+                  &ldquo;{TIER_AI_INSIGHT}&rdquo;
+                </p>
               </div>
             </div>
           </div>
         }
       >
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={saasCategories} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <BarChart data={saasCategories} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9} />
@@ -486,7 +467,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} />
             <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={<CustomBarTooltip />} />
-            {/* Market Benchmark 33% reference line */}
             <ReferenceLine
               y={BENCHMARK_LINE}
               stroke="#f59e0b"
@@ -500,6 +480,7 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
       </ChartCard>
 
       {/* ── Regional Markets ── */}
+      {/* ── Regional Markets ── */}
       <ChartCard
         title="Regional Markets"
         icon={Globe}
@@ -507,8 +488,24 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         delay={0.2}
         id="region-chart"
         badge={
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[9px] font-black text-rose-400">
-            <AlertTriangle size={9} /> Europe Risk
+          <div className="group relative">
+            {/* The Risk Badge Trigger */}
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[9px] font-black text-rose-400 cursor-help transition-all group-hover:bg-rose-500/20">
+              <AlertTriangle size={9} /> Europe Risk
+            </div>
+
+            {/* The Risk Reasoning Tooltip - Matches AI Insight Look */}
+            <div className="absolute right-0 top-full mt-2 w-64 p-3 rounded-xl border border-rose-500/30 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-auto">
+              <div className="flex items-center gap-2 mb-1.5">
+                <AlertCircle size={10} className="text-rose-400 animate-pulse" />
+                <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest">Risk Analysis</p>
+              </div>
+
+              {/* Blunt, data-driven reasoning */}
+              <p className="text-[10px] text-slate-300 leading-relaxed font-medium italic">
+                &ldquo;External volatility and rising GDPR compliance costs are squeezing Enterprise renewals in the EU sector.&rdquo;
+              </p>
+            </div>
           </div>
         }
       >

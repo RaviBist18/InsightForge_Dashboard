@@ -1,74 +1,90 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 
-export const CEOBriefing = () => {
+interface CEOBriefingProps {
+    efficiency: number;     // Passed from ChartsSection net efficiency logic
+    newsHeadline?: string;  // Passed from your live NewsAPI state
+}
+
+export const CEOBriefing = ({ efficiency, newsHeadline = "Market stable" }: CEOBriefingProps) => {
     const searchParams = useSearchParams();
     const range = searchParams.get('range') || 'monthly';
     const category = searchParams.get('category') || 'all';
 
-    const getBriefing = () => {
-        // Priority 1: Specific Subscription Tier Insights
-        if (category === 'enterprise') {
-            return "Enterprise retention is stable, but high API usage in Europe suggests regional tier optimization.";
-        }
-        if (category === 'pro') {
-            return "Pro tier is your fastest-growing segment. Analyze 'Starter' upgrade paths to maximize your Profit Forge.";
-        }
-        if (category === 'starter') {
-            return "Starter tier churn is 2% higher than the market benchmark. Consider simplifying onboarding for better efficiency.";
+    const [briefing, setBriefing] = useState<string>("Forging strategic insight...");
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
+    // ─── AI Strategic Handshake ───────────────────────────────────────────────
+    useEffect(() => {
+        async function fetchAiInsight() {
+            setIsLoading(true);
+            try {
+                const response = await fetch('/api/briefing', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ range, category, efficiency, newsHeadline }),
+                });
+
+                const data = await response.json();
+                setBriefing(data.briefing);
+            } catch (error) {
+                // Fallback to clear, plain-English status
+                setBriefing("Consultant offline. Check internal growth metrics.");
+            } finally {
+                setIsLoading(false);
+            }
         }
 
-        // Priority 2: Time-Scale Strategic Insights
-        switch (range) {
-            case 'daily':
-                return "Daily volume is up 2%, but sentiment in Asia is ⚠️. Monitor Starter tier churn over the next 24 hours.";
-            case 'weekly':
-                return "Weekly efficiency is high. NewsAPI highlights tech sector growth—ideal window for Pro-tier promotions.";
-            case 'monthly':
-                return "Monthly health is strong. Net Efficiency is stable with minimal tech overhead after Vercel/API costs.";
-            case 'quarterly':
-                return "Q2 growth beats market benchmarks by 5%. Strategic opportunity: Reinvest Enterprise surplus into R&D.";
-            case 'annually':
-                return "Annual revenue shows high stability. Prepare for 2027 scaling by optimizing European server and API costs.";
-            default:
-                return "Overall MRR is healthy. Internal growth outpaces market benchmarks by 5%. Stay the course.";
-        }
-    };
+        fetchAiInsight();
+    }, [range, category, efficiency, newsHeadline]); // Re-runs on every filter shift
 
     return (
         <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 relative overflow-hidden rounded-2xl border border-sky-400/20 bg-sky-400/5 p-4 backdrop-blur-md"
+            className="mb-6 relative overflow-hidden rounded-2xl border border-sky-400/20 bg-sky-400/5 p-4 backdrop-blur-md shadow-lg"
         >
-            <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-400/10 text-sky-400">
-                    <Sparkles size={20} className="animate-pulse" />
+            {/* Background Sony A1-style Cinematic Glows */}
+            <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-sky-400/10 blur-[80px] pointer-events-none" />
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-sky-400/30 to-transparent" />
+
+            <div className="flex items-center gap-4 relative z-10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-400/10 text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.15)]">
+                    <Sparkles size={18} className={isLoading ? "animate-spin" : "animate-pulse"} />
                 </div>
-                <div>
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400/70">AI Strategic Briefing</h3>
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400/70">
+                            AI Strategic Briefing
+                        </h3>
+                        {isLoading && (
+                            <span className="text-[8px] font-bold text-sky-500/40 uppercase tracking-widest animate-pulse">
+                                Analyzing Scenario...
+                            </span>
+                        )}
+                    </div>
+
                     <div className="overflow-hidden">
                         <AnimatePresence mode="wait">
                             <motion.p
-                                key={getBriefing()} // Triggers animation on text change
-                                initial={{ opacity: 0, x: 10 }}
+                                key={briefing} // Triggers slide animation on new insight
+                                initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -10 }}
-                                transition={{ duration: 0.3 }}
-                                className="text-sm font-medium text-slate-200"
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.4, ease: "easeOut" }}
+                                className="text-sm font-semibold text-slate-100 leading-relaxed italic"
                             >
-                                {getBriefing()}
+                                &ldquo;{briefing}&rdquo;
                             </motion.p>
                         </AnimatePresence>
                     </div>
                 </div>
             </div>
-            {/* Background Ambient Glow for Sony A1 Aesthetic */}
-            <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-sky-400/10 blur-[80px] pointer-events-none" />
         </motion.div>
     );
 };
