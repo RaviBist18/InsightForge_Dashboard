@@ -53,7 +53,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       </header>
 
       <div className="space-y-6">
-        <CEOBriefing />
+
+        <CEOBriefing
+          efficiency={stats?.efficiency || 0}
+          newsHeadline={stats?.latestNews || "Market stable"}
+        />
 
         {/* KPI Metrics */}
         <KPISection stats={stats} category={category} range={range} />
