@@ -4,6 +4,7 @@ import { ChartsSection } from '@/components/dashboard/ChartsSection';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
 import { RealTimeDashboard } from '@/components/dashboard/RealTimeDashboard';
+import { CEOBriefing } from '@/components/CEOBriefing';
 import {
   getTransactions,
   getInsights,
@@ -52,6 +53,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       </header>
 
       <div className="space-y-6">
+        <CEOBriefing />
+
         {/* KPI Metrics */}
         <KPISection stats={stats} category={category} range={range} />
 

@@ -4,15 +4,26 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area,
   BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ReferenceLine
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, BarChart2, Globe, Zap, AlertCircle } from 'lucide-react';
+import { TrendingUp, BarChart2, Globe, Zap, AlertCircle, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams } from 'next/navigation';
 
 const COLORS = ['#38bdf8', '#10b981', '#8b5cf6', '#f43f5e'];
 const GROSS_MARGIN = 0.78;
+const BENCHMARK_LINE = 33; // 33% average tier distribution
+
+// ─── AI Insights per chart ────────────────────────────────────────────────────
+const TIER_AI_INSIGHT = "Internal data suggests stability. Pro tier growing fastest — consider upsell campaign targeting Starter users showing high engagement.";
+const REGION_AI_INSIGHTS: Record<string, { insight: string; sentiment: 'positive' | 'negative' | 'neutral' }> = {
+  'North America': { insight: 'Strong enterprise renewals in Q2. NASDAQ correlation suggests continued SaaS budget growth.', sentiment: 'positive' },
+  'Europe': { insight: 'External market volatility in Europe may impact Enterprise renewals. Monitor GDPR compliance costs.', sentiment: 'negative' },
+  'Asia Pacific': { insight: 'Asia Pacific showing 3x hardware growth. Potential expansion market for Pro tier.', sentiment: 'positive' },
+  'Latin America': { insight: 'Emerging market — Starter tier adoption growing. Currency volatility a risk factor.', sentiment: 'neutral' },
+};
 
 // ─── AI Markers ───────────────────────────────────────────────────────────────
 const AI_MARKERS: Record<string, { label: string; color: string }> = {
@@ -21,12 +32,18 @@ const AI_MARKERS: Record<string, { label: string; color: string }> = {
   'Q2': { label: 'Strong Q2 enterprise renewals — churn down 0.3% vs prior quarter', color: '#10b981' },
 };
 
+// ─── Default SaaS tier data (fallback) ───────────────────────────────────────
+const DEFAULT_TIER_DATA = [
+  { name: 'Starter', value: 420 },
+  { name: 'Pro', value: 310 },
+  { name: 'Enterprise', value: 180 },
+];
+
 // ─── Dynamic X-axis data generator ───────────────────────────────────────────
 const generateChartData = (range: string, baseData: any[], tierMultiplier: number) => {
   const now = new Date();
 
   if (range === 'daily') {
-    // Last 12 hours — live
     return Array.from({ length: 12 }, (_, i) => {
       const h = new Date(now);
       h.setHours(now.getHours() - 11 + i, 0, 0, 0);
@@ -41,7 +58,6 @@ const generateChartData = (range: string, baseData: any[], tierMultiplier: numbe
   }
 
   if (range === 'weekly') {
-    // Rolling 7 days
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(now);
       d.setDate(now.getDate() - 6 + i);
@@ -56,15 +72,13 @@ const generateChartData = (range: string, baseData: any[], tierMultiplier: numbe
   }
 
   if (range === 'monthly') {
-    // 4 weeks with date ranges
     return Array.from({ length: 4 }, (_, i) => {
       const start = new Date(now.getFullYear(), now.getMonth(), i * 7 + 1);
       const end = new Date(now.getFullYear(), now.getMonth(), Math.min((i + 1) * 7, 28));
       const base = baseData[i]?.revenue ?? 35000 + Math.random() * 10000;
       const revenue = Math.round(base * tierMultiplier);
       return {
-        name: `Week ${i + 1}`,
-        revenue,
+        name: `Week ${i + 1}`, revenue,
         profit: Math.round(revenue * GROSS_MARGIN * (0.95 + Math.random() * 0.1)),
         tooltip: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
       };
@@ -73,10 +87,10 @@ const generateChartData = (range: string, baseData: any[], tierMultiplier: numbe
 
   if (range === 'quarterly') {
     const quarters = [
-      { name: 'Q1', months: 'Jan, Feb, Mar', start: 0 },
-      { name: 'Q2', months: 'Apr, May, Jun', start: 3 },
-      { name: 'Q3', months: 'Jul, Aug, Sep', start: 6 },
-      { name: 'Q4', months: 'Oct, Nov, Dec', start: 9 },
+      { name: 'Q1', months: 'Jan, Feb, Mar' },
+      { name: 'Q2', months: 'Apr, May, Jun' },
+      { name: 'Q3', months: 'Jul, Aug, Sep' },
+      { name: 'Q4', months: 'Oct, Nov, Dec' },
     ];
     return quarters.map(q => {
       const base = 120000 + Math.random() * 40000;
@@ -88,7 +102,6 @@ const generateChartData = (range: string, baseData: any[], tierMultiplier: numbe
     });
   }
 
-  // annually — 12 months
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return months.map((m, i) => {
     const base = baseData[i]?.revenue ?? 35000 + Math.random() * 15000;
@@ -265,33 +278,96 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
     return () => { supabase.removeChannel(channel); };
   }, [range]);
 
-  // SaaS category bars
-  const saasCategories = categoryData.map(d => ({
+  // ── Live tier data from Supabase ──
+  const [tierData, setTierData] = useState(DEFAULT_TIER_DATA);
+
+  useEffect(() => {
+    const fetchTierData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('category');
+        if (error || !data?.length) return;
+
+        const counts: Record<string, number> = { Starter: 0, Pro: 0, Enterprise: 0 };
+        data.forEach(row => {
+          const cat = row.category as string;
+          if (['SaaS', 'Analytics', 'Fintech'].includes(cat)) counts['Starter']++;
+          else if (['Cloud', 'Infrastructure'].includes(cat)) counts['Pro']++;
+          else if (['Research', 'Consulting', 'Hardware'].includes(cat)) counts['Enterprise']++;
+        });
+
+        setTierData([
+          { name: 'Starter', value: counts['Starter'] || DEFAULT_TIER_DATA[0].value },
+          { name: 'Pro', value: counts['Pro'] || DEFAULT_TIER_DATA[1].value },
+          { name: 'Enterprise', value: counts['Enterprise'] || DEFAULT_TIER_DATA[2].value },
+        ]);
+      } catch { /* use defaults */ }
+    };
+    fetchTierData();
+  }, []);
+
+  const saasCategories = tierData.map(d => ({
     ...d,
-    name: d.name === 'Electronics' ? 'Starter' : d.name === 'Clothing' ? 'Pro' : d.name === 'Home & Garden' ? 'Enterprise' : d.name,
     value: Math.round(d.value * tierMultiplier),
   }));
 
-  const regionWithColors = regionData.map((item, i) => ({ ...item, fill: COLORS[i % COLORS.length] }));
+  // ── Region sentiment (mock NewsAPI — swap with real endpoint when key added) ──
+  const regionSentiment: Record<string, 'positive' | 'negative' | 'neutral'> = {
+    'North America': 'positive',
+    'Europe': 'negative', // warning glow
+    'Asia Pacific': 'positive',
+    'Latin America': 'neutral',
+  };
+
+  const regionWithColors = regionData.map((item, i) => ({
+    ...item,
+    fill: COLORS[i % COLORS.length],
+    sentiment: regionSentiment[item.name] ?? 'neutral',
+    aiInsight: REGION_AI_INSIGHTS[item.name] ?? { insight: 'No data available.', sentiment: 'neutral' },
+  }));
 
   const rangeLabel: Record<string, string> = {
     daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', annually: 'Annual',
   };
 
+  // ─── Operational Efficiency Logic (Profit Forge) ───
+  const calculateProfitStats = () => {
+    const totalRevenue = chartData.reduce((acc, curr) => acc + (curr.revenue || 0), 0);
+    const userCount = saasCategories.reduce((acc, curr) => acc + curr.value, 0);
+    const apiTokenCost = userCount * 0.08;
+    const hostingCost = 40;
+    const netProfit = totalRevenue - (apiTokenCost + hostingCost);
+    const efficiency = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    return { netProfit, efficiency };
+  };
+  const { netProfit, efficiency } = calculateProfitStats();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
 
-      {/* ── Revenue Growth Analysis ── */}
+      {/* ── MRR Growth Analysis ── */}
       <ChartCard
-        title="Revenue Growth Analysis"
+        title="MRR Growth Analysis"
         icon={TrendingUp}
         accentColor="#38bdf8"
         delay={0}
         className="col-span-1 lg:col-span-2"
-        id="mrr-chart"
         badge={
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Live badge */}
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Profit Forge Metrics */}
+            <div className="hidden md:flex items-center gap-4 pr-4 border-r border-white/10">
+              <div>
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Net Efficiency</p>
+                <p className="text-[12px] font-mono font-bold text-emerald-400">{efficiency.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Profit Forge</p>
+                <p className="text-[12px] font-mono font-bold text-white">${(netProfit / 1000).toFixed(1)}k</p>
+              </div>
+            </div>
+
+            {/* Existing Live and Tier Badges... */}
             <AnimatePresence>
               {isLive && (
                 <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
@@ -368,7 +444,36 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
       </ChartCard>
 
       {/* ── Subscription Tier Distribution ── */}
-      <ChartCard title="Subscription Tier Distribution" icon={BarChart2} accentColor="#8b5cf6" delay={0.1}>
+      <ChartCard
+        title="Subscription Tier Distribution"
+        icon={BarChart2}
+        accentColor="#8b5cf6"
+        delay={0.1}
+        id="tier-chart"
+        badge={
+          <div className="group relative">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-[9px] font-black text-violet-400 cursor-help">
+              <Zap size={9} /> AI Insight
+            </div>
+            {/* Hover tooltip */}
+            <div className="absolute right-0 top-full mt-2 w-64 p-3 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1">Gemini AI</p>
+              <p className="text-[10px] text-slate-300 leading-relaxed">{TIER_AI_INSIGHT}</p>
+              {/* Hover tooltip with Strategic Action */}
+              <div className="absolute right-0 top-full mt-2 w-64 p-4 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1">Gemini AI</p>
+                <p className="text-[10px] text-slate-300 leading-relaxed mb-3">{TIER_AI_INSIGHT}</p>
+                <button
+                  onClick={() => alert('Initiating Upsell Campaign...')}
+                  className="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-[9px] font-black uppercase tracking-widest text-white transition-colors"
+                >
+                  Launch Tier-Specific Campaign
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      >
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={saasCategories} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
             <defs>
@@ -381,13 +486,32 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} />
             <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={<CustomBarTooltip />} />
-            <Bar dataKey="value" fill="url(#gradBar)" radius={[6, 6, 0, 0]} barSize={28} animationDuration={1400} />
+            {/* Market Benchmark 33% reference line */}
+            <ReferenceLine
+              y={BENCHMARK_LINE}
+              stroke="#f59e0b"
+              strokeDasharray="4 3"
+              strokeWidth={1.5}
+              label={{ value: '33% Benchmark', position: 'insideTopRight', fill: '#f59e0b', fontSize: 9, fontWeight: 700 }}
+            />
+            <Bar dataKey="value" fill="url(#gradBar)" radius={[6, 6, 0, 0]} barSize={48} animationDuration={1400} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
       {/* ── Regional Markets ── */}
-      <ChartCard title="Regional Markets" icon={Globe} accentColor="#10b981" delay={0.2}>
+      <ChartCard
+        title="Regional Markets"
+        icon={Globe}
+        accentColor="#10b981"
+        delay={0.2}
+        id="region-chart"
+        badge={
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[9px] font-black text-rose-400">
+            <AlertTriangle size={9} /> Europe Risk
+          </div>
+        }
+      >
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
             <Pie data={regionWithColors} innerRadius={58} outerRadius={82} paddingAngle={6}
@@ -396,29 +520,72 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
               onMouseEnter={(_, i) => setActivePieIndex(i)}
               onMouseLeave={() => setActivePieIndex(null)}
             >
-              {regionWithColors.map((entry, index) => (
-                <Cell key={`cell-${index}`}
-                  fill={activePieIndex === index ? entry.fill : `${entry.fill}70`}
-                  style={{ filter: activePieIndex === index ? `drop-shadow(0 0 10px ${entry.fill}99)` : 'none', transition: 'all 0.25s ease', cursor: 'pointer', outline: 'none' } as React.CSSProperties}
-                  stroke={activePieIndex === index ? entry.fill : 'none'}
-                  strokeWidth={activePieIndex === index ? 1.5 : 0}
-                />
-              ))}
+              {regionWithColors.map((entry, index) => {
+                const isActive = activePieIndex === index;
+                const isNeg = entry.sentiment === 'negative';
+                return (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={isActive ? entry.fill : `${entry.fill}70`}
+                    style={{
+                      filter: isActive
+                        ? `drop-shadow(0 0 12px ${isNeg ? '#f43f5e' : entry.fill}99)`
+                        : isNeg ? 'drop-shadow(0 0 6px #f43f5e44)' : 'none',
+                      transition: 'all 0.25s ease', cursor: 'pointer', outline: 'none',
+                    } as React.CSSProperties}
+                    stroke={isActive ? (isNeg ? '#f43f5e' : entry.fill) : 'none'}
+                    strokeWidth={isActive ? 1.5 : 0}
+                  />
+                );
+              })}
             </Pie>
-            <Tooltip content={<CustomPieTooltip />} />
+            <Tooltip content={({ active, payload }: any) => {
+              if (!active || !payload?.length) return null;
+              const data = payload[0];
+              const color = data.payload.fill || '#38bdf8';
+              const ai = data.payload.aiInsight;
+              const isNeg = data.payload.sentiment === 'negative';
+              return (
+                <div className="px-4 py-3 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-2xl max-w-[220px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: isNeg ? '#f43f5e' : color }} />
+                    <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: isNeg ? '#f43f5e' : color }}>
+                      {data.name}
+                      {isNeg && ' ⚠️'}
+                    </p>
+                  </div>
+                  <p className="text-sm font-black text-white mb-2">{data.value}% share</p>
+                  <div className="border-t border-white/[0.05] pt-2">
+                    <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <Zap size={8} /> Gemini AI
+                    </p>
+                    <p className="text-[9px] text-slate-400 leading-relaxed">{ai?.insight}</p>
+                    <button
+                      onClick={() => alert(`Optimizing strategy for ${data.name}...`)}
+                      className={`w-full mt-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest text-white transition-colors ${isNeg ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
+                    >
+                      {isNeg ? `Deploy ${data.name} Retention` : `Scale ${data.name} Growth`}
+                    </button>
+                  </div>
+                </div>
+              );
+            }} />
             <Legend verticalAlign="middle" align="right" layout="vertical"
               content={({ payload }) => (
                 <ul className="flex flex-col gap-3 pl-4">
                   {payload?.map((entry: any, index: number) => {
                     const isActive = activePieIndex === index;
+                    const region = regionWithColors[index];
+                    const isNeg = region?.sentiment === 'negative';
                     return (
-                      <li key={index} className="flex items-center gap-2.5 cursor-pointer transition-all duration-200"
+                      <li key={index} className="flex items-center gap-2 cursor-pointer transition-all duration-200"
                         onMouseEnter={() => setActivePieIndex(index)} onMouseLeave={() => setActivePieIndex(null)}>
                         <div className="w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200"
-                          style={{ backgroundColor: entry.color, boxShadow: isActive ? `0 0 8px ${entry.color}` : 'none', transform: isActive ? 'scale(1.3)' : 'scale(1)' }} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest transition-colors duration-200"
+                          style={{ backgroundColor: entry.color, boxShadow: isActive ? `0 0 8px ${isNeg ? '#f43f5e' : entry.color}` : 'none', transform: isActive ? 'scale(1.3)' : 'scale(1)' }} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest transition-colors duration-200 flex items-center gap-1"
                           style={{ color: isActive ? '#f1f5f9' : '#64748b' }}>
                           {entry.value}
+                          {isNeg && <AlertTriangle size={8} className="text-rose-400" />}
                         </span>
                       </li>
                     );
