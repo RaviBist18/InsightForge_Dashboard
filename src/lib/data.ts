@@ -47,7 +47,6 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
     })).slice(0, limit) as unknown as Transaction[];
 
   } catch (err) {
-
     try {
       const { data, error } = await supabase
         .from('transactions')
@@ -55,7 +54,6 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
         .order('created_at', { ascending: false });
 
       if (error) {
-
         return [];
       }
 
@@ -107,6 +105,7 @@ export const getRegionData = async (range?: string) => {
   return REGION_DATA.map(d => ({ ...d, value: Math.floor(d.value * m) }));
 };
 
+// --- UPDATED INTERFACE ---
 export interface DashboardStats {
   totalRevenue: number;
   totalProfit: number;
@@ -114,6 +113,8 @@ export interface DashboardStats {
   totalOrders: number;
   activeUsers: number;
   churnRate: number;
+  efficiency: number;    // Added for CEOBriefing
+  latestNews: string;    // Added for CEOBriefing
 }
 
 export const getDashboardStats = async (range?: string): Promise<DashboardStats> => {
@@ -125,13 +126,16 @@ export const getDashboardStats = async (range?: string): Promise<DashboardStats>
   const totalProfit = totalRevenue * 0.186;
   const totalOrders = Math.floor(TRANSACTIONS.length * m);
 
+  // --- POPULATED WITH NEW FIELDS ---
   return {
     totalRevenue,
     totalProfit,
     profitMargin: 18.6,
     totalOrders,
     activeUsers: Math.floor(12500 * m),
-    churnRate: range === '90d' ? 2.4 : range === '7d' ? 0.8 : 1.2
+    churnRate: range === '90d' ? 2.4 : range === '7d' ? 0.8 : 1.2,
+    efficiency: 78.5, // Operational efficiency metric
+    latestNews: "SaaS sector seeing 5% growth in Enterprise renewals" // Mock news
   };
 };
 
@@ -175,13 +179,8 @@ export const getAnalyticsByCategory = async (slug: string) => {
         totalValue: 3450,
         growthPercentage: 14.7,
         chartData: [
-          { name: 'Mon', value: 120 },
-          { name: 'Tue', value: 150 },
-          { name: 'Wed', value: 180 },
-          { name: 'Thu', value: 220 },
-          { name: 'Fri', value: 250 },
-          { name: 'Sat', value: 300 },
-          { name: 'Sun', value: 280 },
+          { name: 'Mon', value: 120 }, { name: 'Tue', value: 150 }, { name: 'Wed', value: 180 },
+          { name: 'Thu', value: 220 }, { name: 'Fri', value: 250 }, { name: 'Sat', value: 300 }, { name: 'Sun', value: 280 },
         ]
       };
 
@@ -202,12 +201,8 @@ export const getAnalyticsByCategory = async (slug: string) => {
         totalValue: 45000,
         growthPercentage: 12.5,
         chartData: [
-          { name: 'Jan', value: 36000 },
-          { name: 'Feb', value: 38000 },
-          { name: 'Mar', value: 41000 },
-          { name: 'Apr', value: 39000 },
-          { name: 'May', value: 43000 },
-          { name: 'Jun', value: 45000 },
+          { name: 'Jan', value: 36000 }, { name: 'Feb', value: 38000 }, { name: 'Mar', value: 41000 },
+          { name: 'Apr', value: 39000 }, { name: 'May', value: 43000 }, { name: 'Jun', value: 45000 },
         ]
       };
 
@@ -217,12 +212,8 @@ export const getAnalyticsByCategory = async (slug: string) => {
         totalValue: 8370,
         growthPercentage: 8.2,
         chartData: [
-          { name: 'Jan', value: 6500 },
-          { name: 'Feb', value: 7100 },
-          { name: 'Mar', value: 6800 },
-          { name: 'Apr', value: 7400 },
-          { name: 'May', value: 7900 },
-          { name: 'Jun', value: 8370 },
+          { name: 'Jan', value: 6500 }, { name: 'Feb', value: 7100 }, { name: 'Mar', value: 6800 },
+          { name: 'Apr', value: 7400 }, { name: 'May', value: 7900 }, { name: 'Jun', value: 8370 },
         ]
       };
 
@@ -233,12 +224,8 @@ export const getAnalyticsByCategory = async (slug: string) => {
         totalValue: baseValue,
         growthPercentage: (safeSlug.length % 15) + 2.5,
         chartData: [
-          { name: 'Jan', value: baseValue * 0.8 },
-          { name: 'Feb', value: baseValue * 1.1 },
-          { name: 'Mar', value: baseValue * 0.9 },
-          { name: 'Apr', value: baseValue * 1.2 },
-          { name: 'May', value: baseValue * 1.5 },
-          { name: 'Jun', value: baseValue * 1.3 },
+          { name: 'Jan', value: baseValue * 0.8 }, { name: 'Feb', value: baseValue * 1.1 }, { name: 'Mar', value: baseValue * 0.9 },
+          { name: 'Apr', value: baseValue * 1.2 }, { name: 'May', value: baseValue * 1.5 }, { name: 'Jun', value: baseValue * 1.3 },
         ]
       };
   }
