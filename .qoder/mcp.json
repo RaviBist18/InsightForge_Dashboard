@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Users\\viratkohli\\pipx\\venvs\\code-review-graph\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "E:\\insightforge-dashboard",
+      "type": "stdio"
+    }
+  }
+}

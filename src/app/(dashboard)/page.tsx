@@ -86,4 +86,3 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     </>
   );
 }
-
