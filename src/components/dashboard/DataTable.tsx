@@ -2,333 +2,324 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ChevronLeft, ChevronRight, X, ExternalLink, ArrowUpDown } from 'lucide-react';
-import { Transaction } from '../../data/mockData';
-import { cn } from '../../lib/utils';
+import {
+  Search, ChevronLeft, ChevronRight, X, Crosshair, Zap,
+  ShieldCheck, Target, UserPlus, Globe, ArrowUpDown,
+  Activity, Fingerprint, Database, Cpu
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-interface DataTableProps {
-  transactions: Transaction[];
+// ─── TYPES & INTERFACES ──────────────────────────────────────────────────
+
+export interface ForensicNode {
+  id: string;
+  hash: string;
+  velocity: string;
+  entity: string;
+  intent: string;
+  correlation: string;
+  alpha: number | string;
+  audit: 'Verified' | 'Forensic Audit';
+  type: 'transaction' | 'node_activation';
+  metadata: {
+    gas_fee?: string;
+    block_depth?: number;
+    network_load?: string;
+    iso_timestamp: string;
+    shutter_speed: string;
+  };
+  briefing: {
+    status: string;
+    context: string;
+    action: string;
+  };
 }
 
-const STATUS_CONFIG = {
-  Completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  Pending: 'bg-amber-500/10  text-amber-400  border-amber-500/20',
-  Refunded: 'bg-slate-500/10  text-slate-300  border-slate-500/20',
-  Failed: 'bg-rose-500/10   text-rose-400   border-rose-500/20',
+interface DataTableProps {
+  nodes?: ForensicNode[]; // Made optional with default empty array guard
+}
+
+const AUDIT_CONFIG = {
+  Verified: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]',
+  'Forensic Audit': 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]',
 };
 
-const highlightText = (text: string, query: string) => {
-  if (!query) return <>{text}</>;
-  const parts = text.split(new RegExp(`(${query})`, 'gi'));
+// ─── SUB-COMPONENT: VIEWFINDER FOCUS ────────────────────────────────────
+
+const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () => void }) => {
   return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === query.toLowerCase()
-          ? <mark key={i} className="text-sky-400 font-bold bg-sky-400/10 px-0.5 rounded not-italic">{part}</mark>
-          : part
-      )}
-    </>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-2xl"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 30 }}
+        className="relative bg-[#050a15] border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
+
+        <div className="p-10 relative z-10">
+          <div className="flex justify-between items-start mb-10 border-b border-white/5 pb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20">
+                <Crosshair size={20} className="text-sky-400 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Manual Focus Mode</h4>
+                <p className="text-[11px] font-mono text-sky-400 mt-1">{node.hash}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-500 hover:text-white transition-all">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="space-y-8">
+              <section>
+                <h5 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Activity size={10} /> CEO Briefing [Status]
+                </h5>
+                <p className="text-sm text-slate-200 leading-relaxed italic font-medium">"{node.briefing.status}"</p>
+              </section>
+              <section>
+                <h5 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Globe size={10} /> Market Correlation [Context]
+                </h5>
+                <p className="text-sm text-slate-200 leading-relaxed italic font-medium">"{node.briefing.context}"</p>
+              </section>
+              <div className="p-5 rounded-2xl bg-sky-500/5 border border-sky-400/20">
+                <h5 className="text-[9px] font-black text-sky-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <Target size={12} /> Prescriptive Action
+                </h5>
+                <p className="text-xs text-white font-black uppercase tracking-tight leading-snug">{node.briefing.action}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h5 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4">Raw Forensic Metadata</h5>
+              {[
+                { label: 'ISO Timestamp', value: node.metadata.iso_timestamp, icon: Cpu },
+                { label: 'Network Load', value: node.metadata.network_load, icon: Activity },
+                { label: 'Block Depth', value: node.metadata.block_depth, icon: Database },
+                { label: 'Gas Velocity', value: node.metadata.gas_fee, icon: Zap },
+              ].map((meta, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <div className="flex items-center gap-2">
+                    <meta.icon size={10} className="text-slate-600" />
+                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{meta.label}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-300">{meta.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-12 pt-6 border-t border-white/5 flex justify-between items-center text-[8px] font-mono text-slate-600 uppercase tracking-[0.4em]">
+            <span>Hardware: Sony A1 Master Engine</span>
+            <span>Lens: 85mm f1.4 // Exp: {node.metadata.shutter_speed}</span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
-export const DataTable: React.FC<DataTableProps> = ({ transactions }) => {
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────
+
+export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Default to empty array
   const [searchQuery, setSearchQuery] = useState('');
-  const [localQuery, setLocalQuery] = useState('');
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [selectedNode, setSelectedNode] = useState<ForensicNode | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortKey, setSortKey] = useState<'date' | 'amount' | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof ForensicNode | null, dir: 'asc' | 'desc' }>({ key: null, dir: 'desc' });
   const tableRef = useRef<HTMLDivElement>(null);
-  const ITEMS = 10;
+  const ITEMS_PER_PAGE = 10;
 
-  useEffect(() => {
-    const handler = (e: any) => { setSearchQuery(e.detail || ''); setLocalQuery(e.detail || ''); };
-    window.addEventListener('globalSearch', handler);
-    return () => window.removeEventListener('globalSearch', handler);
-  }, []);
-
-  const handleSort = (key: 'date' | 'amount') => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('desc'); }
+  const handleSort = (key: keyof ForensicNode) => {
+    setSortConfig(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+    }));
   };
 
-  const filtered = useMemo(() => {
-    let data = [...transactions];
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      data = data.filter(tx =>
-        tx.customer.toLowerCase().includes(q) ||
-        tx.category.toLowerCase().includes(q) ||
-        tx.id.toLowerCase().includes(q)
-      );
+  const filteredNodes = useMemo(() => {
+    if (!nodes) return []; // Defensive guard
+
+    let result = nodes.filter(n =>
+      n.entity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      n.hash.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        const valA = a[sortConfig.key!];
+        const valB = b[sortConfig.key!];
+        if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
+        return 0;
+      });
     }
-    if (sortKey === 'amount') data.sort((a, b) => sortDir === 'asc' ? a.amount - b.amount : b.amount - a.amount);
-    if (sortKey === 'date') data.sort((a, b) => sortDir === 'asc' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-    return data;
-  }, [transactions, searchQuery, sortKey, sortDir]);
+    return result;
+  }, [nodes, searchQuery, sortConfig]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, transactions]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS));
-  const start = (currentPage - 1) * ITEMS;
-  const paginated = filtered.slice(start, start + ITEMS);
-
-  const goTo = (page: number) => {
-    setCurrentPage(page);
-    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const SortBtn = ({ col }: { col: 'date' | 'amount' }) => (
-    <button onClick={() => handleSort(col)} className="inline-flex items-center gap-1 hover:text-white transition-colors">
-      <ArrowUpDown size={10} className={cn('transition-colors', sortKey === col ? 'text-sky-400' : 'text-slate-600')} />
-    </button>
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredNodes.length / ITEMS_PER_PAGE));
+  const paginated = filteredNodes.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
     <>
       <motion.div
         ref={tableRef}
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden mt-6"
+        className="relative rounded-[2rem] border border-white/[0.08] bg-[#050a15]/80 backdrop-blur-xl overflow-hidden mt-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
       >
-        {/* top glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-[1px] bg-gradient-to-r from-transparent via-sky-400/20 to-transparent pointer-events-none" />
-
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-white/[0.05] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h3 className="font-black text-white text-[11px] uppercase tracking-[0.18em]">
-              Global Transactions
-            </h3>
-            <span className="px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[9px] font-black text-slate-500 uppercase tracking-widest">
-              {filtered.length} records
-            </span>
+        <div className="px-8 py-6 border-b border-white/[0.06] flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 relative z-10">
+                <Fingerprint className="w-6 h-6 text-sky-400" />
+              </div>
+              <div className="absolute inset-0 bg-sky-400/20 blur-xl animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-[12px] font-black text-white uppercase tracking-[0.4em]">Forensic Intelligence Ledger</h2>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase tracking-widest">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Connectivity: {nodes.length > 0 ? 'Active' : 'Awaiting Data'}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 group-focus-within:text-sky-400 transition-colors" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-sky-400 transition-colors" />
             <input
               type="text"
-              placeholder="Filter records..."
-              value={localQuery}
-              onChange={e => { setLocalQuery(e.target.value); setSearchQuery(e.target.value); }}
-              className="pl-9 pr-4 py-2 w-52 bg-white/[0.04] border border-white/[0.07] rounded-xl text-[11px] text-white placeholder-slate-600 focus:outline-none focus:border-sky-500/50 focus:bg-white/[0.06] transition-all"
+              placeholder="Filter Nodes or Hashes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 pr-6 py-3 w-full md:w-80 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-[11px] text-white focus:outline-none focus:border-sky-500/40 transition-all placeholder:uppercase placeholder:tracking-widest"
             />
-            {localQuery && (
-              <button onClick={() => { setLocalQuery(''); setSearchQuery(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-white">
-                <X size={12} />
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-separate border-spacing-0">
             <thead>
-              <tr className="border-b border-white/[0.04]">
+              <tr className="bg-white/[0.01]">
                 {[
-                  { label: 'Transaction ID', key: null },
-                  { label: 'Date', key: 'date' as const },
-                  { label: 'Customer', key: null },
-                  { label: 'Category', key: null },
-                  { label: 'Amount', key: 'amount' as const },
-                  { label: 'Status', key: null },
-                ].map(col => (
-                  <th
-                    key={col.label}
-                    className="px-5 py-3.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600"
-                  >
-                    <span className="flex items-center gap-1">
+                  { label: 'Forensic Hash', key: 'hash' },
+                  { label: 'Settlement Velocity', key: 'velocity' },
+                  { label: 'Entity / Node', key: 'entity' },
+                  { label: 'Strategic Function', key: 'intent' },
+                  { label: 'Market Correlation', key: 'correlation' },
+                  { label: 'Growth Fuel', key: 'alpha' },
+                  { label: 'Audit Integrity', key: 'audit' }
+                ].map((col) => (
+                  <th key={col.label} className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 border-b border-white/[0.04]">
+                    <button onClick={() => handleSort(col.key as any)} className="flex items-center gap-2 hover:text-sky-400 transition-colors">
                       {col.label}
-                      {col.key && <SortBtn col={col.key} />}
-                    </span>
+                      <ArrowUpDown size={10} />
+                    </button>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              <AnimatePresence mode="popLayout" initial={false}>
-                {paginated.map((tx) => (
-                  <motion.tr
-                    layout
-                    key={tx.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    onClick={() => setSelectedTx(tx)}
-                    className="border-b border-white/[0.03] hover:bg-white/[0.025] group transition-colors cursor-pointer"
-                  >
-                    <td className="px-5 py-3.5 font-mono text-[11px] text-slate-500 group-hover:text-sky-400 transition-colors">
-                      {tx.id}
-                    </td>
-                    <td className="px-5 py-3.5 text-[11px] text-slate-500">{tx.date}</td>
-                    <td className="px-5 py-3.5 text-[12px] font-bold text-slate-200">
-                      {highlightText(tx.customer, searchQuery)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className="px-2.5 py-1 bg-white/[0.04] text-slate-400 rounded-lg border border-white/[0.06] text-[10px] font-bold">
-                        {highlightText(tx.category, searchQuery)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-[12px] font-black text-white tabular-nums">
-                      ${tx.amount.toLocaleString()}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={cn(
-                        'px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border',
-                        STATUS_CONFIG[tx.status] ?? STATUS_CONFIG.Pending
-                      )}>
-                        {tx.status}
-                      </span>
-                    </td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
+            <tbody className="divide-y divide-white/[0.03]">
+              {paginated.length > 0 ? paginated.map((node) => (
+                <tr
+                  key={node.id}
+                  onClick={() => setSelectedNode(node)}
+                  className="group hover:bg-white/[0.02] transition-all cursor-pointer"
+                >
+                  <td className="px-8 py-5 font-mono text-[11px] text-slate-500 group-hover:text-sky-400 transition-colors">{node.hash}</td>
+                  <td className="px-8 py-5 text-[11px] font-bold text-slate-400 tracking-tight">{node.velocity}</td>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                        {node.type === 'node_activation' ? <UserPlus size={14} className="text-emerald-400" /> : <Globe size={14} className="text-sky-400" />}
+                      </div>
+                      <span className="text-[12px] font-black text-white uppercase tracking-tighter">{node.entity}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <span className="px-3 py-1 bg-white/[0.03] border border-white/[0.08] rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-[0.15em]">
+                      {node.intent}
+                    </span>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-2.5">
+                      <Zap size={12} className="text-sky-400 animate-pulse" />
+                      <span className="text-[11px] font-bold text-sky-400/80 italic tracking-tight">{node.correlation}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 text-right relative">
+                    <div className="inline-block">
+                      <p className="text-[13px] font-black text-white tabular-nums tracking-tighter">
+                        {node.type === 'transaction' ? `$${Number(node.alpha).toLocaleString()}` : `+${node.alpha} Node`}
+                      </p>
+                      <div className="h-[1.5px] w-full bg-gradient-to-r from-sky-500/50 to-transparent mt-1" />
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 text-center">
+                    <span className={cn(
+                      'px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border',
+                      AUDIT_CONFIG[node.audit]
+                    )}>
+                      {node.audit}
+                    </span>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={7} className="py-20 text-center">
+                    <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em]">No Nodes Detected in Current Cycle</p>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
-
-          {filtered.length === 0 && (
-            <div className="py-16 text-center">
-              <p className="text-slate-600 text-sm font-bold">No transactions match "{searchQuery}"</p>
-              <p className="text-slate-700 text-xs mt-1">Try a different search term</p>
-            </div>
-          )}
         </div>
 
-        {/* Pagination */}
-        <div className="px-5 py-3.5 border-t border-white/[0.04] flex items-center justify-between bg-white/[0.01]">
-          <p className="text-[10px] font-bold text-slate-600">
-            {filtered.length === 0 ? '0' : start + 1}–{Math.min(start + ITEMS, filtered.length)} of {filtered.length}
+        <div className="px-8 py-5 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            Showing {paginated.length} of {filteredNodes.length} nodes
           </p>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => goTo(Math.max(1, currentPage - 1))}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-1.5 rounded-lg border border-white/[0.06] text-slate-500 hover:text-white hover:border-white/[0.14] disabled:opacity-20 transition-all"
+              className="p-2 rounded-xl border border-white/[0.08] text-slate-500 hover:text-white disabled:opacity-20 transition-all"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={16} />
             </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-              .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push('...');
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === '...'
-                  ? <span key={`e${i}`} className="px-1 text-slate-600 text-[11px]">…</span>
-                  : (
-                    <button
-                      key={p}
-                      onClick={() => goTo(p as number)}
-                      className={cn(
-                        'w-7 h-7 rounded-lg text-[11px] font-black transition-all',
-                        currentPage === p
-                          ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                          : 'text-slate-500 hover:text-white border border-white/[0.06] hover:border-white/[0.14]'
-                      )}
-                    >
-                      {p}
-                    </button>
-                  )
-              )}
-
+            <span className="px-4 text-[11px] font-black text-white tabular-nums tracking-tighter">
+              PAGE {currentPage} / {totalPages}
+            </span>
             <button
-              onClick={() => goTo(Math.min(totalPages, currentPage + 1))}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="p-1.5 rounded-lg border border-white/[0.06] text-slate-500 hover:text-white hover:border-white/[0.14] disabled:opacity-20 transition-all"
+              className="p-2 rounded-xl border border-white/[0.08] text-slate-500 hover:text-white disabled:opacity-20 transition-all"
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={16} />
             </button>
           </div>
         </div>
       </motion.div>
 
-      {/* ── Transaction Detail Modal ── */}
       <AnimatePresence>
-        {selectedTx && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
-            onClick={() => setSelectedTx(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.94, opacity: 0, y: 12 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.94, opacity: 0, y: 12 }}
-              transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-              onClick={e => e.stopPropagation()}
-              className="relative rounded-2xl border border-white/[0.1] bg-[#080f1f] w-full max-w-md overflow-hidden shadow-2xl"
-            >
-              {/* top accent */}
-              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/40 to-transparent" />
-
-              {/* Header */}
-              <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-0.5">Transaction</p>
-                  <p className="font-mono text-sky-400 text-sm font-bold">{selectedTx.id}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedTx(null)}
-                  className="p-2 rounded-xl border border-white/[0.06] text-slate-500 hover:text-white hover:border-white/[0.14] transition-all"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="p-6 space-y-5">
-                {/* Amount + Status */}
-                <div className="flex items-end justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-1">Amount</p>
-                    <p className="text-4xl font-black text-white tabular-nums">${selectedTx.amount.toLocaleString()}</p>
-                  </div>
-                  <span className={cn(
-                    'px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border',
-                    STATUS_CONFIG[selectedTx.status] ?? STATUS_CONFIG.Pending
-                  )}>
-                    {selectedTx.status}
-                  </span>
-                </div>
-
-                {/* Details grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Customer', value: selectedTx.customer },
-                    { label: 'Date', value: selectedTx.date },
-                    { label: 'Category', value: selectedTx.category },
-                    { label: 'Region', value: selectedTx.region },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-600 mb-1">{label}</p>
-                      <p className="text-[13px] font-bold text-white">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 pb-5 flex justify-end">
-                <button
-                  onClick={() => setSelectedTx(null)}
-                  className="px-5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white text-[11px] font-black uppercase tracking-widest transition-all"
-                >
-                  Close
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+        {selectedNode && (
+          <ViewfinderFocus
+            node={selectedNode}
+            onClose={() => setSelectedNode(null)}
+          />
         )}
       </AnimatePresence>
     </>

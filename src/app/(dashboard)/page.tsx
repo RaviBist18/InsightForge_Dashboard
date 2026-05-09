@@ -1,7 +1,7 @@
 import { KPISection } from '@/components/dashboard/KPISection';
 import { FiltersPanel } from '@/components/dashboard/FiltersPanel';
 import { ChartsSection } from '@/components/dashboard/ChartsSection';
-import { DataTable } from '@/components/dashboard/DataTable';
+import { DataTable, ForensicNode } from '@/components/dashboard/DataTable';
 import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
 import { RealTimeDashboard } from '@/components/dashboard/RealTimeDashboard';
 import { CEOBriefing } from '@/components/CEOBriefing';
@@ -19,7 +19,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const range = resolvedSearchParams.range || 'monthly';
   const category = resolvedSearchParams.category || '';
 
-  // Parallel fetching using the DAL
   const [
     transactions,
     insights,
@@ -36,6 +35,30 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     getRegionData(range)
   ]);
 
+  // ─── THE DATA FORGE: MAPPING RAW DATA TO FORENSIC NODES ──────────────────
+  // This step ensures end-to-end connectivity
+  const forensicNodes: ForensicNode[] = (transactions || []).map((tx: any) => ({
+    id: tx.id,
+    hash: tx.id.startsWith('0x') ? tx.id : `0x${tx.id.substring(0, 10)}...`, // Forensic Hash
+    velocity: "Real-time", // Settlement Velocity
+    entity: tx.customer || "Global Node", // Entity / Node
+    intent: tx.category || "Strategic Function", // Strategic Function
+    correlation: "Optimizing Portfolio", // Market Correlation
+    alpha: tx.amount, // Growth Fuel
+    audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit', // Audit Integrity
+    type: 'transaction',
+    metadata: {
+      iso_timestamp: new Date().toISOString(),
+      shutter_speed: "1/200", // Sony A1 Emulation
+      network_load: "Optimal"
+    },
+    briefing: {
+      status: "Verified financial movement.",
+      context: "Forging internal data with global market trends.",
+      action: "Maintain liquidity buffer."
+    }
+  }));
+
   return (
     <>
       <header className="mb-8 px-2">
@@ -44,44 +67,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           <span className="opacity-30">/</span>
           <span className="text-sky-400">Executive Summary</span>
         </div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">
-          InsightForge Intelligence
-        </h1>
-        <p className="text-slate-400 mt-1">
-          Real-time tracking for revenue, operational efficiency, and market trends.
-        </p>
+        <h1 className="text-3xl font-bold text-white tracking-tight">InsightForge Intelligence</h1>
+        <p className="text-slate-400 mt-1">Real-time tracking for revenue and market trends.</p>
       </header>
 
       <div className="space-y-6">
-
-        <CEOBriefing
-          efficiency={stats?.efficiency || 0}
-          newsHeadline={stats?.latestNews || "Market stable"}
-        />
-
-        {/* KPI Metrics */}
+        <CEOBriefing efficiency={stats?.efficiency || 0} newsHeadline={stats?.latestNews || "Market stable"} />
         <KPISection stats={stats} category={category} range={range} />
-
-        {/* Filters and Controls */}
         <FiltersPanel />
-
-        {/* Charts visualization */}
-        <ChartsSection
-          revenueData={revenueData}
-          categoryData={categoryData}
-          regionData={regionData}
-          category={category}
-          range={range}
-        />
-
-        {/* AI Generated Insights */}
+        <ChartsSection revenueData={revenueData} categoryData={categoryData} regionData={regionData} category={category} range={range} />
         <InsightsPanel insights={insights} />
-
-        {/* Real-Time Intelligence */}
         <RealTimeDashboard />
 
-        {/* Transaction Table */}
-        <DataTable transactions={transactions} />
+
+        <DataTable nodes={forensicNodes} />
       </div>
     </>
   );
