@@ -123,7 +123,7 @@ export function AIChat({ nodes }: AIChatProps) {
                 }
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
-                className="fixed bottom-10 right-6 z-50 w-13 h-13 w-[52px] h-[52px] rounded-2xl bg-sky-500 hover:bg-sky-400 shadow-2xl shadow-sky-500/40 flex items-center justify-center transition-colors"
+                className="fixed bottom-14 right-6 z-50 w-13 h-13 w-[52px] h-[52px] rounded-2xl bg-sky-500 hover:bg-sky-400 shadow-2xl shadow-sky-500/40 flex items-center justify-center transition-colors"
             >
                 <AnimatePresence mode="wait" >
                     {
@@ -153,7 +153,7 @@ export function AIChat({ nodes }: AIChatProps) {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                        className="fixed bottom-[100px] right-6 z-50 w-[360px] h-[520px] rounded-2xl border border-white/[0.1] bg-[#080f1f] shadow-2xl overflow-hidden flex flex-col"
+                        className="fixed bottom-[140px] right-6 z-50 w-[360px] h-[520px] rounded-2xl border border-white/[0.1] bg-[#080f1f] shadow-2xl overflow-hidden flex flex-col"
                     >
                         {/* Top glow */}
                         < div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent" />
