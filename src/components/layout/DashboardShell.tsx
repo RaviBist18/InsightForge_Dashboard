@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
-import { AIChat } from './AIChat';
+
 import { ThemeProvider } from '@/context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname } from 'next/navigation';
@@ -57,7 +57,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
 
-        <AIChat />
       </div>
     </ThemeProvider>
   );

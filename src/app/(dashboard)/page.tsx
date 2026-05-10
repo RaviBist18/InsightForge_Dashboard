@@ -4,6 +4,7 @@ import { ChartsSection } from '@/components/dashboard/ChartsSection';
 import { DataTable, ForensicNode } from '@/components/dashboard/DataTable';
 import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
 import { RealTimeDashboard } from '@/components/dashboard/RealTimeDashboard';
+import { AIChat } from '@/components/dashboard/AIChat';
 import { CEOBriefing } from '@/components/CEOBriefing';
 import {
   getTransactions,
@@ -35,21 +36,19 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     getRegionData(range)
   ]);
 
-  // ─── THE DATA FORGE: MAPPING RAW DATA TO FORENSIC NODES ──────────────────
-  // This step ensures end-to-end connectivity
   const forensicNodes: ForensicNode[] = (transactions || []).map((tx: any) => ({
     id: tx.id,
-    hash: tx.id.startsWith('0x') ? tx.id : `0x${tx.id.substring(0, 10)}...`, // Forensic Hash
-    velocity: "Real-time", // Settlement Velocity
-    entity: tx.customer || "Global Node", // Entity / Node
-    intent: tx.category || "Strategic Function", // Strategic Function
-    correlation: "Optimizing Portfolio", // Market Correlation
+    hash: tx.id.startsWith('0x') ? tx.id : `0x${tx.id.substring(0, 10)}...`,
+    velocity: "Real-time",
+    entity: tx.customer || "Global Node",
+    intent: tx.category || "Strategic Function",
+    correlation: "Optimizing Portfolio",
     alpha: tx.amount, // Growth Fuel
-    audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit', // Audit Integrity
+    audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit',
     type: 'transaction',
     metadata: {
       iso_timestamp: new Date().toISOString(),
-      shutter_speed: "1/200", // Sony A1 Emulation
+      shutter_speed: "1/200",
       network_load: "Optimal"
     },
     briefing: {
@@ -79,8 +78,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <InsightsPanel insights={insights} />
         <RealTimeDashboard />
 
-
+        {/* DATA TABLE: Visual Forensic Ledger */}
         <DataTable nodes={forensicNodes} />
+
+        {/* SINGLE AI CHAT COMPONENT */}
+        <AIChat nodes={forensicNodes} />
       </div>
     </>
   );
