@@ -11,6 +11,9 @@ interface Message {
     content: string;
     timestamp: Date;
 }
+interface AIChatProps {
+    nodes: any[];
+}
 
 const SUGGESTED = [
     "Summarize this month's revenue",
@@ -31,7 +34,7 @@ Current dashboard data:
 - Top categories: SaaS, Infrastructure, Research
 Keep responses concise, insightful, and actionable. Use bullet points when listing multiple items.`;
 
-export function AIChat() {
+export function AIChat({ nodes }: AIChatProps) {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([
         {
