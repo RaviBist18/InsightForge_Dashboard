@@ -45,27 +45,35 @@ export default function Home({ searchParams }: { searchParams: any }) {
         getRegionData(range)
       ]);
 
-      const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => ({
-        id: tx.id,
-        hash: tx.id.startsWith('0x') ? tx.id : `0x${tx.id.substring(0, 10)}...`,
-        velocity: "Real-time",
-        entity: tx.customer || "Global Node",
-        intent: tx.category || "Strategic Function",
-        correlation: "Optimizing Portfolio",
-        alpha: tx.amount,
-        audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit',
-        type: 'transaction',
-        metadata: {
-          iso_timestamp: new Date().toISOString(),
-          shutter_speed: "1/200",
-          network_load: "Optimal"
-        },
-        briefing: {
-          status: "Verified financial movement.",
-          context: "Forging internal data with global market trends.",
-          action: "Maintain liquidity buffer."
-        }
-      }));
+      const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
+        // 1. Force the ID to a string to prevent the crash
+        const stringId = String(tx.id || '');
+
+        return {
+          id: stringId,
+          // 2. Safely perform string operations on the new stringId
+          hash: stringId.startsWith('0x')
+            ? stringId
+            : `0x${stringId.substring(0, 10)}${stringId.length > 10 ? '...' : ''}`,
+          velocity: "Real-time",
+          entity: tx.customer || "Global Node",
+          intent: tx.category || "Strategic Function",
+          correlation: "Optimizing Portfolio",
+          alpha: tx.amount,
+          audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit',
+          type: 'transaction',
+          metadata: {
+            iso_timestamp: new Date().toISOString(),
+            shutter_speed: "1/200",
+            network_load: "Optimal"
+          },
+          briefing: {
+            status: "Verified financial movement.",
+            context: "Forging internal data with global market trends.",
+            action: "Maintain liquidity buffer."
+          }
+        };
+      });
 
       setNodes(initialNodes);
       setStats(st);
