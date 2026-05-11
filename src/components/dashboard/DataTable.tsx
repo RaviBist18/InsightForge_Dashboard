@@ -19,7 +19,7 @@ export interface ForensicNode {
   intent: string;
   correlation: string;
   alpha: number | string;
-  prevAlpha?: number;
+  prevAlpha?: number; // ADD THIS LINE
   audit: 'Verified' | 'Forensic Audit';
   type: 'transaction' | 'node_activation';
   metadata: {
@@ -156,8 +156,10 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
 
     if (sortConfig.key) {
       result.sort((a, b) => {
-        const valA = a[sortConfig.key!];
-        const valB = b[sortConfig.key!];
+        // Use nullish coalescing (??) to ensure we never compare undefined
+        const valA = a[sortConfig.key!] ?? '';
+        const valB = b[sortConfig.key!] ?? '';
+
         if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
         return 0;
