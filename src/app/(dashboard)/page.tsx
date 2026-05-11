@@ -78,7 +78,34 @@ export default function Home({ searchParams }: { searchParams: any }) {
     initDashboard();
   }, []);
 
-  // 3. Handlers
+  // 3. ─── LIVE PULSE ENGINE ───
+  // This effect simulates live daily fluctuations by randomly updating alpha values
+  // Inside Home component in page.tsx
+  useEffect(() => {
+    if (nodes.length === 0 || loading) return;
+
+    const pulseEngine = setInterval(() => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) => {
+          const currentAlpha = typeof node.alpha === 'string' ? parseFloat(node.alpha) : node.alpha;
+
+          // Randomly shift every node by +/- 1%
+          const changePercent = 1 + (Math.random() * 0.02 - 0.01);
+          const newAlpha = Math.max(0.01, currentAlpha * changePercent);
+
+          return {
+            ...node,
+            prevAlpha: currentAlpha, // Store the old value for comparison
+            alpha: newAlpha.toFixed(2),
+          };
+        })
+      );
+    }, 4000); // Pulse every 4 seconds
+
+    return () => clearInterval(pulseEngine);
+  }, [nodes.length, loading]);
+
+  // 4. Handlers
   const handleAddNode = (newNode: ForensicNode) => {
     setNodes((prev) => [newNode, ...prev]);
     setTimeout(() => {
@@ -93,9 +120,9 @@ export default function Home({ searchParams }: { searchParams: any }) {
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center text-sky-500 font-black italic uppercase tracking-widest">Initializing InsightForge...</div>;
 
   return (
-    <>
-      <header className="mb-8 px-2 flex justify-between items-end">
-        <div>
+    <div className="min-h-screen bg-[#020617] selection:bg-sky-500/30">
+      <header className="mb-8 px-2 flex justify-between items-end pt-6">
+        <div className="px-4">
           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
             <span>Enterprise Dashboard</span>
             <span className="opacity-30">/</span>
@@ -105,17 +132,17 @@ export default function Home({ searchParams }: { searchParams: any }) {
           <p className="text-slate-400 mt-1">Real-time tracking for revenue and market trends.</p>
         </div>
 
-        <div className="pb-1">
+        <div className="pb-1 px-4">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-sky-500/20"
+            className="px-6 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-sky-500/20"
           >
             Forge New Node
           </button>
         </div>
       </header>
 
-      <div className="space-y-6">
+      <div className="space-y-6 px-4 pb-20">
         <CEOBriefing efficiency={stats?.efficiency || 0} newsHeadline={stats?.latestNews || "Market stable"} />
         <KPISection stats={stats} category="" range="monthly" />
         <FiltersPanel />
@@ -127,7 +154,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
           <DataTable nodes={nodes} onDelete={handleDeleteNode} />
         </div>
 
-        <AIChat nodes={nodes} />
+        <AIChat nodes={nodes} stats={stats} />
 
         <AddNodeModal
           isOpen={isModalOpen}
@@ -135,6 +162,6 @@ export default function Home({ searchParams }: { searchParams: any }) {
           onAdd={handleAddNode}
         />
       </div>
-    </>
+    </div>
   );
 }

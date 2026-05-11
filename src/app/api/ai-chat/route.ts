@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
     try {
-        // Now extracting contextData which contains your Forensic Ledger
-        const { message, history, contextData } = await req.json();
+        // FIXED: Extract 'systemPrompt' to match what AIChat.tsx is sending
+        const { message, history, systemPrompt } = await req.json();
 
         const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
@@ -11,21 +11,18 @@ export async function POST(req: NextRequest) {
         }
 
         // ─── DYNAMIC CONTEXT INJECTION ───
-        // This gives the AI 'eyes' to see your Bitcoin/Ethereum fuel and audit status
-        const LEDGER_CONTEXT = contextData
-            ? `LIVE FORENSIC LEDGER DATA: ${JSON.stringify(contextData)}`
-            : "No ledger data provided.";
-
+        // We use the full systemPrompt built in AIChat.tsx which already contains 
+        // the formatted nodes and stats strings
         const SYSTEM_CONTEXT = `
 ACT AS: InsightForge Lead Strategic Consultant. Boardroom-aggressive, blunt, zero-fluff.
 
 CORE LOGIC:
-1. DATA FIDELITY: Use the provided LEDGER DATA to answer questions about specific entities (Bitcoin, Ethereum, etc.).
-2. EXTERNAL CORRELATION: Link internal revenue to Alpha Vantage/NewsAPI.
+1. DATA FIDELITY: Use the LIVE LEDGER DATA below to answer questions about specific entities.
+2. EXTERNAL CORRELATION: Link internal revenue to market trends.
 3. PRESCRIPTIVE DIRECTIVES: Use only action verbs — Squeeze, Cut, Pivot, Defend, Capture.
 4. BANNED WORDS: overall, stable, healthy, monitor, good, slightly.
 
-${LEDGER_CONTEXT}
+${systemPrompt || "No live ledger data detected."}
 
 DASHBOARD OVERVIEW:
 - MRR: $678,460 (+12.5%) | Margin: 18.6%
@@ -51,8 +48,8 @@ DASHBOARD OVERVIEW:
             body: JSON.stringify({
                 model: 'llama-3.1-8b-instant',
                 messages,
-                max_tokens: 350,
-                temperature: 0.5, // Lower temperature for more accurate data reporting
+                max_tokens: 450, // Increased slightly for more detailed financial strategy
+                temperature: 0.2, // Lowered to 0.2 to prevent the AI from "guessing"
             }),
         });
 

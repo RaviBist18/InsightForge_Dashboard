@@ -19,6 +19,7 @@ export interface ForensicNode {
   intent: string;
   correlation: string;
   alpha: number | string;
+  prevAlpha?: number;
   audit: 'Verified' | 'Forensic Audit';
   type: 'transaction' | 'node_activation';
   metadata: {
@@ -63,7 +64,6 @@ const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () =>
         className="relative bg-[#050a15] border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
         onClick={e => e.stopPropagation()}
       >
-        {/* CRT Scanline Texture */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
 
         <div className="p-10 relative z-10">
@@ -177,7 +177,6 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
         viewport={{ once: true }}
         className="relative rounded-[2rem] border border-white/[0.08] bg-[#050a15]/80 backdrop-blur-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
       >
-        {/* Table Header Section */}
         <div className="px-8 py-6 border-b border-white/[0.06] flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -209,7 +208,6 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
           </div>
         </div>
 
-        {/* The Data Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-separate border-spacing-0">
             <thead>
@@ -262,12 +260,36 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
                       <span className="text-[11px] font-bold text-sky-400/80 italic tracking-tight">{node.correlation}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-5 text-right relative">
-                    <div className="inline-block">
-                      <p className="text-[13px] font-black text-white tabular-nums tracking-tighter">
-                        {/* Clean Currency formatting */}
-                        ${Number(node.alpha).toLocaleString()}
-                      </p>
+
+                  <td className="px-8 py-5 text-right relative group/fuel">
+                    <div className="inline-block relative">
+                      <div className="flex items-center justify-end gap-3">
+
+                        {/* ─── DIRECTIONAL VELOCITY ICON ─── */}
+                        <motion.div
+                          key={node.alpha} // Re-animate on every data change
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center border transition-all duration-700",
+                            // If current alpha is higher than previous, show Green Up
+                            Number(node.alpha) >= (node.prevAlpha || 0)
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.2)]"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.1)]"
+                          )}
+                        >
+                          {Number(node.alpha) >= (node.prevAlpha || 0) ? (
+                            <motion.span animate={{ y: [-1, 1, -1] }} transition={{ repeat: Infinity, duration: 2 }}>↑</motion.span>
+                          ) : (
+                            <motion.span animate={{ y: [1, -1, 1] }} transition={{ repeat: Infinity, duration: 2 }}>↓</motion.span>
+                          )}
+                        </motion.div>
+
+                        <p className="text-[14px] font-black text-white tabular-nums tracking-tighter">
+                          ${Number(node.alpha).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+
                       <div className="h-[1.5px] w-full bg-gradient-to-r from-sky-500/50 to-transparent mt-1" />
                     </div>
                   </td>
@@ -280,10 +302,9 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
                     </span>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    {/* Prune/Delete Node Button */}
                     <button
                       onClick={(e) => {
-                        e.stopPropagation(); // Prevent opening viewfinder
+                        e.stopPropagation();
                         onDelete(node.id);
                       }}
                       className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-500 hover:text-white"
@@ -304,7 +325,6 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
           </table>
         </div>
 
-        {/* Pagination Section */}
         <div className="px-8 py-5 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
             Showing {paginated.length} of {filteredNodes.length} nodes
@@ -331,7 +351,6 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () 
         </div>
       </motion.div>
 
-      {/* The Viewfinder Focus (Manual Focus Mode Popup) */}
       <AnimatePresence>
         {selectedNode && (
           <ViewfinderFocus

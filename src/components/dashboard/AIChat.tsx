@@ -11,8 +11,12 @@ interface Message {
     content: string;
     timestamp: Date;
 }
+
+// 1. Updated Interface to include stats
+// Inside AIChat.tsx
 interface AIChatProps {
     nodes: any[];
+    stats: any; // <--- MUST HAVE THIS
 }
 
 const SUGGESTED = [
@@ -22,19 +26,7 @@ const SUGGESTED = [
     "How can I improve profit margin?",
 ];
 
-const SYSTEM_CONTEXT = `You are InsightForge AI, a smart business intelligence assistant embedded in the InsightForge dashboard. 
-You help users understand their business data and metrics.
-Current dashboard data:
-- Total Revenue: $678,460
-- Total Profit: $126,193 (18.6% margin)
-- Total Orders: 53
-- Active Users: 12,500
-- Churn Rate: 1.2%
-- Top regions: North America (45%), Europe (30%), Asia Pacific (15%)
-- Top categories: SaaS, Infrastructure, Research
-Keep responses concise, insightful, and actionable. Use bullet points when listing multiple items.`;
-
-export function AIChat({ nodes }: AIChatProps) {
+export function AIChat({ nodes, stats }: AIChatProps) {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -48,6 +40,30 @@ export function AIChat({ nodes }: AIChatProps) {
     const [loading, setLoading] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // 2. Moved systemContext INSIDE the component
+    const currentSystemContext = `
+        You are the InsightForge Intelligence Engine, a high-level Forensic Financial Analyst. 
+        You have access to the following live data:
+
+        1. THE LEDGER: You are currently tracking ${nodes?.length || 0} nodes. 
+           The latest entities are: ${nodes?.slice(0, 3).map(n => n.entity).join(', ') || 'None'}.
+
+        2. BUSINESS STATS: 
+           - Efficiency: ${stats?.efficiency || 0}% 
+           - Latest Market Signal: ${stats?.latestNews || 'Stable'}.
+
+        INSTRUCTIONS:
+        - Answer ANY question the user asks. 
+        - If they ask about the dashboard, use the data provided above.
+        - Maintain a professional, boardroom-ready tone.
+        VELOCITY LOGIC:
+    - If a node has > $50,000 Alpha, it is in 'HIGH GROWTH' (indicated by an UP arrow).
+    - If it is <= $50,000, it is 'OPTIMIZED/STABLE' (indicated by a SIDE arrow).
+    
+    Use this to give prescriptive advice. If the user asks 'Which nodes are surging?', 
+    identify those with high Alpha values.
+    `;
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,6 +93,8 @@ export function AIChat({ nodes }: AIChatProps) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: text.trim(),
+                    // Change: Be extremely explicit in the naming
+                    context: currentSystemContext,
                     history: messages.map(m => ({
                         role: m.role,
                         content: m.content,
@@ -118,31 +136,24 @@ export function AIChat({ nodes }: AIChatProps) {
     return (
         <>
             {/* ── Floating Button ── */}
-            < motion.button
-                onClick={() => setOpen(v => !v)
-                }
+            <motion.button
+                onClick={() => setOpen(v => !v)}
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
-                className="fixed bottom-14 right-6 z-50 w-13 h-13 w-[52px] h-[52px] rounded-2xl bg-sky-500 hover:bg-sky-400 shadow-2xl shadow-sky-500/40 flex items-center justify-center transition-colors"
+                className="fixed bottom-14 right-6 z-50 w-[52px] h-[52px] rounded-2xl bg-sky-500 hover:bg-sky-400 shadow-2xl shadow-sky-500/40 flex items-center justify-center transition-colors"
             >
-                <AnimatePresence mode="wait" >
-                    {
-                        open
-                            ? <motion.div key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
-                                <X size={20} className="text-white" />
-                            </motion.div>
-                            : <motion.div key="spark" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
-                                <Sparkles size={20} className="text-white" />
-                            </motion.div>
-                    }
+                <AnimatePresence mode="wait">
+                    {open ? (
+                        <motion.div key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                            <X size={20} className="text-white" />
+                        </motion.div>
+                    ) : (
+                        <motion.div key="spark" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                            <Sparkles size={20} className="text-white" />
+                        </motion.div>
+                    )}
                 </AnimatePresence>
-
-                {/* Unread dot */}
-                {
-                    !open && (
-                        <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#020617]" />
-                    )
-                }
+                {!open && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#020617]" />}
             </motion.button>
 
             {/* ── Chat Panel ── */}
@@ -153,116 +164,70 @@ export function AIChat({ nodes }: AIChatProps) {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                        className="fixed bottom-[140px] right-6 z-50 w-[360px] h-[520px] rounded-2xl border border-white/[0.1] bg-[#080f1f] shadow-2xl overflow-hidden flex flex-col"
+                        className="fixed bottom-[120px] right-6 z-50 w-[360px] h-[520px] rounded-2xl border border-white/[0.1] bg-[#080f1f] shadow-2xl overflow-hidden flex flex-col"
                     >
-                        {/* Top glow */}
-                        < div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent" />
-
-                        {/* Header */}
-                        < div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0" >
-                            <div className="flex items-center gap-2.5" >
-                                <div className="w-7 h-7 rounded-lg bg-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/30" >
+                        {/* Header & CRT Effects */}
+                        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent" />
+                        <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/30">
                                     <Sparkles size={13} className="text-white" />
                                 </div>
-                                < div >
-                                    <p className="text-[12px] font-black text-white" > InsightForge AI </p>
-                                    < div className="flex items-center gap-1" >
+                                <div>
+                                    <p className="text-[12px] font-black text-white">InsightForge AI</p>
+                                    <div className="flex items-center gap-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                        <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest" > Online </p>
+                                        <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Live Sync Active</p>
                                     </div>
                                 </div>
                             </div>
-                            < div className="flex items-center gap-1" >
-                                <button onClick={handleReset}
-                                    className="p-1.5 rounded-lg text-slate-600 hover:text-slate-400 hover:bg-white/[0.05] transition-all" >
+                            <div className="flex items-center gap-1">
+                                <button onClick={handleReset} className="p-1.5 rounded-lg text-slate-600 hover:text-slate-400 hover:bg-white/[0.05] transition-all">
                                     <RotateCcw size={13} />
                                 </button>
-                                < button onClick={() => setOpen(false)}
-                                    className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-white/[0.05] transition-all" >
+                                <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-white/[0.05] transition-all">
                                     <X size={13} />
                                 </button>
                             </div>
                         </div>
 
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar" >
-                            {
-                                messages.map(msg => (
-                                    <motion.div
-                                        key={msg.id}
-                                        initial={{ opacity: 0, y: 8 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className={cn('flex gap-2.5', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}
-                                    >
-                                        {/* Avatar */}
-                                        < div className={
-                                            cn(
-                                                'w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
-                                                msg.role === 'assistant'
-                                                    ? 'bg-sky-500 shadow-lg shadow-sky-500/30'
-                                                    : 'bg-white/[0.08] border border-white/[0.1]'
-                                            )
-                                        } >
-                                            {
-                                                msg.role === 'assistant'
-                                                    ? <Sparkles size={10} className="text-white" />
-                                                    : <User size={10} className="text-slate-400" />
-                                            }
-                                        </div>
-
-                                        {/* Bubble */}
-                                        <div className={
-                                            cn(
-                                                'max-w-[78%] px-3.5 py-2.5 rounded-2xl text-[12px] leading-relaxed',
-                                                msg.role === 'assistant'
-                                                    ? 'bg-white/[0.05] border border-white/[0.06] text-slate-300 rounded-tl-sm'
-                                                    : 'bg-sky-500 text-white rounded-tr-sm'
-                                            )
-                                        }>
-                                            {msg.content}
-                                        </div>
-                                    </motion.div>
-                                ))}
-
-                            {/* Loading bubble */}
-                            {
-                                loading && (
-                                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }
-                                    } className="flex gap-2.5" >
-                                        <div className="w-6 h-6 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-lg shadow-sky-500/30" >
-                                            <Sparkles size={10} className="text-white" />
-                                        </div>
-                                        < div className="px-3.5 py-3 rounded-2xl rounded-tl-sm bg-white/[0.05] border border-white/[0.06] flex items-center gap-1.5" >
-                                            {
-                                                [0, 1, 2].map(i => (
-                                                    <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-500"
-                                                        animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-                                                        transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }} />
-                                                ))}
-                                        </div>
-                                    </motion.div>
-                                )}
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                            {messages.map(msg => (
+                                <motion.div key={msg.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn('flex gap-2.5', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
+                                    <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', msg.role === 'assistant' ? 'bg-sky-500 shadow-lg shadow-sky-500/30' : 'bg-white/[0.08] border border-white/[0.1]')}>
+                                        {msg.role === 'assistant' ? <Sparkles size={10} className="text-white" /> : <User size={10} className="text-slate-400" />}
+                                    </div>
+                                    <div className={cn('max-w-[78%] px-3.5 py-2.5 rounded-2xl text-[12px] leading-relaxed', msg.role === 'assistant' ? 'bg-white/[0.05] border border-white/[0.06] text-slate-300 rounded-tl-sm' : 'bg-sky-500 text-white rounded-tr-sm')}>
+                                        {msg.content}
+                                    </div>
+                                </motion.div>
+                            ))}
+                            {loading && (
+                                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
+                                    <div className="w-6 h-6 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-lg shadow-sky-500/30"><Sparkles size={10} className="text-white" /></div>
+                                    <div className="px-3.5 py-3 rounded-2xl rounded-tl-sm bg-white/[0.05] border border-white/[0.06] flex items-center gap-1.5">
+                                        {[0, 1, 2].map(i => (
+                                            <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-500" animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }} transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }} />
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
                             <div ref={bottomRef} />
                         </div>
 
-                        {/* Suggestions */}
-                        {
-                            messages.length === 1 && (
-                                <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0" >
-                                    {
-                                        SUGGESTED.map(s => (
-                                            <button key={s} onClick={() => sendMessage(s)}
-                                                className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.07] text-[10px] font-bold text-slate-400 hover:text-white hover:border-sky-500/40 transition-all" >
-                                                {s}
-                                            </button>
-                                        ))
-                                    }
-                                </div>
-                            )}
+                        {/* Suggestions Panel */}
+                        {messages.length === 1 && (
+                            <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
+                                {SUGGESTED.map(s => (
+                                    <button key={s} onClick={() => sendMessage(s)} className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.07] text-[10px] font-bold text-slate-400 hover:text-white hover:border-sky-500/40 transition-all">{s}</button>
+                                ))}
+                            </div>
+                        )}
 
-                        {/* Input */}
-                        <div className="px-3 pb-3 pt-2 border-t border-white/[0.06] flex-shrink-0" >
-                            <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 focus-within:border-sky-500/40 transition-all" >
+                        {/* Input Area */}
+                        <div className="px-3 pb-3 pt-2 border-t border-white/[0.06] flex-shrink-0">
+                            <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 focus-within:border-sky-500/40 transition-all">
                                 <input
                                     ref={inputRef}
                                     value={input}
@@ -271,15 +236,10 @@ export function AIChat({ nodes }: AIChatProps) {
                                     placeholder="Ask about your data..."
                                     className="flex-1 bg-transparent text-[12px] text-white placeholder-slate-700 focus:outline-none"
                                 />
-                                <button
-                                    onClick={() => sendMessage(input)}
-                                    disabled={!input.trim() || loading}
-                                    className="w-6 h-6 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-30 flex items-center justify-center transition-all flex-shrink-0"
-                                >
+                                <button onClick={() => sendMessage(input)} disabled={!input.trim() || loading} className="w-6 h-6 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-30 flex items-center justify-center transition-all flex-shrink-0">
                                     {loading ? <Loader2 size={11} className="animate-spin text-white" /> : <Send size={11} className="text-white" />}
                                 </button>
                             </div>
-                            < p className="text-[9px] text-slate-700 text-center mt-1.5 font-bold" > Powered by Gemini AI </p>
                         </div>
                     </motion.div>
                 )}
