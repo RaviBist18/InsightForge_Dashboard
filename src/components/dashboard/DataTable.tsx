@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, ChevronLeft, ChevronRight, X, Crosshair, Zap,
   ShieldCheck, Target, UserPlus, Globe, ArrowUpDown,
-  Activity, Fingerprint, Database, Cpu
+  Activity, Fingerprint, Database, Cpu, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +36,8 @@ export interface ForensicNode {
 }
 
 interface DataTableProps {
-  nodes?: ForensicNode[]; // Made optional with default empty array guard
+  nodes?: ForensicNode[];
+  onDelete: (id: string) => void;
 }
 
 const AUDIT_CONFIG = {
@@ -44,7 +45,7 @@ const AUDIT_CONFIG = {
   'Forensic Audit': 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]',
 };
 
-// ─── SUB-COMPONENT: VIEWFINDER FOCUS ────────────────────────────────────
+// ─── SUB-COMPONENT: VIEWFINDER FOCUS (MODAL) ────────────────────────────
 
 const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () => void }) => {
   return (
@@ -62,6 +63,7 @@ const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () =>
         className="relative bg-[#050a15] border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
         onClick={e => e.stopPropagation()}
       >
+        {/* CRT Scanline Texture */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
 
         <div className="p-10 relative z-10">
@@ -108,7 +110,7 @@ const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () =>
                 { label: 'ISO Timestamp', value: node.metadata.iso_timestamp, icon: Cpu },
                 { label: 'Network Load', value: node.metadata.network_load, icon: Activity },
                 { label: 'Block Depth', value: node.metadata.block_depth, icon: Database },
-                { label: 'Gas Velocity', value: node.metadata.gas_fee, icon: Zap },
+                { label: 'Gas Velocity', value: node.metadata.gas_fee || 'N/A', icon: Zap },
               ].map((meta, i) => (
                 <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
                   <div className="flex items-center gap-2">
@@ -122,7 +124,7 @@ const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () =>
           </div>
           <div className="mt-12 pt-6 border-t border-white/5 flex justify-between items-center text-[8px] font-mono text-slate-600 uppercase tracking-[0.4em]">
             <span>Hardware: Sony A1 Master Engine</span>
-            <span>Lens: 85mm f1.4 // Exp: {node.metadata.shutter_speed}</span>
+            <span>Lens: 85mm f1.4 // Shutter: {node.metadata.shutter_speed}</span>
           </div>
         </div>
       </motion.div>
@@ -132,12 +134,11 @@ const ViewfinderFocus = ({ node, onClose }: { node: ForensicNode; onClose: () =>
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────
 
-export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Default to empty array
+export const DataTable: React.FC<DataTableProps> = ({ nodes = [], onDelete = () => { } }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState<ForensicNode | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof ForensicNode | null, dir: 'asc' | 'desc' }>({ key: null, dir: 'desc' });
-  const tableRef = useRef<HTMLDivElement>(null);
   const ITEMS_PER_PAGE = 10;
 
   const handleSort = (key: keyof ForensicNode) => {
@@ -148,8 +149,6 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
   };
 
   const filteredNodes = useMemo(() => {
-    if (!nodes) return []; // Defensive guard
-
     let result = nodes.filter(n =>
       n.entity.toLowerCase().includes(searchQuery.toLowerCase()) ||
       n.hash.toLowerCase().includes(searchQuery.toLowerCase())
@@ -173,12 +172,12 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
   return (
     <>
       <motion.div
-        ref={tableRef}
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="relative rounded-[2rem] border border-white/[0.08] bg-[#050a15]/80 backdrop-blur-xl overflow-hidden mt-10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
+        className="relative rounded-[2rem] border border-white/[0.08] bg-[#050a15]/80 backdrop-blur-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
       >
+        {/* Table Header Section */}
         <div className="px-8 py-6 border-b border-white/[0.06] flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -202,7 +201,7 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-sky-400 transition-colors" />
             <input
               type="text"
-              placeholder="Filter Nodes or Hashes..."
+              placeholder="Filter Nodes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-11 pr-6 py-3 w-full md:w-80 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-[11px] text-white focus:outline-none focus:border-sky-500/40 transition-all placeholder:uppercase placeholder:tracking-widest"
@@ -210,6 +209,7 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
           </div>
         </div>
 
+        {/* The Data Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-separate border-spacing-0">
             <thead>
@@ -221,13 +221,15 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
                   { label: 'Strategic Function', key: 'intent' },
                   { label: 'Market Correlation', key: 'correlation' },
                   { label: 'Growth Fuel', key: 'alpha' },
-                  { label: 'Audit Integrity', key: 'audit' }
-                ].map((col) => (
-                  <th key={col.label} className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 border-b border-white/[0.04]">
-                    <button onClick={() => handleSort(col.key as any)} className="flex items-center gap-2 hover:text-sky-400 transition-colors">
-                      {col.label}
-                      <ArrowUpDown size={10} />
-                    </button>
+                  { label: 'Audit Integrity', key: 'audit' },
+                  { label: '', key: null }
+                ].map((col, i) => (
+                  <th key={i} className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 border-b border-white/[0.04]">
+                    {col.key ? (
+                      <button onClick={() => handleSort(col.key as any)} className="flex items-center gap-2 hover:text-sky-400 transition-colors uppercase">
+                        {col.label} <ArrowUpDown size={10} />
+                      </button>
+                    ) : null}
                   </th>
                 ))}
               </tr>
@@ -263,7 +265,8 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
                   <td className="px-8 py-5 text-right relative">
                     <div className="inline-block">
                       <p className="text-[13px] font-black text-white tabular-nums tracking-tighter">
-                        {node.type === 'transaction' ? `$${Number(node.alpha).toLocaleString()}` : `+${node.alpha} Node`}
+                        {/* Clean Currency formatting */}
+                        ${Number(node.alpha).toLocaleString()}
                       </p>
                       <div className="h-[1.5px] w-full bg-gradient-to-r from-sky-500/50 to-transparent mt-1" />
                     </div>
@@ -276,10 +279,23 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
                       {node.audit}
                     </span>
                   </td>
+                  <td className="px-8 py-5 text-right">
+                    {/* Prune/Delete Node Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent opening viewfinder
+                        onDelete(node.id);
+                      }}
+                      className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-500 hover:text-white"
+                      title="Prune Node"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={8} className="py-20 text-center">
                     <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em]">No Nodes Detected in Current Cycle</p>
                   </td>
                 </tr>
@@ -288,6 +304,7 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
           </table>
         </div>
 
+        {/* Pagination Section */}
         <div className="px-8 py-5 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
             Showing {paginated.length} of {filteredNodes.length} nodes
@@ -314,6 +331,7 @@ export const DataTable: React.FC<DataTableProps> = ({ nodes = [] }) => { // Defa
         </div>
       </motion.div>
 
+      {/* The Viewfinder Focus (Manual Focus Mode Popup) */}
       <AnimatePresence>
         {selectedNode && (
           <ViewfinderFocus
