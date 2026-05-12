@@ -189,8 +189,8 @@ function PostMortem() {
             <motion.button key={pin.date} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               onClick={() => setActivePin(activePin?.date === pin.date ? null : pin)}
               className={`text-left p-3 rounded-xl border transition-all ${pin.impact === 'positive'
-                  ? 'bg-emerald-400/5 border-emerald-400/20 hover:border-emerald-400/40'
-                  : 'bg-rose-400/5 border-rose-400/20 hover:border-rose-400/40'
+                ? 'bg-emerald-400/5 border-emerald-400/20 hover:border-emerald-400/40'
+                : 'bg-rose-400/5 border-rose-400/20 hover:border-rose-400/40'
                 }`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-600 font-mono">{pin.date}</span>
