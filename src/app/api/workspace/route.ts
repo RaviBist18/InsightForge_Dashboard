@@ -1,5 +1,6 @@
 // src/app/api/workspace/route.ts
-// Handles: why-feed (with live market correlation), scenario simulation, entity scoring, snapshot sealing
+// Handles: why-feed, scenario simulation, entity scoring, snapshot sealing
+// Optimized for direct database access to bypass cookie sync issues
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
@@ -28,18 +29,17 @@ async function groq(system: string, user: string, maxTokens = 512): Promise<stri
     return data.choices?.[0]?.message?.content ?? "AI unavailable";
 }
 
-// ── WHY FEED (UPDATED WITH MARKET CORRELATION) ────────────────────────────────
+// ── WHY FEED ──────────────────────────────────────────────────────────────────
 async function handleWhyFeed(body: {
     headlines: string[];
     mrr: number;
     churn: number;
     persona: string;
-    marketData?: Record<string, { price: number; change: number } | undefined>;
 }) {
-    const { headlines, mrr, churn, persona, marketData } = body;
+    const { headlines, mrr, churn, persona } = body;
 
     const system = `You are InsightForge's Strategic Intelligence Engine.
-Persona: ${persona}. You analyze global news AND live market movements through the lens of a B2B SaaS CEO's metrics.
+Persona: ${persona}. You analyze global news through the lens of a B2B SaaS CEO's metrics.
 Respond ONLY with a JSON array of objects: [{headline, snippet, impact_type, impact_delta, source}]
 - snippet: 1 sentence explaining business impact (be specific, use numbers).
 - impact_type: one of "churn" | "revenue" | "opportunity" | "risk"
@@ -48,9 +48,8 @@ Respond ONLY with a JSON array of objects: [{headline, snippet, impact_type, imp
 No markdown, no extra text.`;
 
     const user = `Current MRR: $${mrr.toLocaleString()}. Churn: ${churn}%.
-Market: SPY ${marketData?.SPY?.change?.toFixed(2) ?? "?"}%, NVDA ${marketData?.NVDA?.change?.toFixed(2) ?? "?"}%, BTC ${marketData?.BTC?.change?.toFixed(2) ?? "?"}%.
 Headlines: ${headlines.slice(0, 5).join(" | ")}
-Map each headline and market shift to a business impact snippet for this specific CEO.`;
+Map each headline to a business impact snippet.`;
 
     const raw = await groq(system, user, 800);
 
@@ -134,7 +133,7 @@ Score each entity.`;
     }
 }
 
-// ── SEAL SNAPSHOT ─────────────────────────────────────────────────────────────
+// ── SEAL SNAPSHOT (UPDATED WITH ROBUST LOGGING) ──────────────────────────────
 async function handleSealSnapshot(
     body: {
         label: string;
@@ -146,43 +145,53 @@ async function handleSealSnapshot(
     },
     userId: string
 ) {
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    try {
+        if (!userId) throw new Error("userId is missing");
 
-    const { label, mrr, churn, signups, marketConditions, persona } = body;
+        const { label, mrr, churn, signups, marketConditions, persona } = body;
 
-    const system = `You are InsightForge's Strategic Archivist.
+        const system = `You are InsightForge's Strategic Archivist.
 Write a concise 2-3 sentence strategic advisory for a CEO sealing this decision moment.
 Be direct and specific. No fluff.`;
 
-    const user = `Sealing snapshot: "${label}"
+        const user = `Sealing snapshot: "${label}"
 MRR: $${mrr}, Churn: ${churn}%, New Signups: ${signups}
 Market: ${JSON.stringify(marketConditions)}
 Persona: ${persona}`;
 
-    const aiAdvice = await groq(system, user, 300);
+        const aiAdvice = await groq(system, user, 300);
 
-    const payload = JSON.stringify({ label, mrr, churn, signups, marketConditions, aiAdvice, timestamp: Date.now() });
-    const hash = crypto.createHash("sha256").update(payload).digest("hex");
+        const payload = JSON.stringify({ label, mrr, churn, signups, marketConditions, aiAdvice, timestamp: Date.now() });
+        const hash = crypto.createHash("sha256").update(payload).digest("hex");
 
-    const { data, error } = await supabase.from("forensic_snapshots").insert({
-        user_id: userId,
-        label,
-        hash,
-        mrr,
-        churn,
-        signups,
-        market_conditions: marketConditions,
-        ai_advice: aiAdvice,
-        persona,
-    }).select().single();
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        const { data, error } = await supabase.from("forensic_snapshots").insert({
+            user_id: userId,
+            label,
+            hash,
+            mrr: Number(mrr),
+            churn: Number(churn),
+            signups: Number(signups),
+            market_conditions: marketConditions,
+            ai_advice: aiAdvice,
+            persona,
+        }).select().single();
 
-    return NextResponse.json({ snapshot: data });
+        if (error) {
+            console.error("SNAPSHOT_ERROR:", error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        return NextResponse.json({ snapshot: data });
+    } catch (err: any) {
+        console.error("SNAPSHOT_ERROR:", err);
+        return NextResponse.json({ error: err.message ?? "Unknown error" }, { status: 500 });
+    }
 }
 
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────

@@ -327,6 +327,7 @@ export default function WorkspaceClient({
                 body: JSON.stringify({
                     action: "seal-snapshot",
                     label: sealLabel, mrr, churn, signups,
+                    userId,
                     marketConditions: {
                         spy: tickers.find(t => t.symbol === "SPY")?.price ?? 0,
                         nvda: tickers.find(t => t.symbol === "NVDA")?.price ?? 0,
