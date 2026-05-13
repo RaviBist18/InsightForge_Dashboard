@@ -1,7 +1,6 @@
 "use client";
 // src/app/(dashboard)/dashboard/workspace/WorkspaceClient.tsx
-
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     AreaChart, Area, LineChart, Line,
@@ -11,6 +10,11 @@ import {
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
+
+// ── IMPORT FORENSIC COMPONENTS ──────────────────────────────────────────────
+import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
+import { KPISection } from "@/components/dashboard/KPISection";
+
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 interface Profile { full_name: string | null; role: string | null }
@@ -182,6 +186,18 @@ export default function WorkspaceClient({
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsSaved, setSettingsSaved] = useState(false);
 
+
+    // ── STABLE REFS (prevent useCallback loop) ──
+    const tickersRef = useRef(tickers);
+    const mrrRef = useRef(mrr);
+    const churnRef = useRef(churn);
+    const personaRef = useRef(persona);
+
+    useEffect(() => { tickersRef.current = tickers; }, [tickers]);
+    useEffect(() => { mrrRef.current = mrr; }, [mrr]);
+    useEffect(() => { churnRef.current = churn; }, [churn]);
+    useEffect(() => { personaRef.current = persona; }, [persona]);
+
     // ── FETCH REAL MRR FROM SUPABASE ─────────────────────────────────────────
     useEffect(() => {
         async function fetchMetrics() {
@@ -237,7 +253,7 @@ export default function WorkspaceClient({
             }
         }
         fetchMetrics();
-    }, [initialMrr]);
+    }, [initialMrr, setMrrTrend]);
 
     function generateMockSparkline(baseMrr: number) {
         return Array.from({ length: 12 }, (_, i) => ({
@@ -247,43 +263,41 @@ export default function WorkspaceClient({
     }
 
     // ── FETCH TICKERS ─────────────────────────────────────────────────────────
+
+    useEffect(() => { tickersRef.current = tickers; }, [tickers]);
+
     const fetchTickers = useCallback(async () => {
         const AV_KEY = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_KEY;
         const symbols = ["SPY", "NVDA", "BTC"];
-
         const results = await Promise.allSettled(
             symbols.map(async (symbol) => {
-                const ticker = symbol === "BTC" ? "BTC" : symbol;
                 const endpoint = symbol === "BTC"
                     ? `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=BTC&to_currency=USD&apikey=${AV_KEY}`
-                    : `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${AV_KEY}`;
-
+                    : `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${AV_KEY}`;
                 const res = await fetch(endpoint);
                 const data = await res.json();
-                console.log(symbol, JSON.stringify(data));
-
                 if (symbol === "BTC") {
                     const rate = data["Realtime Currency Exchange Rate"];
-                    const price = parseFloat(rate?.["5. Exchange Rate"] ?? "0");
-                    return { symbol, price, change: 0 };
+                    return { symbol, price: parseFloat(rate?.["5. Exchange Rate"] ?? "0"), change: 0 };
                 } else {
                     const quote = data["Global Quote"];
-                    const price = parseFloat(quote?.["05. price"] ?? "0");
-                    const change = parseFloat(quote?.["10. change percent"]?.replace("%", "") ?? "0");
-                    return { symbol, price, change };
+                    return { symbol, price: parseFloat(quote?.["05. price"] ?? "0"), change: parseFloat(quote?.["10. change percent"]?.replace("%", "") ?? "0") };
                 }
             })
         );
-
         const updated = results.map((r, i) =>
-            r.status === "fulfilled" && r.value.price > 0
-                ? r.value
-                : tickers[i]
+            r.status === "fulfilled" && (r.value as { price: number }).price > 0
+                ? r.value : tickersRef.current[i]
         );
-        setTickers(updated);
-    }, []);
+        setTickers(updated as Ticker[]);
+    }, []); // ← empty
 
     // ── FETCH WHY FEED ─────────────────────────────────────────────────────────
+
+    useEffect(() => { mrrRef.current = mrr; }, [mrr]);
+    useEffect(() => { churnRef.current = churn; }, [churn]);
+    useEffect(() => { personaRef.current = persona; }, [persona]);
+
     const fetchWhyFeed = useCallback(async () => {
         setFeedLoading(true);
         setFeedError(false);
@@ -294,31 +308,25 @@ export default function WorkspaceClient({
                 body: JSON.stringify({
                     action: "why-feed",
                     headlines: MOCK_HEADLINES,
-                    mrr, churn, persona,
+                    mrr: mrrRef.current,
+                    churn: churnRef.current,
+                    persona: personaRef.current,
                     marketData: {
-                        SPY: tickers.find(t => t.symbol === "SPY"),
-                        NVDA: tickers.find(t => t.symbol === "NVDA"),
-                        BTC: tickers.find(t => t.symbol === "BTC"),
+                        SPY: tickersRef.current.find(t => t.symbol === "SPY"),
+                        NVDA: tickersRef.current.find(t => t.symbol === "NVDA"),
+                        BTC: tickersRef.current.find(t => t.symbol === "BTC"),
                     },
                 }),
             });
             const data = await res.json();
             if (data.feed?.length) {
-                // Check for AI unavailable
-                const hasError = data.feed.some((f: WhyFeedItem) =>
-                    f.snippet?.toLowerCase().includes("ai unavailable")
-                );
+                const hasError = data.feed.some((f: WhyFeedItem) => f.snippet?.toLowerCase().includes("ai unavailable"));
                 if (hasError) { setFeedError(true); setWhyFeed([]); }
                 else setWhyFeed(data.feed);
-            } else {
-                setFeedError(true);
-            }
-        } catch {
-            setFeedError(true);
-        } finally {
-            setFeedLoading(false);
-        }
-    }, [mrr, churn, persona]);
+            } else { setFeedError(true); }
+        } catch { setFeedError(true); }
+        finally { setFeedLoading(false); }
+    }, []); // ← empty
 
     useEffect(() => {
         fetchTickers();
@@ -330,12 +338,12 @@ export default function WorkspaceClient({
     useEffect(() => {
         setIsWorkspacePage(true);
         return () => setIsWorkspacePage(false);
-    }, []);
+    }, [setIsWorkspacePage]);
 
-    useEffect(() => { setCtxMrr(mrr); }, [mrr]);
-    useEffect(() => { setCtxChurn(churn); }, [churn]);
-    useEffect(() => { setEntityCount(entities.length); }, [entities.length]);
-    useEffect(() => { setSnapshotCount(snapshots.length); }, [snapshots.length]);
+    useEffect(() => { setCtxMrr(mrr); }, [mrr, setCtxMrr]);
+    useEffect(() => { setCtxChurn(churn); }, [churn, setCtxChurn]);
+    useEffect(() => { setEntityCount(entities.length); }, [entities.length, setEntityCount]);
+    useEffect(() => { setSnapshotCount(snapshots.length); }, [snapshots.length, setSnapshotCount]);
 
     // ── SEAL SNAPSHOT ─────────────────────────────────────────────────────────
     const handleSeal = async () => {
@@ -552,7 +560,7 @@ export default function WorkspaceClient({
                 {/* Tab Bar */}
                 <div className="flex gap-1 mb-6 overflow-x-auto pb-2">
                     {tabs.map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                             className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold whitespace-nowrap transition-all"
                             style={{
                                 background: activeTab === tab.id ? `${accent}20` : "rgba(255,255,255,0.03)",
@@ -571,166 +579,208 @@ export default function WorkspaceClient({
                     {activeTab === "pulse" && (
                         <motion.div key="pulse"
                             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                            className="space-y-6"
                         >
-                            {/* Internal Revenue Panel */}
-                            <div className="rounded-xl p-5"
-                                style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 30px ${accent}08` }}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Internal Revenue</p>
-                                        {metricsLoading ? (
-                                            <motion.div className="h-9 w-40 rounded"
-                                                animate={{ opacity: [0.3, 0.7, 0.3] }}
-                                                transition={{ duration: 1.5, repeat: Infinity }}
-                                                style={{ background: "rgba(255,255,255,0.06)" }} />
-                                        ) : (
-                                            <p className="text-3xl font-black text-white">
-                                                ${mrr.toLocaleString()}
-                                                <span className="text-sm text-slate-500 ml-2 font-normal">/mo</span>
+                            <KPISection stats={{
+                                totalRevenue: mrr,
+                                totalProfit: Math.round(mrr * 0.4),
+                                profitMargin: 40,
+                                totalOrders: Math.round(mrr / 34),
+                                activeUsers: Math.round(mrr / 48),
+                                churnRate: 1.8,
+                                efficiency: 78.5,
+                                latestNews: "Forensic analysis active.",
+                                mrrSparkline: mrrSparkline.map(d => d.mrr)
+                            }} />
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Internal Revenue Panel */}
+                                <div className="rounded-xl p-5"
+                                    style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 30px ${accent}08` }}>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Internal Revenue</p>
+                                            {metricsLoading ? (
+                                                <motion.div className="h-9 w-40 rounded"
+                                                    animate={{ opacity: [0.3, 0.7, 0.3] }}
+                                                    transition={{ duration: 1.5, repeat: Infinity }}
+                                                    style={{ background: "rgba(255,255,255,0.06)" }} />
+                                            ) : (
+                                                <p className="text-3xl font-black text-white">
+                                                    ${mrr.toLocaleString()}
+                                                    <span className="text-sm text-slate-500 ml-2 font-normal">/mo</span>
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-slate-500">Churn</p>
+                                            <p className="text-lg font-bold" style={{ color: churn < 3 ? "#10b981" : "#f43f5e" }}>
+                                                {churn}%
                                             </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-40">
+                                        {metricsLoading ? (
+                                            <div className="h-full flex items-end gap-1 px-2">
+                                                {Array.from({ length: 12 }).map((_, i) => (
+                                                    <motion.div key={i} className="flex-1 rounded-t"
+                                                        animate={{ opacity: [0.2, 0.5, 0.2] }}
+                                                        transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
+                                                        style={{
+                                                            height: `${30 + Math.random() * 60}%`,
+                                                            background: `${accent}30`,
+                                                        }} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={mrrSparkline}>
+                                                    <defs>
+                                                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                                                            <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+                                                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#475569" }} axisLine={false} tickLine={false} />
+                                                    <YAxis hide />
+                                                    <Tooltip
+                                                        contentStyle={{ background: "#080f1e", border: `1px solid ${accent}40`, borderRadius: 6, fontSize: 11, color: "#e2e8f0" }}
+                                                        formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
+                                                    />
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey="mrr"
+                                                        stroke="#38bdf8"
+                                                        strokeWidth={3}
+                                                        fill="url(#colorRevenue)"
+                                                        dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
+                                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }}
+                                                    />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
                                         )}
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xs text-slate-500">Churn</p>
-                                        <p className="text-lg font-bold" style={{ color: churn < 3 ? "#10b981" : "#f43f5e" }}>
-                                            {churn}%
-                                        </p>
-                                    </div>
-                                </div>
 
-                                <div className="h-40">
-                                    {metricsLoading ? (
-                                        <div className="h-full flex items-end gap-1 px-2">
-                                            {Array.from({ length: 12 }).map((_, i) => (
-                                                <motion.div key={i} className="flex-1 rounded-t"
-                                                    animate={{ opacity: [0.2, 0.5, 0.2] }}
-                                                    transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
-                                                    style={{
-                                                        height: `${30 + Math.random() * 60}%`,
-                                                        background: `${accent}30`,
-                                                    }} />
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={mrrSparkline}>
-                                                <defs>
-                                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
-                                                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                                                <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#475569" }} axisLine={false} tickLine={false} />
-                                                <YAxis hide />
-                                                <Tooltip
-                                                    contentStyle={{ background: "#080f1e", border: `1px solid ${accent}40`, borderRadius: 6, fontSize: 11, color: "#e2e8f0" }}
-                                                    formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
-                                                />
-                                                <Area
-                                                    type="monotone"
-                                                    dataKey="mrr"
-                                                    stroke="#38bdf8"
-                                                    strokeWidth={3}
-                                                    fill="url(#colorRevenue)"
-                                                    dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
-                                                    activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }}
-                                                />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 mt-3">
-                                    {[
-                                        { label: "New Signups", value: signups, color: "#10b981" },
-                                        { label: "Subscribers", value: Math.round(mrr / 49), color: accent },
-                                    ].map(m => (
-                                        <div key={m.label} className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                                            <p className="text-xs text-slate-500 mb-1">{m.label}</p>
-                                            <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Why Feed Panel */}
-                            <div className="rounded-xl p-5 flex flex-col"
-                                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Intelligence Feed</p>
-                                        <p className="text-sm font-bold text-white">Why Your Numbers Are Moving</p>
-                                    </div>
-                                    <button onClick={fetchWhyFeed} disabled={feedLoading}
-                                        className="px-3 py-1.5 rounded text-xs font-bold transition-all"
-                                        style={{
-                                            background: feedLoading ? "rgba(255,255,255,0.05)" : `${accent}20`,
-                                            border: `1px solid ${accent}40`, color: accent,
-                                        }}>
-                                        {feedLoading ? "⟳ Analyzing..." : "↺ Refresh"}
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 overflow-y-auto max-h-[420px] space-y-3 pr-1 custom-scroll">
-                                    {/* Loading skeleton */}
-                                    {feedLoading && <FeedSkeleton accent={accent} />}
-
-                                    {/* Error state */}
-                                    {!feedLoading && feedError && (
-                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                            className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
-                                            <p className="text-2xl">⚠️</p>
-                                            <p className="text-xs text-amber-400 font-bold">Intelligence Forge Offline</p>
-                                            <p className="text-xs text-slate-500 leading-relaxed">
-                                                Market signals detected, but intelligence forge is offline. Check API keys.
-                                            </p>
-                                            <button onClick={fetchWhyFeed}
-                                                className="mt-2 px-4 py-1.5 rounded text-xs font-bold transition-all"
-                                                style={{ background: `${accent}20`, border: `1px solid ${accent}40`, color: accent }}>
-                                                Retry
-                                            </button>
-                                        </motion.div>
-                                    )}
-
-                                    {/* Feed items */}
-                                    {!feedLoading && !feedError && whyFeed.map((item, i) => (
-                                        <motion.div key={i}
-                                            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: i * 0.08 }}
-                                            className="p-3 rounded-lg"
-                                            style={{
-                                                background: "rgba(255,255,255,0.025)",
-                                                border: `1px solid ${impactColor(item.impact_type, item.impact_delta)}25`,
-                                                borderLeft: `3px solid ${impactColor(item.impact_type, item.impact_delta)}`,
-                                            }}>
-                                            <div className="flex items-start justify-between gap-2 mb-1">
-                                                <p className="text-xs text-slate-400 line-clamp-1">{item.headline}</p>
-                                                <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded"
-                                                    style={{
-                                                        background: `${impactColor(item.impact_type, item.impact_delta)}20`,
-                                                        color: impactColor(item.impact_type, item.impact_delta),
-                                                    }}>
-                                                    {(item.impact_delta ?? 0) > 0 ? "+" : ""}{(item.impact_delta ?? 0).toFixed(1)}%
-                                                </span>
+                                    <div className="grid grid-cols-2 gap-3 mt-3">
+                                        {[
+                                            { label: "New Signups", value: signups, color: "#10b981" },
+                                            { label: "Subscribers", value: Math.round(mrr / 49), color: accent },
+                                        ].map(m => (
+                                            <div key={m.label} className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                                                <p className="text-xs text-slate-500 mb-1">{m.label}</p>
+                                                <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
                                             </div>
-                                            <p className="text-xs text-slate-200 leading-relaxed">{item.snippet}</p>
-                                            <p className="text-xs text-slate-600 mt-1">{item.source} · {item.impact_type.toUpperCase()}</p>
-                                        </motion.div>
-                                    ))}
+                                        ))}
+                                    </div>
+                                </div>
 
-                                    {/* Empty state */}
-                                    {!feedLoading && !feedError && whyFeed.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center py-12 gap-2">
-                                            <p className="text-slate-600 text-sm">No intelligence yet.</p>
-                                            <button onClick={fetchWhyFeed} className="text-xs underline" style={{ color: accent }}>
-                                                Generate Feed
-                                            </button>
+                                {/* Why Feed Panel */}
+                                <div className="rounded-xl p-5 flex flex-col"
+                                    style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Intelligence Feed</p>
+                                            <p className="text-sm font-bold text-white">Why Your Numbers Are Moving</p>
                                         </div>
-                                    )}
+                                        <button onClick={fetchWhyFeed} disabled={feedLoading}
+                                            className="px-3 py-1.5 rounded text-xs font-bold transition-all"
+                                            style={{
+                                                background: feedLoading ? "rgba(255,255,255,0.05)" : `${accent}20`,
+                                                border: `1px solid ${accent}40`, color: accent,
+                                            }}>
+                                            {feedLoading ? "⟳ Analyzing..." : "↺ Refresh"}
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto max-h-[420px] space-y-3 pr-1 custom-scroll">
+                                        {/* Loading skeleton */}
+                                        {feedLoading && <FeedSkeleton accent={accent} />}
+
+                                        {/* Error state */}
+                                        {!feedLoading && feedError && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                                className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
+                                                <p className="text-2xl">⚠️</p>
+                                                <p className="text-xs text-amber-400 font-bold">Intelligence Forge Offline</p>
+                                                <p className="text-xs text-slate-500 leading-relaxed">
+                                                    Market signals detected, but intelligence forge is offline. Check API keys.
+                                                </p>
+                                                <button onClick={fetchWhyFeed}
+                                                    className="mt-2 px-4 py-1.5 rounded text-xs font-bold transition-all"
+                                                    style={{ background: `${accent}20`, border: `1px solid ${accent}40`, color: accent }}>
+                                                    Retry
+                                                </button>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Feed items */}
+                                        {!feedLoading && !feedError && whyFeed.map((item, i) => (
+                                            <motion.div key={i}
+                                                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.08 }}
+                                                className="p-3 rounded-lg"
+                                                style={{
+                                                    background: "rgba(255,255,255,0.025)",
+                                                    border: `1px solid ${impactColor(item.impact_type, item.impact_delta)}25`,
+                                                    borderLeft: `3px solid ${impactColor(item.impact_type, item.impact_delta)}`,
+                                                }}>
+                                                <div className="flex items-start justify-between gap-2 mb-1">
+                                                    <p className="text-xs text-slate-400 line-clamp-1">{item.headline}</p>
+                                                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded"
+                                                        style={{
+                                                            background: `${impactColor(item.impact_type, item.impact_delta)}20`,
+                                                            color: impactColor(item.impact_type, item.impact_delta),
+                                                        }}>
+                                                        {(item.impact_delta ?? 0) > 0 ? "+" : ""}{(item.impact_delta ?? 0).toFixed(1)}%
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-200 leading-relaxed">{item.snippet}</p>
+                                                <p className="text-xs text-slate-600 mt-1">{item.source} · {item.impact_type.toUpperCase()}</p>
+                                            </motion.div>
+                                        ))}
+
+                                        {/* Empty state */}
+                                        {!feedLoading && !feedError && whyFeed.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center py-12 gap-2">
+                                                <p className="text-slate-600 text-sm">No intelligence yet.</p>
+                                                <button onClick={fetchWhyFeed} className="text-xs underline" style={{ color: accent }}>
+                                                    Generate Feed
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
+                        </motion.div>
+                    )}
+
+                    {/* ── FORENSIC DETAIL VIEW INJECTION ── */}
+                    {(activeTab.includes("total-") || activeTab.includes("-rate") || activeTab.includes("-margin")) && (
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                        >
+                            <KPIDetailClient
+                                slug={activeTab}
+                                stats={{
+                                    totalRevenue: mrr,
+                                    totalProfit: Math.round(mrr * 0.4),
+                                    profitMargin: 40,
+                                    totalOrders: Math.round(mrr / 34),
+                                    activeUsers: Math.round(mrr / 48),
+                                    churnRate: 1.8,
+                                    efficiency: 78.5,
+                                    latestNews: "Telemetry integrated.",
+                                    mrrSparkline: mrrSparkline.map(d => d.mrr)
+                                }}
+                                analytics={{}}
+                                role={profile?.role as any || 'admin'}
+                                persona={persona as any}
+                            />
                         </motion.div>
                     )}
 

@@ -1,18 +1,12 @@
 import { supabase } from './supabase';
 import { TRANSACTIONS, INSIGHTS, Transaction, Insight, REVENUE_DATA, CATEGORY_DATA, REGION_DATA } from '@/data/mockData';
 
-/**
- * DATA ACCESS LAYER (DAL)
- * -----------------------
- * This layer abstracts the data fetching logic from the UI components.
- */
-
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getMultiplier = (range?: string) => {
   if (range === '7d') return 0.25;
   if (range === '90d') return 3;
-  return 1; // default to 30d
+  return 1;
 };
 
 export const getTransactions = async (range?: string): Promise<Transaction[]> => {
@@ -28,87 +22,47 @@ export const getTransactions = async (range?: string): Promise<Transaction[]> =>
     if (!response.ok) throw new Error(`CoinGecko API returned ${response.status}`);
     const data = await response.json();
     const limit = Math.max(5, Math.floor((data?.length || 0) * m));
-
-    return (data || []).map((coin: any) => ({
+    return (data || []).map((coin: { id: string; name: string; last_updated: string; current_price: number; price_change_percentage_24h: number }) => ({
       id: coin.id,
-      date: new Date(coin.last_updated || Date.now()).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
-      }),
+      date: new Date(coin.last_updated || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       customer: coin.name,
       category: 'Crypto',
       region: 'Global',
       amount: coin.current_price,
-      status: coin.price_change_percentage_24h > 0 ? 'Completed' : 'Pending'
+      status: coin.price_change_percentage_24h > 0 ? 'Completed' : 'Pending',
     })).slice(0, limit) as unknown as Transaction[];
-  } catch (err) {
+  } catch {
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
       if (error) return [];
       const limit = Math.max(5, Math.floor((data?.length || 0) * m));
       return (data || []).map(item => ({
         ...item,
-        date: new Date(item.created_at).toLocaleDateString('en-US', {
-          month: 'short', day: 'numeric', year: 'numeric'
-        })
+        date: new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       })).slice(0, limit) as Transaction[];
-    } catch (supabaseErr) {
+    } catch {
       return [];
     }
   }
 };
 
-// ─── FINALIZED STRATEGIC FORGE INTEGRATION ───
 export const getInsights = async (range?: string): Promise<Insight[]> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const response = await fetch(`${baseUrl}/api/briefing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        range: range || 'monthly',
-        category: 'enterprise',
-        efficiency: 78.1,
-        newsHeadline: "Tech sector resilient amid market dip"
-      }),
-      cache: 'no-store'
+      body: JSON.stringify({ range: range || 'monthly', category: 'enterprise', efficiency: 78.1, newsHeadline: 'Tech sector resilient amid market dip' }),
+      cache: 'no-store',
     });
-
     if (!response.ok) throw new Error('AI Bridge Failed');
-    const aiData = await response.json();
-
-    // Mapping with absolute Label compliance for Card 1, 2, and 3
     return [
-      {
-        id: 1,
-        title: "Market Dominance",
-        description: `Briefing: Revenue growth of 19.7% outpaces sector volatility. Margin Impact: +4.2%. Executive Action: Squeeze Pro tier upgrades.`,
-        priority: 'high',
-        type: 'trend'
-      },
-      {
-        id: 2,
-        title: "Toxic Growth Alert",
-        description: `Briefing: Revenue is up but efficiency at 78.1% indicates a margin leak. Margin Impact: -1.7%. Executive Action: Audit Vercel burn.`,
-        priority: 'critical',
-        type: 'anomaly'
-      },
-      {
-        id: 3,
-        title: "Counter-Cyclical Strategy",
-        description: `Briefing: Tech resilience detected while SPY dips. Margin Impact: +2.4%. Executive Action: Squeeze B2B budgets.`,
-        priority: 'medium',
-        type: 'highlight'
-      }
+      { id: 1, title: 'Market Dominance', description: 'Briefing: Revenue growth of 19.7% outpaces sector volatility. Margin Impact: +4.2%. Executive Action: Squeeze Pro tier upgrades.', priority: 'high', type: 'trend' },
+      { id: 2, title: 'Toxic Growth Alert', description: 'Briefing: Revenue is up but efficiency at 78.1% indicates a margin leak. Margin Impact: -1.7%. Executive Action: Audit Vercel burn.', priority: 'critical', type: 'anomaly' },
+      { id: 3, title: 'Counter-Cyclical Strategy', description: 'Briefing: Tech resilience detected while SPY dips. Margin Impact: +2.4%. Executive Action: Squeeze B2B budgets.', priority: 'medium', type: 'highlight' },
     ];
-  } catch (error) {
-    // Fallback if API is offline
-    return INSIGHTS.map(insight => ({
-      ...insight,
-      description: `Briefing: ${insight.description} Margin Impact: Neutral. Executive Action: Review internal data.`
-    }));
+  } catch {
+    return INSIGHTS.map(insight => ({ ...insight, description: `Briefing: ${insight.description} Margin Impact: Neutral. Executive Action: Review internal data.` }));
   }
 };
 
@@ -135,6 +89,8 @@ export const getRegionData = async (range?: string) => {
   return REGION_DATA.map(d => ({ ...d, value: Math.floor(d.value * m) }));
 };
 
+// ─── DashboardStats — canonical shape used by WorkspaceProvider ──────────────
+
 export interface DashboardStats {
   totalRevenue: number;
   totalProfit: number;
@@ -144,93 +100,147 @@ export interface DashboardStats {
   churnRate: number;
   efficiency: number;
   latestNews: string;
+  mrrSparkline?: number[];   // for MoM calc in KPISection
 }
 
+// ─── CANONICAL VALUES — single source of truth ────────────────────────────────
+// Admin HUD + KPIDetailClient both read from here.
+// REV_HIST in KPIDetailClient scales toward these exact April values.
+
+const CANONICAL: DashboardStats = {
+  totalRevenue: 1800,
+  totalProfit: 720,
+  profitMargin: 40,
+  totalOrders: 53,
+  activeUsers: 37,
+  churnRate: 1.8,
+  efficiency: 78.5,
+  latestNews: 'SaaS sector seeing 5% growth in Enterprise renewals',
+  mrrSparkline: [1240, 1380, 1520, 1610, 1680, 1740, 1800],
+};
+
 export const getDashboardStats = async (range?: string): Promise<DashboardStats> => {
-  await delay(600);
-  const m = getMultiplier(range);
-  const baseRevenue = TRANSACTIONS.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalRevenue = baseRevenue * m;
+  await delay(300);
+
+  // Range scaling — keeps relative shape, final value always canonical
+  const scale: Record<string, number> = { '7d': 0.25, '30d': 1, '90d': 1, 'monthly': 1, 'quarterly': 1, 'annual': 1 };
+  const m = scale[range ?? '30d'] ?? 1;
+
+  if (m === 1) return CANONICAL;
 
   return {
-    totalRevenue,
-    totalProfit: totalRevenue * 0.186,
-    profitMargin: 18.6,
-    totalOrders: Math.floor(TRANSACTIONS.length * m),
-    activeUsers: Math.floor(12500 * m),
-    churnRate: range === '90d' ? 2.4 : range === '7d' ? 0.8 : 1.2,
-    efficiency: 78.5,
-    latestNews: "SaaS sector seeing 5% growth in Enterprise renewals"
+    ...CANONICAL,
+    totalRevenue: Math.round(CANONICAL.totalRevenue * m),
+    totalProfit: Math.round(CANONICAL.totalProfit * m),
+    totalOrders: Math.round(CANONICAL.totalOrders * m),
+    activeUsers: Math.round(CANONICAL.activeUsers * m),
+    churnRate: range === '7d' ? 0.8 : CANONICAL.churnRate,
+    mrrSparkline: CANONICAL.mrrSparkline?.map(v => Math.round(v * m)),
   };
 };
 
-export const getAnalyticsByCategory = async (slug: string) => {
-  await delay(400);
-  const safeSlug = slug || 'category';
-  const title = safeSlug.charAt(0).toUpperCase() + safeSlug.slice(1).replace('-', ' ');
+// ─── getAnalyticsByCategory — slug detail data ────────────────────────────────
+// totalValue MUST match CANONICAL values — no legacy $45k/$8k mocks.
 
-  switch (safeSlug) {
-    case 'active-users':
-      return {
-        title, totalValue: 12500, growthPercentage: 5.4,
-        userData: [
-          { id: 1, name: 'Alice Smith', email: 'alice@example.com', status: 'Active', joinDate: '2024-01-15' },
-          { id: 2, name: 'Bob Jones', email: 'bob@example.com', status: 'Active', joinDate: '2024-02-10' },
-          { id: 3, name: 'Charlie Davis', email: 'charlie@example.com', status: 'Inactive', joinDate: '2024-02-28' },
-          { id: 4, name: 'Diana Prince', email: 'diana@example.com', status: 'Active', joinDate: '2024-03-05' },
-          { id: 5, name: 'Evan Wright', email: 'evan@example.com', status: 'Active', joinDate: '2024-03-20' },
-        ]
-      };
-    case 'profit-margin':
-      return {
-        title, totalValue: 18.6, growthPercentage: -2.1, marginPercentage: 18.6,
-        expenses: [
-          { category: 'Infrastructure', amount: 45000, percentage: 45 },
-          { category: 'Marketing', amount: 25000, percentage: 25 },
-          { category: 'Salaries', amount: 20000, percentage: 20 },
-          { category: 'Software Tools', amount: 10000, percentage: 10 },
-        ]
-      };
-    case 'total-orders':
-      return {
-        title, totalValue: 3450, growthPercentage: 14.7,
-        chartData: [
-          { name: 'Mon', value: 120 }, { name: 'Tue', value: 150 }, { name: 'Wed', value: 180 },
-          { name: 'Thu', value: 220 }, { name: 'Fri', value: 250 }, { name: 'Sat', value: 300 }, { name: 'Sun', value: 280 },
-        ]
-      };
-    case 'churn-rate':
-      return {
-        title, totalValue: 1.2, growthPercentage: -0.3,
-        pieData: [
-          { name: 'Retained', value: 98.8, fill: '#10b981' },
-          { name: 'Churned', value: 1.2, fill: '#f43f5e' }
-        ]
-      };
+export const getAnalyticsByCategory = async (slug: string) => {
+  await delay(300);
+
+  switch (slug) {
     case 'total-revenue':
       return {
-        title: 'Total Revenue', totalValue: 45000, growthPercentage: 12.5,
+        title: 'Total Revenue',
+        totalValue: CANONICAL.totalRevenue,   // $1,800
+        growthPercentage: 12.5,
         chartData: [
-          { name: 'Jan', value: 36000 }, { name: 'Feb', value: 38000 }, { name: 'Mar', value: 41000 },
-          { name: 'Apr', value: 39000 }, { name: 'May', value: 43000 }, { name: 'Jun', value: 45000 },
-        ]
+          { name: 'Oct', value: 1240 },
+          { name: 'Nov', value: 1380 },
+          { name: 'Dec', value: 1520 },
+          { name: 'Jan', value: 1610 },
+          { name: 'Feb', value: 1680 },
+          { name: 'Mar', value: 1740 },
+          { name: 'Apr', value: 1800 },
+        ],
       };
+
     case 'total-profit':
       return {
-        title: 'Total Profit', totalValue: 8370, growthPercentage: 8.2,
+        title: 'Total Profit',
+        totalValue: CANONICAL.totalProfit,    // $720
+        growthPercentage: 8.2,
         chartData: [
-          { name: 'Jan', value: 6500 }, { name: 'Feb', value: 7100 }, { name: 'Mar', value: 6800 },
-          { name: 'Apr', value: 7400 }, { name: 'May', value: 7900 }, { name: 'Jun', value: 8370 },
-        ]
+          { name: 'Oct', value: 496 },
+          { name: 'Nov', value: 552 },
+          { name: 'Dec', value: 608 },
+          { name: 'Jan', value: 644 },
+          { name: 'Feb', value: 672 },
+          { name: 'Mar', value: 696 },
+          { name: 'Apr', value: 720 },
+        ],
       };
-    default:
-      const baseValue = (safeSlug.length * 1234) % 50000 + 10000;
+
+    case 'profit-margin':
       return {
-        title, totalValue: baseValue, growthPercentage: (safeSlug.length % 15) + 2.5,
+        title: 'Profit Margin',
+        totalValue: CANONICAL.profitMargin,   // 40
+        growthPercentage: -2.1,
+        marginPercentage: CANONICAL.profitMargin,
+        expenses: [
+          { category: 'Hosting (Vercel)', amount: 180, percentage: 17 },
+          { category: 'Groq API tokens', amount: 240, percentage: 22 },
+          { category: 'Alpha Vantage', amount: 60, percentage: 6 },
+          { category: 'NewsAPI', amount: 50, percentage: 5 },
+          { category: 'Supabase', amount: 45, percentage: 4 },
+          { category: 'Other OpEx', amount: 505, percentage: 46 },
+        ],
+      };
+
+    case 'total-orders':
+      return {
+        title: 'Total Orders',
+        totalValue: CANONICAL.totalOrders,    // 53
+        growthPercentage: 14.7,
         chartData: [
-          { name: 'Jan', value: baseValue * 0.8 }, { name: 'Feb', value: baseValue * 1.1 }, { name: 'Mar', value: baseValue * 0.9 },
-          { name: 'Apr', value: baseValue * 1.2 }, { name: 'May', value: baseValue * 1.5 }, { name: 'Jun', value: baseValue * 1.3 },
-        ]
+          { name: 'Mon', value: 6 },
+          { name: 'Tue', value: 8 },
+          { name: 'Wed', value: 7 },
+          { name: 'Thu', value: 9 },
+          { name: 'Fri', value: 11 },
+          { name: 'Sat', value: 8 },
+          { name: 'Sun', value: 4 },
+        ],
+      };
+
+    case 'active-users':
+      return {
+        title: 'Active Users',
+        totalValue: CANONICAL.activeUsers,    // 37
+        growthPercentage: 5.4,
+        userData: [
+          { id: 1, name: 'Alice Smith', email: 'alice@example.com', status: 'Active', joinDate: '2026-01-15' },
+          { id: 2, name: 'Bob Jones', email: 'bob@example.com', status: 'Active', joinDate: '2026-02-10' },
+          { id: 3, name: 'Charlie Davis', email: 'charlie@example.com', status: 'Inactive', joinDate: '2026-02-28' },
+          { id: 4, name: 'Diana Prince', email: 'diana@example.com', status: 'Active', joinDate: '2026-03-05' },
+          { id: 5, name: 'Evan Wright', email: 'evan@example.com', status: 'Active', joinDate: '2026-03-20' },
+        ],
+      };
+
+    case 'churn-rate':
+      return {
+        title: 'Churn Rate',
+        totalValue: CANONICAL.churnRate,      // 1.8
+        growthPercentage: -0.3,
+        pieData: [
+          { name: 'Retained', value: 98.2, fill: '#10b981' },
+          { name: 'Churned', value: 1.8, fill: '#f43f5e' },
+        ],
+      };
+
+    default:
+      return {
+        title: slug,
+        totalValue: 0,
+        growthPercentage: 0,
+        chartData: [],
       };
   }
 };

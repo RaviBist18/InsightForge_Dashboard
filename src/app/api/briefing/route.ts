@@ -7,66 +7,52 @@ export async function POST(req: Request) {
     try {
         const { range, category, efficiency, newsHeadline } = await req.json();
 
+        // ─── 429 PROTECTION: OPTIMIZED PROMPT ───
+        // By reducing the length of the system prompt, we save tokens per minute (TPM).
         const completion = await groq.chat.completions.create({
             messages: [
                 {
                     role: "system",
-                    content: `You are a world-class SaaS business strategist and market analyst.
-
-Write ONE sentence only.
-
-Goal:
-Generate a sharp, unique, filter-aware strategic insight that explains the business situation clearly.
-
+                    content: `You are a SaaS strategist. Write ONE sentence (<20 words) explaining the business situation.
 Rules:
-- Keep it under 20 words.
-- Use blunt, intelligent, high-impact business language.
-- Make every output feel distinct.
-- Avoid generic words: overall, stable, healthy, monitor, good.
-- Use strong verbs: cut, push, squeeze, unlock, protect, accelerate, defend, capture, recover, expand.
-- Match the tone to the filter and tier.
-- Reflect the news context in the insight.
-- No filler. No explanation. No emojis.
-
-Filter meaning:
-- Daily: urgent movement, immediate risk, quick opportunity.
-- Weekly: trend shift, momentum, pressure, recovery.
-- Monthly: performance quality, efficiency, leak points, growth strength.
-- Quarterly: strategic direction, market position, scaling, resilience.
-- Annual: long-term strength, structural growth, competitive advantage.
-
-Tier meaning:
-- Starter: simple, direct, easy to understand.
-- Pro: growth-focused, analytical, sharper business language.
-- Enterprise: executive-level, strategic, high-value, boardroom tone.
-
-Return only one sentence.`
+- High-impact business language only.
+- Use strong verbs: cut, push, squeeze, unlock, protect, accelerate.
+- Match tone to Filter (Daily: urgent | Weekly: trend | Monthly: efficiency) and Tier.
+- No filler, generic words, or emojis.`
                 },
                 {
                     role: "user",
-                    content: `Context:
-- Filter: ${range}
-- Tier: ${category}
-- Profit Efficiency: ${efficiency}%
-- News Context: ${newsHeadline}
-
-Write the sharpest possible strategic insight for this exact situation.`
+                    content: `Context: Filter:${range}, Tier:${category}, Efficiency:${efficiency}%, News:${newsHeadline}`
                 }
             ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0.35,
-            top_p: 0.85,
-            max_completion_tokens: 40,
+            model: "llama-3.1-8b-instant",
+            temperature: 0.3, // Lowered for more consistent, sharp output
+            top_p: 0.8,
+            max_completion_tokens: 35, // Strict limit to prevent token waste
         });
 
-        const message =
-            completion.choices[0]?.message?.content || "Profit engine needs a sharper move.";
+        const message = completion.choices[0]?.message?.content || "Strategic engine requiring realignment.";
 
         return NextResponse.json({ briefing: message });
-    } catch (error) {
+
+    } catch (error: any) {
+        // ─── GRACEFUL ERROR HANDLING ───
+
+        // Handle Groq Rate Limits (429)
+        if (error.status === 429) {
+            console.warn("Groq Rate Limit Hit. Returning cached fallback.");
+            return NextResponse.json(
+                {
+                    briefing: "Strategic briefing temporarily cached due to high demand.",
+                    isRateLimited: true
+                },
+                { status: 200 } // Return 200 so the UI doesn't crash
+            );
+        }
+
         console.error("Groq API Error:", error);
         return NextResponse.json(
-            { briefing: "Consultant offline. Check Groq API configuration." },
+            { briefing: "Intelligence consultant offline. Re-initializing..." },
             { status: 500 }
         );
     }
