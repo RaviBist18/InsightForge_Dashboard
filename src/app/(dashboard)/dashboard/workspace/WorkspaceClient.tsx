@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 interface Profile { full_name: string | null; role: string | null }
@@ -130,9 +131,12 @@ export default function WorkspaceClient({
     const accent = ACCENT_COLORS[accentColor] ?? "#0ea5e9";
 
     // ── ACTIVE TAB ──
-    const [activeTab, setActiveTab] = useState<
-        "pulse" | "archives" | "forge" | "entities" | "customizer"
-    >("pulse");
+    const {
+        activeTab, setActiveTab,
+        setMrr: setCtxMrr, setChurn: setCtxChurn,
+        setEntityCount, setSnapshotCount, setMrrTrend,
+        setIsWorkspacePage,
+    } = useWorkspace();
 
     // ── LIVE METRICS (real from Supabase) ──
     const [mrr, setMrr] = useState(initialMrr);
@@ -210,11 +214,18 @@ export default function WorkspaceClient({
 
                     setMrrSparkline(sparkline);
 
+
                     // Current month only for the big number
                     const now = new Date();
                     const currentMonthKey = now.toLocaleDateString("en-US", { month: "short", year: "numeric" });
                     const currentMrr = monthMap[currentMonthKey]?.total ?? 0;
                     setMrr(Math.round(currentMrr));
+                    if (sparkline.length >= 2) {
+                        const prev = sparkline[sparkline.length - 2].mrr;
+                        const curr = sparkline[sparkline.length - 1].mrr;
+                        const trend = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+                        setMrrTrend(parseFloat(trend.toFixed(1)));
+                    }
 
                 } else {
                     setMrrSparkline(generateMockSparkline(initialMrr));
@@ -315,6 +326,16 @@ export default function WorkspaceClient({
         const interval = setInterval(fetchTickers, 300000);
         return () => clearInterval(interval);
     }, [fetchTickers, fetchWhyFeed]);
+
+    useEffect(() => {
+        setIsWorkspacePage(true);
+        return () => setIsWorkspacePage(false);
+    }, []);
+
+    useEffect(() => { setCtxMrr(mrr); }, [mrr]);
+    useEffect(() => { setCtxChurn(churn); }, [churn]);
+    useEffect(() => { setEntityCount(entities.length); }, [entities.length]);
+    useEffect(() => { setSnapshotCount(snapshots.length); }, [snapshots.length]);
 
     // ── SEAL SNAPSHOT ─────────────────────────────────────────────────────────
     const handleSeal = async () => {
