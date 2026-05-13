@@ -152,7 +152,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
 
       <div className="space-y-6 px-4 pb-20">
         <CEOBriefing efficiency={stats?.efficiency || 0} newsHeadline={stats?.latestNews || "Market stable"} />
-        <KPISection stats={stats} category="" range="monthly" />
+        <KPISection stats={stats} />
         <FiltersPanel />
         <ChartsSection revenueData={revenueData} categoryData={categoryData} regionData={regionData} category="" range="monthly" />
         <InsightsPanel insights={insights} />
