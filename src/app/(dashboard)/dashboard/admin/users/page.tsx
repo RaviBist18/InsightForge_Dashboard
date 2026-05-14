@@ -361,7 +361,7 @@ function AdminUsersContent() {
 
             if (error) throw error;
 
-            const merged: UserRecord[] = (data || []).map((profile: any, i) => ({
+            const merged: UserRecord[] = (data || []).map((profile: any, i: number) => ({
                 id: profile.id,
                 email: `user-${profile.id.slice(0, 6)}@app.com`,
                 full_name: profile.full_name,

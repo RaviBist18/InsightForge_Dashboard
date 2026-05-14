@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import WorkspaceClient from "./WorkspaceClient";
+import WorkspaceClient from "@/app/(dashboard)/dashboard/workspace/WorkspaceClient";
 
 export default function WorkspacePage() {
     const [ready, setReady] = useState(false);
