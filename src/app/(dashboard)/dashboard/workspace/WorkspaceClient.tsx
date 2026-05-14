@@ -15,7 +15,6 @@ import { useWorkspace } from "@/context/WorkspaceContext";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { KPISection } from "@/components/dashboard/KPISection";
 
-
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 interface Profile { full_name: string | null; role: string | null }
 interface BriefingSettings { persona: string; frequency: string }
@@ -46,6 +45,16 @@ interface Props {
     initialSnapshots: ForensicSnapshot[]; initialEntities: BusinessEntity[];
     mrr: number; churn: number; signups: number; isReadOnly: boolean;
 }
+
+// ── KPI slug set — single source of truth ────────────────────────────────────
+const KPI_SLUGS = new Set([
+    "total-revenue",
+    "total-profit",
+    "profit-margin",
+    "total-orders",
+    "active-users",
+    "churn-rate",
+]);
 
 // ── ACCENT MAP ────────────────────────────────────────────────────────────────
 const ACCENT_COLORS: Record<string, string> = {
@@ -91,7 +100,6 @@ function FeedSkeleton({ accent }: { accent: string }) {
                     </div>
                     <div className="h-2 rounded w-full mb-1.5" style={{ background: "rgba(255,255,255,0.04)" }} />
                     <div className="h-2 rounded w-3/4" style={{ background: "rgba(255,255,255,0.04)" }} />
-                    {/* Scanning line */}
                     <motion.div
                         className="h-px w-full mt-2 rounded"
                         animate={{ scaleX: [0, 1], opacity: [0, 1, 0] }}
@@ -101,24 +109,12 @@ function FeedSkeleton({ accent }: { accent: string }) {
                 </motion.div>
             ))}
             <div className="flex items-center justify-center gap-2 py-3">
-                <motion.div
-                    className="w-1.5 h-1.5 rounded-full"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
-                    style={{ background: accent }}
-                />
-                <motion.div
-                    className="w-1.5 h-1.5 rounded-full"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.2 }}
-                    style={{ background: accent }}
-                />
-                <motion.div
-                    className="w-1.5 h-1.5 rounded-full"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }}
-                    style={{ background: accent }}
-                />
+                {[0, 0.2, 0.4].map((delay, i) => (
+                    <motion.div key={i} className="w-1.5 h-1.5 rounded-full"
+                        animate={{ opacity: [0.3, 1, 0.3] }}
+                        transition={{ duration: 0.8, repeat: Infinity, delay }}
+                        style={{ background: accent }} />
+                ))}
                 <span className="text-xs ml-1" style={{ color: accent }}>Forging intelligence...</span>
             </div>
         </div>
@@ -134,7 +130,6 @@ export default function WorkspaceClient({
     const { accentColor } = useTheme();
     const accent = ACCENT_COLORS[accentColor] ?? "#0ea5e9";
 
-    // ── ACTIVE TAB ──
     const {
         activeTab, setActiveTab,
         setMrr: setCtxMrr, setChurn: setCtxChurn,
@@ -142,14 +137,14 @@ export default function WorkspaceClient({
         setIsWorkspacePage,
     } = useWorkspace();
 
-    // ── LIVE METRICS (real from Supabase) ──
+    // ── LIVE METRICS ──
     const [mrr, setMrr] = useState(initialMrr);
     const [churn] = useState(initialChurn);
     const [signups] = useState(initialSignups);
     const [mrrSparkline, setMrrSparkline] = useState<{ month: string; mrr: number }[]>([]);
     const [metricsLoading, setMetricsLoading] = useState(true);
 
-    // ── WHY FEED STATE ──
+    // ── WHY FEED ──
     const [whyFeed, setWhyFeed] = useState<WhyFeedItem[]>([]);
     const [feedLoading, setFeedLoading] = useState(false);
     const [feedError, setFeedError] = useState(false);
@@ -161,33 +156,32 @@ export default function WorkspaceClient({
         { symbol: "BTC", price: null, change: null },
     ]);
 
-    // ── ARCHIVES STATE ──
+    // ── ARCHIVES ──
     const [snapshots, setSnapshots] = useState<ForensicSnapshot[]>(initialSnapshots);
     const [sealLabel, setSealLabel] = useState("");
     const [sealing, setSealing] = useState(false);
     const [sealSuccess, setSealSuccess] = useState(false);
 
-    // ── FORGE STATE ──
+    // ── FORGE ──
     const [shocks, setShocks] = useState<Record<string, number>>({
         nasdaq_drop: 0, ai_regulation: 0, inflation: 0, vc_freeze: 0, rate_hike: 0,
     });
     const [simulation, setSimulation] = useState<SimulationResult | null>(null);
     const [simLoading, setSimLoading] = useState(false);
 
-    // ── ENTITIES STATE ──
+    // ── ENTITIES ──
     const [entities, setEntities] = useState<BusinessEntity[]>(initialEntities);
     const [newEntity, setNewEntity] = useState({ name: "", type: "product" });
     const [scoringId, setScoringId] = useState<string | null>(null);
     const [addingEntity, setAddingEntity] = useState(false);
 
-    // ── CUSTOMIZER STATE ──
+    // ── CUSTOMIZER ──
     const [persona, setPersona] = useState<string>(briefingSettings?.persona ?? "balanced");
     const [frequency, setFrequency] = useState<string>(briefingSettings?.frequency ?? "daily");
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsSaved, setSettingsSaved] = useState(false);
 
-
-    // ── STABLE REFS (prevent useCallback loop) ──
+    // ── STABLE REFS ──
     const tickersRef = useRef(tickers);
     const mrrRef = useRef(mrr);
     const churnRef = useRef(churn);
@@ -198,7 +192,7 @@ export default function WorkspaceClient({
     useEffect(() => { churnRef.current = churn; }, [churn]);
     useEffect(() => { personaRef.current = persona; }, [persona]);
 
-    // ── FETCH REAL MRR FROM SUPABASE ─────────────────────────────────────────
+    // ── FETCH REAL MRR ────────────────────────────────────────────────────────
     useEffect(() => {
         async function fetchMetrics() {
             setMetricsLoading(true);
@@ -209,40 +203,34 @@ export default function WorkspaceClient({
                     .order("created_at", { ascending: true });
 
                 if (data && data.length > 0) {
-                    const completed = data; // use all rows regardless of status
-
-                    // Group by month chronologically
                     const monthMap: Record<string, { total: number; date: Date }> = {};
-                    completed.forEach(t => {
+                    data.forEach(t => {
                         const d = new Date(t.created_at);
                         const key = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
                         if (!monthMap[key]) monthMap[key] = { total: 0, date: d };
                         monthMap[key].total += t.amount ?? 0;
                     });
 
-                    // Sort chronologically
                     const sparkline = Object.entries(monthMap)
                         .sort((a, b) => a[1].date.getTime() - b[1].date.getTime())
                         .map(([key, val]) => ({
-                            month: key.split(" ")[0], // "Mar", "Apr", "May"
+                            month: key.split(" ")[0],
                             mrr: Math.round(val.total),
                         }));
 
                     setMrrSparkline(sparkline);
 
-
-                    // Current month only for the big number
                     const now = new Date();
                     const currentMonthKey = now.toLocaleDateString("en-US", { month: "short", year: "numeric" });
                     const currentMrr = monthMap[currentMonthKey]?.total ?? 0;
                     setMrr(Math.round(currentMrr));
+
                     if (sparkline.length >= 2) {
                         const prev = sparkline[sparkline.length - 2].mrr;
                         const curr = sparkline[sparkline.length - 1].mrr;
                         const trend = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
                         setMrrTrend(parseFloat(trend.toFixed(1)));
                     }
-
                 } else {
                     setMrrSparkline(generateMockSparkline(initialMrr));
                 }
@@ -263,9 +251,6 @@ export default function WorkspaceClient({
     }
 
     // ── FETCH TICKERS ─────────────────────────────────────────────────────────
-
-    useEffect(() => { tickersRef.current = tickers; }, [tickers]);
-
     const fetchTickers = useCallback(async () => {
         const AV_KEY = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_KEY;
         const symbols = ["SPY", "NVDA", "BTC"];
@@ -290,14 +275,9 @@ export default function WorkspaceClient({
                 ? r.value : tickersRef.current[i]
         );
         setTickers(updated as Ticker[]);
-    }, []); // ← empty
+    }, []);
 
-    // ── FETCH WHY FEED ─────────────────────────────────────────────────────────
-
-    useEffect(() => { mrrRef.current = mrr; }, [mrr]);
-    useEffect(() => { churnRef.current = churn; }, [churn]);
-    useEffect(() => { personaRef.current = persona; }, [persona]);
-
+    // ── FETCH WHY FEED ────────────────────────────────────────────────────────
     const fetchWhyFeed = useCallback(async () => {
         setFeedLoading(true);
         setFeedError(false);
@@ -326,7 +306,7 @@ export default function WorkspaceClient({
             } else { setFeedError(true); }
         } catch { setFeedError(true); }
         finally { setFeedLoading(false); }
-    }, []); // ← empty
+    }, []);
 
     useEffect(() => {
         fetchTickers();
@@ -355,8 +335,7 @@ export default function WorkspaceClient({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     action: "seal-snapshot",
-                    label: sealLabel, mrr, churn, signups,
-                    userId,
+                    label: sealLabel, mrr, churn, signups, userId,
                     marketConditions: {
                         spy: tickers.find(t => t.symbol === "SPY")?.price ?? 0,
                         nvda: tickers.find(t => t.symbol === "NVDA")?.price ?? 0,
@@ -372,9 +351,7 @@ export default function WorkspaceClient({
                 setSealSuccess(true);
                 setTimeout(() => setSealSuccess(false), 3000);
             }
-        } catch { /* silent */ } finally {
-            setSealing(false);
-        }
+        } catch { /* silent */ } finally { setSealing(false); }
     };
 
     // ── SIMULATION ────────────────────────────────────────────────────────────
@@ -393,9 +370,7 @@ export default function WorkspaceClient({
             });
             const data = await res.json();
             if (data.simulation) setSimulation(data.simulation);
-        } catch { /* silent */ } finally {
-            setSimLoading(false);
-        }
+        } catch { /* silent */ } finally { setSimLoading(false); }
     };
 
     // ── ENTITY MANAGEMENT ─────────────────────────────────────────────────────
@@ -412,9 +387,7 @@ export default function WorkspaceClient({
                 setNewEntity({ name: "", type: "product" });
                 scoreEntity(data);
             }
-        } catch { /* silent */ } finally {
-            setAddingEntity(false);
-        }
+        } catch { /* silent */ } finally { setAddingEntity(false); }
     };
 
     const scoreEntity = async (entity: BusinessEntity) => {
@@ -442,9 +415,7 @@ export default function WorkspaceClient({
                     prev.map(e => e.id === entity.id ? { ...e, sensitivity_score: score.score } : e)
                 );
             }
-        } catch { /* silent */ } finally {
-            setScoringId(null);
-        }
+        } catch { /* silent */ } finally { setScoringId(null); }
     };
 
     const deleteEntity = async (id: string) => {
@@ -463,9 +434,7 @@ export default function WorkspaceClient({
             });
             setSettingsSaved(true);
             setTimeout(() => setSettingsSaved(false), 3000);
-        } catch { /* silent */ } finally {
-            setSavingSettings(false);
-        }
+        } catch { /* silent */ } finally { setSavingSettings(false); }
     };
 
     // ── HELPERS ───────────────────────────────────────────────────────────────
@@ -493,6 +462,19 @@ export default function WorkspaceClient({
         { id: "entities", label: "Asset Registry", icon: "🗺️" },
         { id: "customizer", label: "CEO Briefing", icon: "🎯" },
     ] as const;
+
+    // Shared stats object for KPIDetailClient
+    const liveStats = {
+        totalRevenue: mrr,
+        totalProfit: Math.round(mrr * 0.4),
+        profitMargin: 40,
+        totalOrders: Math.round(mrr / 34),
+        activeUsers: Math.round(mrr / 48),
+        churnRate: 1.8,
+        efficiency: 78.5,
+        latestNews: "Telemetry integrated.",
+        mrrSparkline: mrrSparkline.map(d => d.mrr),
+    };
 
     // ── RENDER ─────────────────────────────────────────────────────────────────
     return (
@@ -581,17 +563,8 @@ export default function WorkspaceClient({
                             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                             className="space-y-6"
                         >
-                            <KPISection stats={{
-                                totalRevenue: mrr,
-                                totalProfit: Math.round(mrr * 0.4),
-                                profitMargin: 40,
-                                totalOrders: Math.round(mrr / 34),
-                                activeUsers: Math.round(mrr / 48),
-                                churnRate: 1.8,
-                                efficiency: 78.5,
-                                latestNews: "Forensic analysis active.",
-                                mrrSparkline: mrrSparkline.map(d => d.mrr)
-                            }} />
+                            {/* FIX: no invalid props — KPISection only accepts { stats } */}
+                            <KPISection stats={liveStats} />
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Internal Revenue Panel */}
@@ -627,10 +600,7 @@ export default function WorkspaceClient({
                                                     <motion.div key={i} className="flex-1 rounded-t"
                                                         animate={{ opacity: [0.2, 0.5, 0.2] }}
                                                         transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
-                                                        style={{
-                                                            height: `${30 + Math.random() * 60}%`,
-                                                            background: `${accent}30`,
-                                                        }} />
+                                                        style={{ height: `${30 + Math.random() * 60}%`, background: `${accent}30` }} />
                                                 ))}
                                             </div>
                                         ) : (
@@ -649,15 +619,10 @@ export default function WorkspaceClient({
                                                         contentStyle={{ background: "#080f1e", border: `1px solid ${accent}40`, borderRadius: 6, fontSize: 11, color: "#e2e8f0" }}
                                                         formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
                                                     />
-                                                    <Area
-                                                        type="monotone"
-                                                        dataKey="mrr"
-                                                        stroke="#38bdf8"
-                                                        strokeWidth={3}
+                                                    <Area type="monotone" dataKey="mrr" stroke="#38bdf8" strokeWidth={3}
                                                         fill="url(#colorRevenue)"
                                                         dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
-                                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }}
-                                                    />
+                                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }} />
                                                 </AreaChart>
                                             </ResponsiveContainer>
                                         )}
@@ -695,10 +660,7 @@ export default function WorkspaceClient({
                                     </div>
 
                                     <div className="flex-1 overflow-y-auto max-h-[420px] space-y-3 pr-1 custom-scroll">
-                                        {/* Loading skeleton */}
                                         {feedLoading && <FeedSkeleton accent={accent} />}
-
-                                        {/* Error state */}
                                         {!feedLoading && feedError && (
                                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                                                 className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
@@ -714,8 +676,6 @@ export default function WorkspaceClient({
                                                 </button>
                                             </motion.div>
                                         )}
-
-                                        {/* Feed items */}
                                         {!feedLoading && !feedError && whyFeed.map((item, i) => (
                                             <motion.div key={i}
                                                 initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
@@ -740,8 +700,6 @@ export default function WorkspaceClient({
                                                 <p className="text-xs text-slate-600 mt-1">{item.source} · {item.impact_type.toUpperCase()}</p>
                                             </motion.div>
                                         ))}
-
-                                        {/* Empty state */}
                                         {!feedLoading && !feedError && whyFeed.length === 0 && (
                                             <div className="flex flex-col items-center justify-center py-12 gap-2">
                                                 <p className="text-slate-600 text-sm">No intelligence yet.</p>
@@ -756,30 +714,23 @@ export default function WorkspaceClient({
                         </motion.div>
                     )}
 
-                    {/* ── FORENSIC DETAIL VIEW INJECTION ── */}
-                    {(activeTab.includes("total-") || activeTab.includes("-rate") || activeTab.includes("-margin")) && (
+                    {/* ── KPI FORENSIC DETAIL — full viewMode ─────────────────────── */}
+                    {/* FIX: use Set.has() — no more brittle includes() chain */}
+                    {KPI_SLUGS.has(activeTab as string) && (
                         <motion.div
                             key={activeTab}
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                         >
                             <KPIDetailClient
-                                slug={activeTab}
-                                stats={{
-                                    totalRevenue: mrr,
-                                    totalProfit: Math.round(mrr * 0.4),
-                                    profitMargin: 40,
-                                    totalOrders: Math.round(mrr / 34),
-                                    activeUsers: Math.round(mrr / 48),
-                                    churnRate: 1.8,
-                                    efficiency: 78.5,
-                                    latestNews: "Telemetry integrated.",
-                                    mrrSparkline: mrrSparkline.map(d => d.mrr)
-                                }}
+                                slug={activeTab as string}
+                                stats={liveStats}
                                 analytics={{}}
                                 role={profile?.role as any || 'admin'}
                                 persona={persona as any}
+                                viewMode="full"
                             />
                         </motion.div>
                     )}
@@ -812,7 +763,6 @@ export default function WorkspaceClient({
                                     </p>
                                 </div>
                             )}
-
                             {snapshots.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                                     <p className="text-4xl">🔒</p>

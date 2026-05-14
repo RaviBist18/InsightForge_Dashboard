@@ -35,13 +35,16 @@ interface KPIDetailClientProps {
     role?: UserRole;
     persona?: AIPersona;
     userId?: string;
+    /** "summary" = hero + 1 chart + 2 bullets only (Dashboard).
+     *  "full"    = all forensic detail (Workspace). Default: "full" */
+    viewMode?: 'full' | 'summary';
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const MONO = { fontFamily: "'JetBrains Mono','Fira Mono',monospace" };
 
-// ─── Canonical values — single source of truth ───────────────────────────────
+// ─── Canonical values ─────────────────────────────────────────────────────────
 
 const GLOBAL = { mrr: 1800, profit: 720, margin: 40, orders: 53, activeUsers: 37, churnRate: 1.8 };
 const USER_C = { mrr: 36, profit: 14.4, margin: 40, orders: 1, activeUsers: 1, churnRate: 0.0 };
@@ -114,7 +117,7 @@ const SLUG_CONFIG: Record<string, {
     },
 };
 
-// ─── Chart datasets — Apr MUST match CANONICAL ───────────────────────────────
+// ─── Chart datasets ───────────────────────────────────────────────────────────
 
 const REV_HIST = [
     { name: 'Oct', revenue: 1240, profit: 496, goal: 1500 },
@@ -562,10 +565,13 @@ function KeyDrivers({ slug, role }: { slug: string; role: UserRole }) {
 
 // ─── Forensic Narrative ───────────────────────────────────────────────────────
 
-function ForensicNarrative({ slug, role, persona, accentColor }: {
+function ForensicNarrative({ slug, role, persona, accentColor, maxBullets }: {
     slug: string; role: UserRole; persona: AIPersona; accentColor: string;
+    /** Limit bullets shown. Omit for all. */
+    maxBullets?: number;
 }) {
-    const bullets = getBullets(slug, role, persona);
+    const allBullets = getBullets(slug, role, persona);
+    const bullets = maxBullets !== undefined ? allBullets.slice(0, maxBullets) : allBullets;
     const pColor = persona === 'aggressive' ? '#f43f5e' : persona === 'defensive' ? '#10b981' : '#38bdf8';
     const roleLabel = role === 'admin' ? 'OWNER ACTION' : 'DEVELOPER UPDATE';
 
@@ -576,7 +582,6 @@ function ForensicNarrative({ slug, role, persona, accentColor }: {
             style={{ borderColor: `${accentColor}30`, background: `${accentColor}06`, boxShadow: `0 0 24px ${accentColor}10` }}>
             <div className="pointer-events-none absolute inset-0"
                 style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.008) 2px,rgba(255,255,255,0.008) 4px)' }} />
-            {/* Accent top line */}
             <div className="absolute top-0 left-0 right-0 h-[1px]"
                 style={{ background: `linear-gradient(90deg,transparent,${accentColor}60,transparent)` }} />
             <div className="relative p-6">
@@ -685,7 +690,10 @@ function RevenueAreaChart({ data, accent, prefix }: { data: typeof REV_HIST; acc
                 <ReferenceLine y={goalVal} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.45}
                     label={{ value: 'GOAL', position: 'insideTopLeft', fill: '#10b981', fontSize: 8, fontFamily: 'monospace' }} />
                 <Area type="monotone" dataKey="revenue" stroke={accent} strokeWidth={2.5} fill="url(#rg)"
-                    dot={(props: Record<string, unknown>) => <ATHDot {...props as Parameters<typeof ATHDot>[0]} dataKey="revenue" data={data} color={accent} />}
+                    dot={(props: any) => {
+                        const { key, ...rest } = props;
+                        return <ATHDot key={key} {...rest} dataKey="revenue" data={data} color={accent} />;
+                    }}
                     activeDot={{ r: 5, fill: accent, stroke: '#0f172a', strokeWidth: 2 }} />
             </AreaChart>
         </ResponsiveContainer>
@@ -708,7 +716,10 @@ function ProfitComposedChart({ data, accent }: { data: typeof REV_HIST; accent: 
                     label={{ value: `AVG $${avg}`, position: 'insideTopRight', fill: accent, fontSize: 8, fontFamily: 'monospace' }} />
                 <Bar dataKey="revenue" fill={`${accent}22`} radius={[4, 4, 0, 0]} barSize={22} />
                 <Line type="monotone" dataKey="profit" stroke={accent} strokeWidth={2.5}
-                    dot={(props: Record<string, unknown>) => <ATHDot {...props as Parameters<typeof ATHDot>[0]} dataKey="profit" data={data} color={accent} />}
+                    dot={(props: any) => {
+                        const { key, ...rest } = props;
+                        return <ATHDot key={key} {...rest} dataKey="profit" data={data} color={accent} />;
+                    }}
                     activeDot={{ r: 5, fill: accent, stroke: '#0f172a', strokeWidth: 2 }} />
             </ComposedChart>
         </ResponsiveContainer>
@@ -757,8 +768,12 @@ function UsersStepLine({ accent }: { accent: string }) {
                     label={{ value: `AVG ${avg}`, position: 'insideTopRight', fill: accent, fontSize: 8, fontFamily: 'monospace' }} />
                 <ReferenceLine y={40} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.45}
                     label={{ value: 'GOAL 40', position: 'insideTopLeft', fill: '#10b981', fontSize: 8, fontFamily: 'monospace' }} />
+                {/* BUGFIX: was referencing undefined `data`; use USERS_STEP directly */}
                 <Line type="stepAfter" dataKey="value" stroke={accent} strokeWidth={2.5}
-                    dot={(props: Record<string, unknown>) => <ATHDot {...props as Parameters<typeof ATHDot>[0]} dataKey="value" data={USERS_STEP} color={accent} />}
+                    dot={(props: any) => {
+                        const { key, ...rest } = props;
+                        return <ATHDot key={key} {...rest} dataKey="value" data={USERS_STEP} color={accent} />;
+                    }}
                     activeDot={{ r: 5, fill: accent, stroke: '#0f172a', strokeWidth: 2 }} />
             </LineChart>
         </ResponsiveContainer>
@@ -807,12 +822,58 @@ function ChurnGauge({ churnRate, accent }: { churnRate: number; accent: string }
     );
 }
 
+// ─── Summary View (Dashboard density) ────────────────────────────────────────
+
+function SummaryView({ slug, cfg, displayVal, prefix, suffix, accent, histData, role, persona }: {
+    slug: string;
+    cfg: (typeof SLUG_CONFIG)[string];
+    displayVal: number;
+    prefix: string;
+    suffix: string;
+    accent: string;
+    histData: typeof REV_HIST;
+    role: UserRole;
+    persona: AIPersona;
+}) {
+    const Icon = cfg.icon;
+    const humanText = cfg.humanLabel(displayVal, role);
+
+    return (
+        <div className="space-y-4">
+            {/* Hero value */}
+            <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl border" style={{ background: `${cfg.glowColor}15`, borderColor: `${cfg.glowColor}25` }}>
+                    <Icon className="w-6 h-6" style={{ color: accent }} />
+                </div>
+                <div>
+                    <p className="text-3xl font-black text-white tabular-nums" style={MONO}>
+                        {prefix}{typeof displayVal === 'number' ? displayVal.toLocaleString() : displayVal}{suffix}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5" style={MONO}>{humanText}</p>
+                </div>
+            </div>
+
+            {/* Single high-impact chart */}
+            {slug === 'total-revenue' && <RevenueAreaChart data={histData} accent={accent} prefix={prefix} />}
+            {slug === 'total-profit' && <ProfitComposedChart data={histData} accent={accent} />}
+            {slug === 'profit-margin' && <MarginDonut margin={GLOBAL.margin} accent={accent} />}
+            {slug === 'total-orders' && <OrdersBarChart accent={accent} />}
+            {slug === 'active-users' && <UsersStepLine accent={accent} />}
+            {slug === 'churn-rate' && <ChurnGauge churnRate={GLOBAL.churnRate} accent={accent} />}
+
+            {/* Top 2 AI bullets only */}
+            <ForensicNarrative slug={slug} role={role} persona={persona} accentColor={accent} maxBullets={2} />
+        </div>
+    );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     slug, analytics, stats,
     role = 'admin',
     persona: initPersona = 'balanced',
+    viewMode = 'full',
 }) => {
     const cfg = SLUG_CONFIG[slug];
     if (!cfg) return null;
@@ -825,12 +886,10 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     const suffix = cfg.suffix ?? '';
     const Icon = cfg.icon;
 
-    // Bind to canonical values — stats prop takes priority if provided
     const displayVal = role === 'admin'
         ? (stats?.totalRevenue !== undefined && slug === 'total-revenue' ? stats.totalRevenue : cfg.adminValue)
         : cfg.userValue;
 
-    // histData always uses our canonical REV_HIST arrays (Apr = $1,800 / $36)
     const histData = role === 'admin' ? REV_HIST : REV_HIST_USER;
     const microStats = (MICRO_STATS[slug] ?? (() => []))(role);
     const humanText = cfg.humanLabel(displayVal, role);
@@ -846,9 +905,20 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
         URL.revokeObjectURL(url);
     };
 
+    // ── SUMMARY MODE: Dashboard compact density ───────────────────────────────
+    if (viewMode === 'summary') {
+        return (
+            <SummaryView
+                slug={slug} cfg={cfg} displayVal={displayVal}
+                prefix={prefix} suffix={suffix} accent={accent}
+                histData={histData} role={role} persona={persona}
+            />
+        );
+    }
+
+    // ── FULL MODE: Workspace deep-dive (all 1100+ lines of forensic detail) ───
     return (
         <div className="space-y-6">
-
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600" style={MONO}>
                 <Link href="/" className="hover:text-sky-400 transition-colors flex items-center gap-1.5">
@@ -942,7 +1012,6 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="YTD" value={`${prefix}${role === 'admin' ? '11,570' : '231'}`} sub="Oct–Apr" color={accent} />
                         <StatCard label="Forecast" value={`${prefix}${role === 'admin' ? '1,980' : '40'}`} sub="Next 30d" color={accent} />
                     </div>
-                    {/* 3-col grid: chart (2/3) + sidebar (1/3) */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div className="lg:col-span-2">
                             <SectionCard title="REVENUE TREND — AREA CHART · AVG + GOAL REFERENCE LINES">
@@ -1108,9 +1177,8 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                 </>
             )}
 
-            {/* Forensic Narrative — always last */}
+            {/* Forensic Narrative — full bullets, always last */}
             <ForensicNarrative slug={slug} role={role} persona={persona} accentColor={accent} />
-
         </div>
     );
 };

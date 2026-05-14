@@ -12,6 +12,7 @@ import { cn } from '../../lib/utils';
 import { DashboardStats } from '../../lib/data';
 import { useWorkspace } from '@/context/WorkspaceContext';
 
+
 // ─── Animated Counter ────────────────────────────────────────────────────────
 function useAnimatedCounter(target: number, duration = 1.4, inView = false) {
   const motionVal = useMotionValue(0);
@@ -55,6 +56,8 @@ const KPICard: React.FC<KPICardProps> = ({
 }) => {
   const ref = useRef(null);
   const { setActiveTab } = useWorkspace();
+
+  const [activeKPI, setActiveKPI] = useState<string | null>(null);
   const inView = useInView(ref, { once: true, margin: '-40px' });
   const animated = useAnimatedCounter(rawValue, 1.4, inView);
 
