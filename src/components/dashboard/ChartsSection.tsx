@@ -252,7 +252,7 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
   useEffect(() => {
     const channel = supabase
       .channel('charts-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, (payload: any) => {
         setIsLive(true);
         const amt = payload.new?.amount ?? 0;
         setLiveEvents(prev => [`+$${Number(amt).toLocaleString()} new transaction`, ...prev].slice(0, 3));
