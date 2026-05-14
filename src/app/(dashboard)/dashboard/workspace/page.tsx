@@ -27,7 +27,7 @@ export default function WorkspacePage() {
                 ]);
 
             const transactions = transactionsRes.data ?? [];
-            const mrr = transactions.filter(t => t.status === "completed").reduce((sum, t) => sum + (t.amount ?? 0), 0);
+            const mrr = transactions.filter((t: any) => t.status === "completed").reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
 
             setProps({
                 userId: user.id,
