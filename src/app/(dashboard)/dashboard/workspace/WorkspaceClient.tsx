@@ -204,7 +204,7 @@ export default function WorkspaceClient({
 
                 if (data && data.length > 0) {
                     const monthMap: Record<string, { total: number; date: Date }> = {};
-                    data.forEach(t => {
+                    data.forEach((t: any) => {
                         const d = new Date(t.created_at);
                         const key = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
                         if (!monthMap[key]) monthMap[key] = { total: 0, date: d };

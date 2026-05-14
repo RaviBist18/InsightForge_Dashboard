@@ -158,7 +158,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
           {/* Back button when a KPI panel is open */}
           {isKPIActive && (
             <button
-              onClick={() => setActiveTab(null)}
+              onClick={() => setActiveTab(null as any)}
               className="px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-black text-slate-400 hover:text-white transition-all"
               style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
