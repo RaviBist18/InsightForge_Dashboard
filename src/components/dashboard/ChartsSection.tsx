@@ -285,7 +285,7 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         if (error || !data?.length) return;
 
         const counts: Record<string, number> = { Starter: 0, Pro: 0, Enterprise: 0 };
-        data.forEach(row => {
+        data.forEach((row: any) => {
           const cat = row.category as string;
           if (['SaaS', 'Analytics', 'Fintech'].includes(cat)) counts['Starter']++;
           else if (['Cloud', 'Infrastructure'].includes(cat)) counts['Pro']++;
