@@ -925,7 +925,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
         <div className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600" style={MONO}>
-                <button onClick={() => onBack ? onBack() : setActiveTab('pulse')} className="hover:text-sky-400 transition-colors flex items-center gap-1.5">
+                <button onClick={() => onBack?.()} className="hover:text-sky-400 transition-colors flex items-center gap-1.5">
                     <ArrowLeft size={11} />
                 </button>
                 <span className="opacity-30">/</span>
