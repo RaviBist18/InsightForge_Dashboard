@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { LogOut } from 'lucide-react';
 
 const getInitials = (nameOrEmail: string) => {
   if (!nameOrEmail) return '??';
@@ -277,31 +278,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* User Menu */}
-        <div className="px-3 pb-4 pt-3 border-t border-white/[0.06] space-y-2">
+        <div className="px-3 pb-4 pt-3 border-t border-white/[0.06]">
           <div className="relative">
             <AnimatePresence>
               {showUserMenu && (!collapsed || mobileOpen) && (
                 <motion.div key="user-menu"
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                  className="absolute bottom-full left-0 right-0 mb-2 bg-[#0b1629] border border-white/[0.1] rounded-xl overflow-hidden shadow-2xl z-50"
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute bottom-full left-0 right-0 mb-2 rounded-2xl overflow-hidden shadow-2xl z-50"
+                  style={{ background: '#0a1628', border: '1px solid rgba(255,255,255,0.1)' }}
                 >
-                  <div className="px-4 py-3 border-b border-white/[0.06]">
-                    <p className="text-[11px] font-bold text-white truncate">{email}</p>
+                  {/* User info block */}
+                  <div className="px-4 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center gap-3 mb-2.5">
+                      <div className={cn(
+                        'w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-black text-white',
+                        isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600' : 'bg-gradient-to-br from-slate-500 to-slate-700'
+                      )}>
+                        {getInitials(name)}
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="text-[12px] font-bold text-white truncate leading-tight">{name}</p>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{email}</p>
+                      </div>
+                    </div>
                     <div className={cn(
-                      'mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest',
-                      isAdmin
-                        ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20'
-                        : 'bg-slate-500/15 text-slate-400 border border-slate-500/20'
+                      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest',
+                      isAdmin ? 'bg-sky-500/12 text-sky-400 border border-sky-500/20' : 'bg-slate-500/12 text-slate-400 border border-slate-500/20'
                     )}>
-                      <Shield size={8} />
-                      {role}
+                      <Shield size={9} />
+                      {isAdmin ? 'Administrator' : 'Member'}
                     </div>
                   </div>
                   <button
                     onClick={async () => { await supabase.auth.signOut(); window.location.href = '/auth'; }}
-                    className="w-full text-left px-4 py-2.5 text-[12px] font-bold text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] font-bold text-rose-400 hover:bg-rose-500/8 transition-colors"
                   >
-                    Sign Out
+                    <LogOut size={13} />
+                    Sign out
                   </button>
                 </motion.div>
               )}
@@ -310,16 +326,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={() => !loading && setShowUserMenu(v => !v)}
               className={cn(
-                'w-full flex items-center rounded-xl p-2.5 hover:bg-white/[0.05] transition-all',
+                'w-full flex items-center rounded-xl p-2.5 transition-all group',
+                showUserMenu ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
                 (!collapsed || mobileOpen) ? 'gap-3' : 'justify-center'
               )}
             >
               {loading ? (
-                <div className="w-7 h-7 rounded-full bg-slate-800 animate-pulse border border-white/10 flex-shrink-0" />
+                <div className="w-8 h-8 rounded-full bg-slate-800 animate-pulse border border-white/10 flex-shrink-0" />
               ) : (
                 <div className={cn(
-                  'w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black text-white border border-white/10',
-                  isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600' : 'bg-gradient-to-br from-slate-500 to-slate-700'
+                  'w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-black text-white ring-2 ring-offset-1 ring-offset-transparent',
+                  isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600 ring-sky-500/30' : 'bg-gradient-to-br from-slate-500 to-slate-700 ring-slate-500/20'
                 )}>
                   {getInitials(name)}
                 </div>
@@ -327,21 +344,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <AnimatePresence>
                 {(!collapsed || mobileOpen) && !loading && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="flex flex-col items-start overflow-hidden">
-                    <span className="text-[12px] font-bold text-white truncate max-w-[150px]">{name}</span>
+                    className="flex flex-col items-start overflow-hidden flex-1 min-w-0">
+                    <span className="text-[12px] font-bold text-white truncate w-full">{name}</span>
                     <span className={cn('text-[9px] font-black uppercase tracking-widest',
-                      isAdmin ? 'text-sky-600' : 'text-slate-600')}>
-                      {role} Account
+                      isAdmin ? 'text-sky-500' : 'text-slate-600')}>
+                      {isAdmin ? 'Administrator' : 'Member'}
                     </span>
                   </motion.div>
                 )}
               </AnimatePresence>
+              {(!collapsed || mobileOpen) && !loading && (
+                <ChevronRight size={13} className={cn('text-slate-600 flex-shrink-0 transition-transform', showUserMenu && 'rotate-[-90deg]')} />
+              )}
             </button>
           </div>
 
           <button
             onClick={() => { setCollapsed(!collapsed); setShowUserMenu(false); }}
-            className="hidden lg:flex w-full items-center justify-center gap-2 p-2 rounded-xl text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all text-[11px] font-bold"
+            className="hidden lg:flex w-full items-center justify-center gap-2 p-2 mt-1 rounded-xl text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all text-[11px] font-bold"
           >
             {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={14} /><span>Collapse</span></>}
           </button>

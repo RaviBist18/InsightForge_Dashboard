@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useUserRole } from '@/hooks/useUserRole';
+import { LogOut } from 'lucide-react';
 
 const getInitials = (nameOrEmail: string) => {
   if (!nameOrEmail) return '??';
@@ -246,33 +247,47 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
             <AnimatePresence>
               {showProfile && !roleLoading && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.2 }}
-                  className="absolute right-0 top-full mt-2 w-56 bg-[#080f1f] border border-white/[0.1] rounded-2xl overflow-hidden shadow-2xl z-50"
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden shadow-2xl z-50"
+                  style={{ background: '#080f1f', border: '1px solid rgba(255,255,255,0.1)' }}
                 >
-                  <div className="px-4 py-3 border-b border-white/[0.06]">
-                    <p className="text-[12px] font-bold text-white truncate">{name}</p>
-                    <p className="text-[10px] text-slate-600 truncate mt-0.5">{email}</p>
-                    {/* Role badge */}
+                  {/* Avatar + name header */}
+                  <div className="px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={cn(
+                        'w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-black text-white flex-shrink-0 ring-2 ring-offset-1 ring-offset-[#080f1f]',
+                        isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600 ring-sky-500/40' : 'bg-gradient-to-br from-slate-500 to-slate-700 ring-slate-500/20'
+                      )}>
+                        {getInitials(name)}
+                      </div>
+                      <div className="overflow-hidden min-w-0">
+                        <p className="text-[13px] font-bold text-white truncate leading-tight">{name}</p>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{email}</p>
+                      </div>
+                    </div>
                     <div className={cn(
-                      'mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border',
-                      isAdmin
-                        ? 'bg-sky-500/15 text-sky-400 border-sky-500/20'
-                        : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+                      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border',
+                      isAdmin ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
                     )}>
-                      <Shield size={8} />
-                      {role}
+                      <Shield size={9} />
+                      {isAdmin ? 'Administrator' : 'Member'}
                     </div>
                   </div>
+
+                  {/* Sign out */}
                   <button
                     onClick={async () => {
                       setIsLoggingOut(true);
                       await supabase.auth.signOut();
                       window.location.href = '/auth';
                     }}
-                    className="w-full text-left px-4 py-3 text-[12px] font-bold text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3.5 text-[12px] font-bold text-rose-400 hover:bg-rose-500/8 transition-colors"
                   >
-                    Sign Out
+                    <LogOut size={13} />
+                    Sign out
                   </button>
                 </motion.div>
               )}

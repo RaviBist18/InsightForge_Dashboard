@@ -196,6 +196,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
                 stats={stats}
                 analytics={{}}
                 viewMode="summary"
+                onBack={() => setActiveTab(null)}
               />
             </motion.div>
           ) : (

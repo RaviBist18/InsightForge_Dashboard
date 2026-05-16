@@ -44,17 +44,36 @@ interface Props {
     profile: Profile | null; briefingSettings: BriefingSettings | null;
     initialSnapshots: ForensicSnapshot[]; initialEntities: BusinessEntity[];
     mrr: number; churn: number; signups: number; isReadOnly: boolean;
+    role?: 'admin' | 'user';
 }
 
-// ── KPI slug set — single source of truth ────────────────────────────────────
+// ── KPI slug sets ─────────────────────────────────────────────────────────────
 const KPI_SLUGS = new Set([
-    "total-revenue",
-    "total-profit",
-    "profit-margin",
-    "total-orders",
-    "active-users",
-    "churn-rate",
+    "total-revenue", "total-profit", "profit-margin",
+    "total-orders", "active-users", "churn-rate",
 ]);
+
+// Slugs restricted to admin only
+const ADMIN_ONLY_SLUGS = new Set(["total-orders", "active-users", "churn-rate"]);
+
+// Slugs available to users
+const USER_KPI_SLUGS = ["total-revenue", "total-profit", "profit-margin"];
+
+// All KPI slugs as array for admin tab rendering
+const ALL_KPI_SLUGS = [
+    "total-revenue", "total-profit", "profit-margin",
+    "total-orders", "active-users", "churn-rate",
+];
+
+// KPI display labels
+const KPI_LABELS: Record<string, string> = {
+    "total-revenue": "Revenue",
+    "total-profit": "Profit",
+    "profit-margin": "Margin",
+    "total-orders": "Orders",
+    "active-users": "Users",
+    "churn-rate": "Churn",
+};
 
 // ── ACCENT MAP ────────────────────────────────────────────────────────────────
 const ACCENT_COLORS: Record<string, string> = {
@@ -121,11 +140,30 @@ function FeedSkeleton({ accent }: { accent: string }) {
     );
 }
 
+// ── NODE VAULT DATA GENERATOR ─────────────────────────────────────────────────
+function generateNodeVaultData(entities: BusinessEntity[], baseMrr: number) {
+    const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    return months.map((month, i) => {
+        const totalCoeff = entities.reduce((sum, e) => {
+            const coeff = 1 + (e.sensitivity_score ?? 30) / 200;
+            return sum + Math.pow(coeff, i);
+        }, 0);
+        const base = entities.length > 0 ? baseMrr / entities.length : baseMrr;
+        const fluctuation = 1 + (Math.sin(i * 1.3) * 0.06);
+        return {
+            month,
+            value: Math.round(base * totalCoeff * fluctuation),
+        };
+    });
+}
+
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────────
 export default function WorkspaceClient({
     userId, userEmail, profile, briefingSettings,
     initialSnapshots, initialEntities,
-    mrr: initialMrr, churn: initialChurn, signups: initialSignups, isReadOnly,
+    mrr: initialMrr, churn: initialChurn, signups: initialSignups,
+    isReadOnly,
+    role = 'admin',
 }: Props) {
     const { accentColor } = useTheme();
     const accent = ACCENT_COLORS[accentColor] ?? "#0ea5e9";
@@ -136,6 +174,8 @@ export default function WorkspaceClient({
         setEntityCount, setSnapshotCount, setMrrTrend,
         setIsWorkspacePage,
     } = useWorkspace();
+
+    const isAdmin = role === 'admin';
 
     // ── LIVE METRICS ──
     const [mrr, setMrr] = useState(initialMrr);
@@ -455,13 +495,17 @@ export default function WorkspaceClient({
         return "#10b981";
     };
 
-    const tabs = [
+    // ── TAB DEFINITIONS ───────────────────────────────────────────────────────
+    const workspaceTabs = [
         { id: "pulse", label: "Strategic Pulse", icon: "⚡" },
         { id: "archives", label: "Intelligence Archives", icon: "🔒" },
         { id: "forge", label: "What-If Forge", icon: "🔥" },
         { id: "entities", label: "Asset Registry", icon: "🗺️" },
         { id: "customizer", label: "CEO Briefing", icon: "🎯" },
     ] as const;
+
+    // KPI slugs available to current role
+    const availableKpiSlugs = isAdmin ? ALL_KPI_SLUGS : USER_KPI_SLUGS;
 
     // Shared stats object for KPIDetailClient
     const liveStats = {
@@ -509,39 +553,48 @@ export default function WorkspaceClient({
                                 style={{ background: `linear-gradient(to bottom, ${accent}, transparent)` }} />
                             <div>
                                 <h1 className="text-2xl font-black tracking-tight" style={{ color: accent }}>
-                                    STRATEGIC WAR ROOM
+                                    {isAdmin ? "STRATEGIC WAR ROOM" : "PERSONAL INTELLIGENCE HUB"}
                                 </h1>
                                 <p className="text-xs text-slate-500 mt-0.5">
                                     {profile?.full_name ?? userEmail} · {persona.toUpperCase()} MODE
+                                    {!isAdmin && (
+                                        <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase"
+                                            style={{ background: `${accent}20`, color: accent }}>
+                                            MEMBER VIEW
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                         </div>
-                        {/* Live Tickers */}
-                        <div className="hidden md:flex items-center gap-4">
-                            {tickers.map(t => (
-                                <div key={t.symbol} className="flex items-center gap-2 px-3 py-1.5 rounded"
-                                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                    <span className="text-xs text-slate-400 font-bold">{t.symbol}</span>
-                                    <span className="text-xs text-white font-mono">
-                                        {t.price != null ? `$${t.price.toFixed(2)}` : "—"}
-                                    </span>
-                                    {t.change != null && (
-                                        <span className="text-xs font-bold"
-                                            style={{ color: t.change >= 0 ? "#10b981" : "#f43f5e" }}>
-                                            {t.change >= 0 ? "+" : ""}{t.change.toFixed(2)}%
+                        {/* Live Tickers — admin only */}
+                        {isAdmin && (
+                            <div className="hidden md:flex items-center gap-4">
+                                {tickers.map(t => (
+                                    <div key={t.symbol} className="flex items-center gap-2 px-3 py-1.5 rounded"
+                                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                        <span className="text-xs text-slate-400 font-bold">{t.symbol}</span>
+                                        <span className="text-xs text-white font-mono">
+                                            {t.price != null ? `$${t.price.toFixed(2)}` : "—"}
                                         </span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                                        {t.change != null && (
+                                            <span className="text-xs font-bold"
+                                                style={{ color: t.change >= 0 ? "#10b981" : "#f43f5e" }}>
+                                                {t.change >= 0 ? "+" : ""}{t.change.toFixed(2)}%
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <div className="h-px w-full mt-4"
                         style={{ background: `linear-gradient(to right, transparent, ${accent}40, transparent)` }} />
                 </motion.div>
 
-                {/* Tab Bar */}
-                <div className="flex gap-1 mb-6 overflow-x-auto pb-2">
-                    {tabs.map(tab => (
+                {/* ── TAB BAR ── */}
+                <div className="flex gap-1 mb-6 overflow-x-auto pb-2 flex-wrap">
+                    {/* Workspace tabs */}
+                    {workspaceTabs.map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                             className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold whitespace-nowrap transition-all"
                             style={{
@@ -553,6 +606,9 @@ export default function WorkspaceClient({
                             <span className="hidden sm:block">{tab.label}</span>
                         </button>
                     ))}
+
+                    {/* Divider */}
+
                 </div>
 
                 <AnimatePresence mode="wait">
@@ -563,8 +619,7 @@ export default function WorkspaceClient({
                             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                             className="space-y-6"
                         >
-                            {/* FIX: no invalid props — KPISection only accepts { stats } */}
-                            <KPISection stats={liveStats} />
+                            <KPISection stats={liveStats} allowedSlugs={isAdmin ? undefined : USER_KPI_SLUGS} />
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Internal Revenue Panel */}
@@ -572,7 +627,9 @@ export default function WorkspaceClient({
                                     style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 30px ${accent}08` }}>
                                     <div className="flex items-center justify-between mb-4">
                                         <div>
-                                            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Internal Revenue</p>
+                                            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
+                                                {isAdmin ? "Internal Revenue" : "Your Revenue Contribution"}
+                                            </p>
                                             {metricsLoading ? (
                                                 <motion.div className="h-9 w-40 rounded"
                                                     animate={{ opacity: [0.3, 0.7, 0.3] }}
@@ -630,8 +687,8 @@ export default function WorkspaceClient({
 
                                     <div className="grid grid-cols-2 gap-3 mt-3">
                                         {[
-                                            { label: "New Signups", value: signups, color: "#10b981" },
-                                            { label: "Subscribers", value: Math.round(mrr / 49), color: accent },
+                                            { label: isAdmin ? "New Signups" : "Your Signups", value: isAdmin ? signups : 1, color: "#10b981" },
+                                            { label: "Subscribers", value: isAdmin ? Math.round(mrr / 49) : 1, color: accent },
                                         ].map(m => (
                                             <div key={m.label} className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
                                                 <p className="text-xs text-slate-500 mb-1">{m.label}</p>
@@ -714,26 +771,52 @@ export default function WorkspaceClient({
                         </motion.div>
                     )}
 
-                    {/* ── KPI FORENSIC DETAIL — full viewMode ─────────────────────── */}
-                    {/* FIX: use Set.has() — no more brittle includes() chain */}
-                    {KPI_SLUGS.has(activeTab as string) && (
-                        <motion.div
-                            key={activeTab}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                        >
-                            <KPIDetailClient
-                                slug={activeTab as string}
-                                stats={liveStats}
-                                analytics={{}}
-                                role={profile?.role as any || 'admin'}
-                                persona={persona as any}
-                                viewMode="full"
-                            />
-                        </motion.div>
-                    )}
+                    {/* ── KPI FORENSIC DETAIL — role-gated ────────────────────────── */}
+                    {KPI_SLUGS.has(activeTab as string) &&
+                        !(role === 'user' && ADMIN_ONLY_SLUGS.has(activeTab as string)) && (
+                            <motion.div
+                                key={activeTab}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                            >
+                                <KPIDetailClient
+                                    slug={activeTab as string}
+                                    stats={liveStats}
+                                    analytics={{}}
+                                    role={role}
+                                    persona={persona as any}
+                                    viewMode="full"
+                                    onBack={() => setActiveTab('pulse')}
+                                />
+                            </motion.div>
+                        )}
+
+                    {/* ── ACCESS DENIED — user tried restricted KPI ────────────────── */}
+                    {KPI_SLUGS.has(activeTab as string) &&
+                        role === 'user' && ADMIN_ONLY_SLUGS.has(activeTab as string) && (
+                            <motion.div
+                                key="access-denied"
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="flex flex-col items-center justify-center py-24 gap-4"
+                            >
+                                <p className="text-4xl">🔒</p>
+                                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                                    Admin Access Required
+                                </p>
+                                <p className="text-xs text-slate-600 text-center max-w-xs">
+                                    This KPI is restricted to administrator accounts. Contact your admin for access.
+                                </p>
+                                <button onClick={() => setActiveTab("pulse")}
+                                    className="mt-2 px-4 py-2 rounded text-xs font-bold transition-all"
+                                    style={{ background: `${accent}20`, border: `1px solid ${accent}40`, color: accent }}>
+                                    Back to Pulse
+                                </button>
+                            </motion.div>
+                        )}
 
                     {/* ── INTELLIGENCE ARCHIVES ────────────────────────────────────── */}
                     {activeTab === "archives" && (
@@ -959,6 +1042,7 @@ export default function WorkspaceClient({
                                     </div>
                                 </div>
                             )}
+
                             {entities.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                                     <p className="text-4xl">🗺️</p>
@@ -1015,6 +1099,143 @@ export default function WorkspaceClient({
                                         );
                                     })}
                                 </div>
+                            )}
+
+                            {/* ── NODE VAULT — user only, shows when entities exist ── */}
+                            {!isAdmin && entities.length > 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 16 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.2 }}
+                                    className="mt-8 rounded-xl p-5"
+                                    style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 40px ${accent}08` }}
+                                >
+                                    {/* Node Vault Header */}
+                                    <div className="flex items-center justify-between mb-5">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: accent }} />
+                                                <p className="text-xs text-slate-500 uppercase tracking-widest">⚡ Node Vault</p>
+                                            </div>
+                                            <p className="text-sm font-bold text-white">Asset Performance Engine</p>
+                                            <p className="text-xs text-slate-600 mt-0.5">Compounded growth · equity coefficient model</p>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="text-xs px-2 py-1 rounded font-bold"
+                                                style={{ background: `${accent}20`, color: accent, border: `1px solid ${accent}40` }}>
+                                                LIVE · EQUITY MODEL
+                                            </span>
+                                            <span className="text-xs text-slate-600">{entities.length} node{entities.length !== 1 ? 's' : ''} tracked</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Growth Chart */}
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <AreaChart
+                                            data={generateNodeVaultData(entities, mrr)}
+                                            margin={{ left: -10, right: 8 }}
+                                        >
+                                            <defs>
+                                                <linearGradient id="nodeVaultGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={accent} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={accent} stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.04)" />
+                                            <XAxis
+                                                dataKey="month"
+                                                tick={{ fontSize: 9, fill: "#475569", fontFamily: "monospace" }}
+                                                axisLine={false} tickLine={false}
+                                            />
+                                            <YAxis
+                                                tick={{ fontSize: 9, fill: "#475569", fontFamily: "monospace" }}
+                                                axisLine={false} tickLine={false}
+                                                tickFormatter={v => `$${v.toLocaleString()}`}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    background: "#080f1e",
+                                                    border: `1px solid ${accent}40`,
+                                                    borderRadius: 8,
+                                                    fontSize: 11,
+                                                    fontFamily: "monospace",
+                                                    color: "#e2e8f0",
+                                                }}
+                                                formatter={(v: number) => [`$${v.toLocaleString()}`, "Portfolio Value"]}
+                                            />
+                                            <ReferenceLine
+                                                y={mrr}
+                                                stroke="#10b981"
+                                                strokeDasharray="4 4"
+                                                strokeOpacity={0.5}
+                                                label={{ value: 'BASE MRR', position: 'insideTopLeft', fill: '#10b981', fontSize: 8, fontFamily: 'monospace' }}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="value"
+                                                stroke={accent}
+                                                strokeWidth={2.5}
+                                                fill="url(#nodeVaultGrad)"
+                                                dot={{ r: 3, fill: accent, strokeWidth: 0 }}
+                                                activeDot={{ r: 6, fill: accent, strokeWidth: 0 }}
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+
+                                    {/* Per-node breakdown */}
+                                    <div className="mt-5">
+                                        <p className="text-xs text-slate-600 uppercase tracking-widest mb-3">6-Month Node Projections</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {entities.slice(0, 4).map((entity, i) => {
+                                                const coeff = 1 + (entity.sensitivity_score ?? 30) / 200;
+                                                const nodeValue = Math.round((mrr / entities.length) * Math.pow(coeff, 6));
+                                                const growth = ((Math.pow(coeff, 6) - 1) * 100).toFixed(1);
+                                                return (
+                                                    <div key={entity.id}
+                                                        className="flex items-center justify-between p-3 rounded-lg"
+                                                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-white">{entity.name}</p>
+                                                            <p className="text-xs text-slate-500 capitalize mt-0.5">
+                                                                {entity.type} · coeff {coeff.toFixed(2)}x
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-sm font-black tabular-nums"
+                                                                style={{ color: accent, fontFamily: 'monospace' }}>
+                                                                ${nodeValue.toLocaleString()}
+                                                            </p>
+                                                            <p className="text-xs font-bold mt-0.5" style={{ color: "#10b981" }}>
+                                                                +{growth}%
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {entities.length > 4 && (
+                                            <p className="text-xs text-slate-600 text-center mt-3">
+                                                +{entities.length - 4} more nodes tracked
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Total portfolio value */}
+                                    <div className="mt-4 p-4 rounded-lg flex items-center justify-between"
+                                        style={{ background: `${accent}08`, border: `1px solid ${accent}25` }}>
+                                        <div>
+                                            <p className="text-xs text-slate-500 uppercase tracking-widest">Total Portfolio · 6mo</p>
+                                            <p className="text-xs text-slate-600 mt-0.5">Compounded across all {entities.length} nodes</p>
+                                        </div>
+                                        <p className="text-2xl font-black tabular-nums"
+                                            style={{ color: accent, fontFamily: 'monospace' }}>
+                                            ${entities.reduce((sum, entity) => {
+                                                const coeff = 1 + (entity.sensitivity_score ?? 30) / 200;
+                                                return sum + Math.round((mrr / entities.length) * Math.pow(coeff, 6));
+                                            }, 0).toLocaleString()}
+                                        </p>
+                                    </div>
+                                </motion.div>
                             )}
                         </motion.div>
                     )}
@@ -1079,6 +1300,7 @@ export default function WorkspaceClient({
                                         { label: "Delivery", value: frequency.charAt(0).toUpperCase() + frequency.slice(1) },
                                         { label: "MRR Tracked", value: `$${mrr.toLocaleString()}` },
                                         { label: "Entities Monitored", value: entities.length },
+                                        { label: "Access Level", value: isAdmin ? "Administrator" : "Member" },
                                     ].map(row => (
                                         <div key={row.label} className="flex items-center justify-between">
                                             <span className="text-xs text-slate-500">{row.label}</span>
@@ -1106,11 +1328,11 @@ export default function WorkspaceClient({
             </div>
 
             <style jsx global>{`
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-        input[type="range"]::-webkit-slider-thumb { cursor: pointer; }
-      `}</style>
+                .custom-scroll::-webkit-scrollbar { width: 4px; }
+                .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+                .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+                input[type="range"]::-webkit-slider-thumb { cursor: pointer; }
+            `}</style>
         </div>
     );
 }

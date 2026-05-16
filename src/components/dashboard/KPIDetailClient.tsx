@@ -23,6 +23,7 @@ import {
 import { cn } from '@/lib/utils';
 import { DashboardStats } from '@/lib/data';
 
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AIPersona = 'aggressive' | 'balanced' | 'defensive';
@@ -38,6 +39,7 @@ interface KPIDetailClientProps {
     /** "summary" = hero + 1 chart + 2 bullets only (Dashboard).
      *  "full"    = all forensic detail (Workspace). Default: "full" */
     viewMode?: 'full' | 'summary';
+    onBack?: () => void;
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -874,11 +876,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     role = 'admin',
     persona: initPersona = 'balanced',
     viewMode = 'full',
+    onBack,
 }) => {
     const cfg = SLUG_CONFIG[slug];
     if (!cfg) return null;
 
     const [persona, setPersona] = useState<AIPersona>(initPersona);
+
 
     const accent = cfg.accentColor;
     const glow = cfg.glowColor;
@@ -921,9 +925,9 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
         <div className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600" style={MONO}>
-                <Link href="/" className="hover:text-sky-400 transition-colors flex items-center gap-1.5">
-                    <ArrowLeft size={11} /> Dashboard
-                </Link>
+                <button onClick={() => onBack ? onBack() : setActiveTab('pulse')} className="hover:text-sky-400 transition-colors flex items-center gap-1.5">
+                    <ArrowLeft size={11} />
+                </button>
                 <span className="opacity-30">/</span>
                 <span style={{ color: accent }}>{cfg.label}</span>
                 {role === 'user' && <><span className="opacity-30">/</span><span className="text-violet-400">PERSONAL</span></>}

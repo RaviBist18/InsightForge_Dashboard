@@ -1,25 +1,19 @@
-// src/context/WorkspaceContext.tsx
 "use client";
-
 import { createContext, useContext, useState, ReactNode } from "react";
 
-type Tab = "pulse" | "archives" | "forge" | "entities" | "customizer";
+type WorkspaceTab = "pulse" | "archives" | "forge" | "entities" | "customizer";
+type KPISlug = "total-revenue" | "total-profit" | "profit-margin" | "total-orders" | "active-users" | "churn-rate";
+export type Tab = WorkspaceTab | KPISlug | null;
 
 interface WorkspaceContextType {
     activeTab: Tab;
     setActiveTab: (tab: Tab) => void;
-    mrr: number;
-    setMrr: (v: number) => void;
-    churn: number;
-    setChurn: (v: number) => void;
-    entityCount: number;
-    setEntityCount: (v: number) => void;
-    snapshotCount: number;
-    setSnapshotCount: (v: number) => void;
-    mrrTrend: number;
-    setMrrTrend: (v: number) => void;
-    isWorkspacePage: boolean;
-    setIsWorkspacePage: (v: boolean) => void;
+    mrr: number; setMrr: (v: number) => void;
+    churn: number; setChurn: (v: number) => void;
+    entityCount: number; setEntityCount: (v: number) => void;
+    snapshotCount: number; setSnapshotCount: (v: number) => void;
+    mrrTrend: number; setMrrTrend: (v: number) => void;
+    isWorkspacePage: boolean; setIsWorkspacePage: (v: boolean) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null);
@@ -36,8 +30,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return (
         <WorkspaceContext.Provider value={{
             activeTab, setActiveTab,
-            mrr, setMrr,
-            churn, setChurn,
+            mrr, setMrr, churn, setChurn,
             entityCount, setEntityCount,
             snapshotCount, setSnapshotCount,
             mrrTrend, setMrrTrend,

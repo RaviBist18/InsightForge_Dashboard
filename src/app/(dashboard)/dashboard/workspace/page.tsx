@@ -40,6 +40,7 @@ export default function WorkspacePage() {
                 churn: parseFloat((Math.random() * 3 + 1.5).toFixed(1)),
                 signups: Math.floor(Math.random() * 40 + 20),
                 isReadOnly,
+                role: (profileRes.data?.role as 'admin' | 'user') ?? 'user', // ADD
             });
             setReady(true);
         }

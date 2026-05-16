@@ -100,9 +100,9 @@ const KPICard: React.FC<KPICardProps> = ({
 // ─── KPI Section ─────────────────────────────────────────────────────────────
 interface KPISectionProps {
   stats: DashboardStats;
+  allowedSlugs?: string[];
 }
-
-export const KPISection: React.FC<KPISectionProps> = ({ stats }) => {
+export const KPISection: React.FC<KPISectionProps> = ({ stats, allowedSlugs }) => {
   // FIXED: No more "isFetching" re-render loop
   if (!stats) return <div className="h-[320px] w-full animate-pulse bg-white/5 rounded-2xl" />;
 
@@ -115,9 +115,11 @@ export const KPISection: React.FC<KPISectionProps> = ({ stats }) => {
     { title: 'Churn Rate', slug: 'churn-rate', rawValue: stats.churnRate, displayValue: `${stats.churnRate}%`, suffix: '%', isFloat: true, icon: Activity, accentColor: '#f43f5e', glowColor: '#e11d48', change: 0.3, trend: 'down' as const },
   ];
 
+  const filtered = allowedSlugs ? metrics.filter(m => allowedSlugs.includes(m.slug)) : metrics;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {metrics.map((m, i) => (
+      {filtered.map((m, i) => (
         <KPICard key={m.title} {...m} delay={i * 0.05} />
       ))}
     </div>
