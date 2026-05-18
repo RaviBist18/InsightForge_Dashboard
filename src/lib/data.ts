@@ -101,6 +101,9 @@ export interface DashboardStats {
   efficiency: number;
   latestNews: string;
   mrrSparkline?: number[];   // for MoM calc in KPISection
+  totalAssetValue?: number;
+  marketGrowthYield?: number;
+  activeNodesCount?: number;
 }
 
 // ─── CANONICAL VALUES — single source of truth ────────────────────────────────

@@ -882,6 +882,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     if (!cfg) return null;
 
     const [persona, setPersona] = useState<AIPersona>(initPersona);
+    const isAdmin = role === 'admin';
 
 
     const accent = cfg.accentColor;
@@ -1016,13 +1017,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="YTD" value={`${prefix}${role === 'admin' ? '11,570' : '231'}`} sub="Oct–Apr" color={accent} />
                         <StatCard label="Forecast" value={`${prefix}${role === 'admin' ? '1,980' : '40'}`} sub="Next 30d" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <SectionCard title="REVENUE TREND — AREA CHART · AVG + GOAL REFERENCE LINES">
                                 <RevenueAreaChart data={histData} accent={accent} prefix={prefix} />
                             </SectionCard>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                 </>
             )}
@@ -1036,13 +1037,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="Margin" value="40%" sub="Gross" color={accent} />
                         <StatCard label="API OpEx" value={role === 'admin' ? '$335' : '$6.70'} sub="Monthly burn" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <SectionCard title="REVENUE VS PROFIT — COMPOSED CHART (BARS=REVENUE · LINE=PROFIT)">
                                 <ProfitComposedChart data={histData} accent={accent} />
                             </SectionCard>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                     {role === 'admin' && (
                         <SectionCard title="WATERFALL EXPENSE BREAKDOWN — ADMIN ONLY">
@@ -1084,8 +1085,8 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="Best Month" value="42.1%" sub="Jan 2026" color={accent} />
                         <StatCard label="Target EOY" value="45.0%" sub="2026 goal" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <SectionCard title="MARGIN DONUT — MARGIN VS COST">
                                 <MarginDonut margin={GLOBAL.margin} accent={accent} />
                                 <div className="flex justify-center gap-6 mt-3">
@@ -1097,7 +1098,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                                 </div>
                             </SectionCard>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                 </>
             )}
@@ -1111,13 +1112,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="Success Rate" value="94.3%" sub="Completed" color={accent} />
                         <StatCard label="Failed" value="5.7%" sub="Refunded" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <SectionCard title="ORDER VOLUME — BAR CHART · AVG + GOAL LINES">
                                 <OrdersBarChart accent={accent} />
                             </SectionCard>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                 </>
             )}
@@ -1131,13 +1132,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="New This Month" value={role === 'admin' ? '4' : '0'} sub="Joined recently" color={accent} />
                         <StatCard label="Inactive" value={role === 'admin' ? '3' : '0'} sub="Past 30 days" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <SectionCard title="USER GROWTH — STEP LINE CHART · GOAL LINE">
                                 <UsersStepLine accent={accent} />
                             </SectionCard>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                 </>
             )}
@@ -1151,8 +1152,8 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         <StatCard label="Retained" value="98.2%" sub="This month" color={accent} />
                         <StatCard label="Accts Lost" value={role === 'admin' ? '1' : '0'} sub="This period" color={accent} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2">
+                    <div className={cn("grid grid-cols-1 gap-4", isAdmin && "lg:grid-cols-3")}>
+                        <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <SectionCard title="CHURN RADIAL GAUGE — 0–5% DANGER">
                                     <ChurnGauge churnRate={GLOBAL.churnRate} accent={accent} />
@@ -1176,7 +1177,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                                 </SectionCard>
                             </div>
                         </div>
-                        <KeyDrivers slug={slug} role={role} />
+                        {isAdmin && <KeyDrivers slug={slug} role={role} />}
                     </div>
                 </>
             )}

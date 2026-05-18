@@ -51,6 +51,7 @@ interface Props {
 const KPI_SLUGS = new Set([
     "total-revenue", "total-profit", "profit-margin",
     "total-orders", "active-users", "churn-rate",
+    "total-asset-value", "market-growth-yield", "active-nodes-count",
 ]);
 
 // Slugs restricted to admin only
@@ -619,7 +620,14 @@ export default function WorkspaceClient({
                             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                             className="space-y-6"
                         >
-                            <KPISection stats={liveStats} allowedSlugs={isAdmin ? undefined : USER_KPI_SLUGS} />
+                            <KPISection
+                                stats={liveStats}
+                                onCardClick={(slug) => setActiveTab(slug as any)}
+                                allowedSlugs={[
+                                    'total-revenue', 'total-profit', 'profit-margin',
+                                    'total-orders', 'active-users', 'churn-rate',
+                                ]}
+                            />
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Internal Revenue Panel */}

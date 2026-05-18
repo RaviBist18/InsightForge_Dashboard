@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { KPISection } from '@/components/dashboard/KPISection';
 import { FiltersPanel } from '@/components/dashboard/FiltersPanel';
@@ -21,6 +21,7 @@ import {
   getCategoryData,
   getRegionData
 } from '@/lib/data';
+
 
 // KPI slugs that trigger the detail panel
 const KPI_SLUGS = new Set([
@@ -44,9 +45,12 @@ export default function Home({ searchParams }: { searchParams: any }) {
   const [loading, setLoading] = useState(true);
 
   // Active KPI tab — null = main dashboard, slug string = detail panel
-  const { activeTab, setActiveTab } = useWorkspace();
+  const [localTab, setLocalTab] = useState<string | null>(null);
+  useWorkspace();
 
   const tableRef = useRef<HTMLDivElement>(null);
+  const stableEfficiency = useMemo(() => stats?.efficiency ?? 0, [stats?.efficiency]);
+  const stableNews = useMemo(() => stats?.latestNews ?? "Market stable", [stats?.latestNews]);
 
   // 2. Fetch Initial Data
   useEffect(() => {
@@ -139,7 +143,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
     </div>
   );
 
-  const isKPIActive = activeTab !== null && KPI_SLUGS.has(activeTab);
+  const isKPIActive = localTab !== null && KPI_SLUGS.has(localTab);
 
   return (
     <div className="min-h-screen bg-[#020617] selection:bg-sky-500/30">
@@ -158,7 +162,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
           {/* Back button when a KPI panel is open */}
           {isKPIActive && (
             <button
-              onClick={() => setActiveTab(null as any)}
+              onClick={() => setLocalTab(null)}
               className="px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-black text-slate-400 hover:text-white transition-all"
               style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
@@ -175,28 +179,35 @@ export default function Home({ searchParams }: { searchParams: any }) {
       </header>
 
       <div className="space-y-6 px-4 pb-20">
-        <CEOBriefing efficiency={stats?.efficiency || 0} newsHeadline={stats?.latestNews || "Market stable"} />
+        <CEOBriefing efficiency={stableEfficiency} newsHeadline={stableNews} />
 
-        {/* KPI cards — always visible, clicking sets activeTab */}
+        {/* KPI cards — always visible, clicking sets localTab */}
         {/* FIX: no category/range props — KPISection only accepts { stats } */}
-        <KPISection stats={stats} />
+        <KPISection
+          stats={stats}
+          onCardClick={(slug) => setLocalTab(slug)}
+          allowedSlugs={[
+            'total-revenue', 'total-profit', 'profit-margin',
+            'total-orders', 'active-users', 'churn-rate',
+          ]}
+        />
 
         {/* AnimatePresence router: main dashboard ↔ summary KPI panel */}
         <AnimatePresence mode="wait">
           {isKPIActive ? (
             <motion.div
-              key={activeTab}
+              key={localTab}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
             >
               <KPIDetailClient
-                slug={activeTab}
+                slug={localTab}
                 stats={stats}
                 analytics={{}}
                 viewMode="summary"
-                onBack={() => setActiveTab(null)}
+                onBack={() => setLocalTab(null)}
               />
             </motion.div>
           ) : (

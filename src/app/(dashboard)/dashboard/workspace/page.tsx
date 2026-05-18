@@ -17,17 +17,22 @@ export default function WorkspacePage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { window.location.href = "/auth"; return; }
 
-            const [profileRes, briefingRes, snapshotsRes, entitiesRes, transactionsRes] =
-                await Promise.all([
-                    supabase.from("profiles").select("full_name, role").eq("id", user.id).single(),
-                    supabase.from("briefing_settings").select("*").eq("user_id", user.id).single(),
-                    supabase.from("forensic_snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(12),
-                    supabase.from("business_entities").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-                    supabase.from("transactions").select("amount, status, created_at").order("created_at", { ascending: false }).limit(90),
-                ]);
+            const [profileRes, snapshotsRes, entitiesRes] = await Promise.all([
+                supabase.from("profiles").select("full_name, role").eq("id", user.id).maybeSingle(),
+                supabase.from("forensic_snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(12),
+                supabase.from("business_entities").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+            ]);
+
+            console.log('profile data:', profileRes.data, 'error:', profileRes.error);
+            console.log('role from profile:', profileRes.data?.role);
+
+            const briefingRes = await supabase.from("briefing_settings").select("*").eq("user_id", user.id).maybeSingle();
+            const transactionsRes = await supabase.from("transactions").select("amount, status, created_at").order("created_at", { ascending: false }).limit(90);
 
             const transactions = transactionsRes.data ?? [];
             const mrr = transactions.filter((t: any) => t.status === "completed").reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
+
+            console.log('role from profile:', profileRes.data?.role);
 
             setProps({
                 userId: user.id,
@@ -40,13 +45,14 @@ export default function WorkspacePage() {
                 churn: parseFloat((Math.random() * 3 + 1.5).toFixed(1)),
                 signups: Math.floor(Math.random() * 40 + 20),
                 isReadOnly,
-                role: (profileRes.data?.role as 'admin' | 'user') ?? 'user', // ADD
+                role: (profileRes.data?.role as 'admin' | 'user') ?? 'user',
             });
             setReady(true);
         }
 
         load();
     }, []);
+
 
     if (!ready) return (
         <div className="min-h-screen bg-[#050a15] flex items-center justify-center text-sky-500 font-black uppercase tracking-widest text-xs">

@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { DashboardStats } from '../../lib/data';
-import { useWorkspace } from '@/context/WorkspaceContext';
 
+import { Database, TrendingUp, Zap } from 'lucide-react';
 
 // ─── Animated Counter ────────────────────────────────────────────────────────
 function useAnimatedCounter(target: number, duration = 1.4, inView = false) {
@@ -47,17 +47,18 @@ interface KPICardProps {
   slug: string;
   accentColor: string;
   glowColor: string;
+  onCardClick?: (slug: string) => void;
 }
 
 const KPICard: React.FC<KPICardProps> = ({
   title, rawValue, displayValue, prefix = '', suffix = '',
   isFloat = false, change, trend, icon: Icon,
-  delay = 0, slug, accentColor, glowColor
+  delay = 0, slug, accentColor, glowColor, onCardClick
 }) => {
   const ref = useRef(null);
-  const { setActiveTab } = useWorkspace();
 
-  const [activeKPI, setActiveKPI] = useState<string | null>(null);
+
+
   const inView = useInView(ref, { once: true, margin: '-40px' });
   const animated = useAnimatedCounter(rawValue, 1.4, inView);
 
@@ -73,7 +74,7 @@ const KPICard: React.FC<KPICardProps> = ({
       initial={{ opacity: 0, y: 24 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.5, delay }}
-      onClick={() => setActiveTab(slug as any)}
+      onClick={() => onCardClick?.(slug)}
       className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 h-full cursor-pointer group hover:border-white/[0.12] transition-all"
       style={{ fontFamily: "'JetBrains Mono', monospace" }}
     >
@@ -101,8 +102,10 @@ const KPICard: React.FC<KPICardProps> = ({
 interface KPISectionProps {
   stats: DashboardStats;
   allowedSlugs?: string[];
+  onCardClick?: (slug: string) => void;
+
 }
-export const KPISection: React.FC<KPISectionProps> = ({ stats, allowedSlugs }) => {
+export const KPISection: React.FC<KPISectionProps> = ({ stats, allowedSlugs, onCardClick }) => {
   // FIXED: No more "isFetching" re-render loop
   if (!stats) return <div className="h-[320px] w-full animate-pulse bg-white/5 rounded-2xl" />;
 
@@ -113,14 +116,19 @@ export const KPISection: React.FC<KPISectionProps> = ({ stats, allowedSlugs }) =
     { title: 'Total Orders', slug: 'total-orders', rawValue: stats.totalOrders, displayValue: `${stats.totalOrders}`, icon: ShoppingCart, accentColor: '#fbbf24', glowColor: '#f59e0b', change: 14.7, trend: 'up' as const },
     { title: 'Active Users', slug: 'active-users', rawValue: stats.activeUsers, displayValue: `${stats.activeUsers}`, icon: Users, accentColor: '#38bdf8', glowColor: '#0ea5e9', change: 5.4, trend: 'up' as const },
     { title: 'Churn Rate', slug: 'churn-rate', rawValue: stats.churnRate, displayValue: `${stats.churnRate}%`, suffix: '%', isFloat: true, icon: Activity, accentColor: '#f43f5e', glowColor: '#e11d48', change: 0.3, trend: 'down' as const },
+    { title: 'Total Asset Value', slug: 'total-asset-value', rawValue: stats.totalAssetValue ?? 0, displayValue: `$${stats.totalAssetValue ?? 0}`, prefix: '$', icon: Database, accentColor: '#34d399', glowColor: '#059669', change: 4.2, trend: 'up' as const },
+    { title: 'Market Growth Yield', slug: 'market-growth-yield', rawValue: stats.marketGrowthYield ?? 0, displayValue: `$${stats.marketGrowthYield ?? 0}`, prefix: '$', icon: TrendingUp, accentColor: '#f59e0b', glowColor: '#d97706', change: 2.8, trend: 'up' as const },
+    { title: 'Active Nodes', slug: 'active-nodes-count', rawValue: stats.activeNodesCount ?? 0, displayValue: `${stats.activeNodesCount ?? 0}`, icon: Zap, accentColor: '#a78bfa', glowColor: '#7c3aed', change: 1.5, trend: 'up' as const },
   ];
 
+
   const filtered = allowedSlugs ? metrics.filter(m => allowedSlugs.includes(m.slug)) : metrics;
+  console.log('filtered slugs:', filtered.map(m => m.slug));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {filtered.map((m, i) => (
-        <KPICard key={m.title} {...m} delay={i * 0.05} />
+        <KPICard key={m.title} {...m} delay={i * 0.05} onCardClick={onCardClick} />
       ))}
     </div>
   );
