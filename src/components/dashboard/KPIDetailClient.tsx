@@ -8,7 +8,7 @@ import {
     ShoppingCart, Users, Activity,
     Download, Brain, Shield, User,
     AlertTriangle, Target, Zap, Star,
-    ChevronRight, AlertCircle
+    ChevronRight, AlertCircle, Database
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -117,6 +117,38 @@ const SLUG_CONFIG: Record<string, {
             ? 'Retention is high — only 1 account lost in the last 30 days.'
             : 'No churn risk detected on your account. Status: retained.',
     },
+    'total-asset-value': {
+        label: 'Total Asset Value',
+        icon: Database,
+        accentColor: '#34d399',
+        glowColor: '#059669',
+        prefix: '$',
+        description: 'Cumulative base valuation of all your forged nodes and active allocations.',
+        adminValue: 0,      // admin never sees this slug; safe fallback
+        userValue: 1800,    // overridden by stats.totalAssetValue in component
+        humanLabel: (v) => `Your forged node portfolio is valued at $${v.toLocaleString()}.`,
+    },
+    'market-growth-yield': {
+        label: 'Market Growth Yield',
+        icon: TrendingUp,
+        accentColor: '#f59e0b',
+        glowColor: '#d97706',
+        prefix: '$',
+        description: 'Net profit generated from live market trend multipliers applied to your assets.',
+        adminValue: 0,
+        userValue: 324,
+        humanLabel: (v) => `$${v.toLocaleString()} yield generated from market multipliers this period.`,
+    },
+    'active-nodes-count': {
+        label: 'Active Nodes Count',
+        icon: Zap,
+        accentColor: '#a78bfa',
+        glowColor: '#7c3aed',
+        description: 'Absolute count of live, functional entities deployed under your user profile.',
+        adminValue: 0,
+        userValue: 0,       // always from stats.activeNodesCount
+        humanLabel: (v) => `${v} nodes currently live and synced under your profile.`,
+    },
 };
 
 // ─── Chart datasets ───────────────────────────────────────────────────────────
@@ -166,6 +198,38 @@ const CHURN_HIST = [
     { name: 'Feb', value: 1.9, goal: 1.8 },
     { name: 'Mar', value: 1.8, goal: 1.8 },
     { name: 'Apr', value: 1.8, goal: 1.5 },
+];
+
+// ── NEW: Asset metric chart data ──────────────────────────────────────────────
+
+const ASSET_VALUE_HIST = [
+    { name: 'Oct', value: 820 },
+    { name: 'Nov', value: 940 },
+    { name: 'Dec', value: 1080 },
+    { name: 'Jan', value: 1240 },
+    { name: 'Feb', value: 1410 },
+    { name: 'Mar', value: 1620 },
+    { name: 'Apr', value: 1800 },
+];
+
+const MARKET_YIELD_HIST = [
+    { name: 'Oct', yield: 180, index: 160 },
+    { name: 'Nov', yield: 210, index: 195 },
+    { name: 'Dec', yield: 195, index: 220 },
+    { name: 'Jan', yield: 260, index: 240 },
+    { name: 'Feb', yield: 290, index: 255 },
+    { name: 'Mar', yield: 275, index: 280 },
+    { name: 'Apr', yield: 324, index: 295 },
+];
+
+const NODE_FORGE_HIST = [
+    { name: 'Oct', forged: 2, updated: 1 },
+    { name: 'Nov', forged: 3, updated: 2 },
+    { name: 'Dec', forged: 1, updated: 3 },
+    { name: 'Jan', forged: 4, updated: 2 },
+    { name: 'Feb', forged: 2, updated: 4 },
+    { name: 'Mar', forged: 5, updated: 1 },
+    { name: 'Apr', forged: 3, updated: 3 },
 ];
 
 const EXPENSE_BREAKDOWN = [
@@ -247,6 +311,21 @@ const MICRO_STATS: Record<string, (role: UserRole) => { label: string; value: st
         { label: 'INDUSTRY AVG', value: '2.5%', sub: 'Benchmark' },
         { label: 'ACCTS LOST', value: '1', sub: 'This month' },
         { label: 'FORECAST', value: '1.6%', sub: 'Next 30 days' },
+    ],
+    'total-asset-value': () => [
+        { label: 'BASE VALUE', value: '$820', sub: 'Oct baseline' },
+        { label: 'PEAK VALUE', value: '$1,800', sub: 'Apr 2026 ATH' },
+        { label: 'FLOOR PRICE', value: '$410', sub: 'Lowest node val' },
+    ],
+    'market-growth-yield': () => [
+        { label: 'CURRENT YIELD', value: '$324', sub: 'This period' },
+        { label: 'YIELD MOM', value: '+17.8%', sub: 'vs Mar' },
+        { label: 'BEST DAY', value: 'Apr 14', sub: 'Peak gain' },
+    ],
+    'active-nodes-count': () => [
+        { label: 'UPTIME RATE', value: '99.8%', sub: '30-day avg' },
+        { label: 'GAS EFFICIENCY', value: '94.2%', sub: 'vs 88% baseline' },
+        { label: 'AVG SYNC LAG', value: '1.3s', sub: 'Last cycle' },
     ],
 };
 
@@ -455,6 +534,67 @@ const FB: Record<string, Record<UserRole, Record<AIPersona, string[]>>> = {
                 'Annual plan cost-effective at your usage level.',
             ],
             defensive: ['No churn risk. Stable.', 'Maintain usage patterns.', 'Account in good standing.'],
+        },
+    },
+
+    'total-asset-value': {
+        admin: { aggressive: [], balanced: [], defensive: [] }, // admin never hits this slug
+        user: {
+            aggressive: [
+                'Portfolio at ATH. Add 2 high-sensitivity nodes now — coeff >1.2 compounds 26% over 6 months.',
+                'Floor price $410 gives downside buffer. Allocate next node to volatile-high tier for max return.',
+                'Grade A unlocks priority scoring queue. Maintain above $1,200 to keep grade.',
+            ],
+            balanced: [
+                'Asset value growing steadily. Node sensitivity mix is healthy — no single-node concentration risk.',
+                'Floor price is 38% of peak — standard buffer. Review low-sensitivity nodes quarterly.',
+                'Grade reflects portfolio quality. Consistent node additions sustain trajectory.',
+            ],
+            defensive: [
+                'Hold current nodes. Market volatility elevated — no new allocations until floor stabilizes.',
+                'Grade A is a buffer, not a signal to expand. Protect existing positions.',
+                'Monitor sensitivity scores monthly. Rescore if market conditions shift >10%.',
+            ],
+        },
+    },
+    'market-growth-yield': {
+        admin: { aggressive: [], balanced: [], defensive: [] },
+        user: {
+            aggressive: [
+                `Yield MoM accelerating. Rotate capital into nodes with sensitivity >60 to ride multiplier.`,
+                'Volatility factor 0.42 = low. Window to increase allocation before factor rises above 0.6.',
+                'Best trajectory day compounding — daily yield checks during market open maximize entry timing.',
+            ],
+            balanced: [
+                'Yield healthy relative to asset base. No reallocation needed this cycle.',
+                'Market index tracking closely — multiplier is working as expected.',
+                'Volatility at 0.42 is stable. Maintain current node mix.',
+            ],
+            defensive: [
+                'Yield positive but market index diverging. Watch for reversion in next 2 periods.',
+                'Volatility factor 0.42 — low now, historically spikes post-ATH. Hold positions.',
+                'Do not chase yield increase with new nodes until volatility confirmed stable.',
+            ],
+        },
+    },
+    'active-nodes-count': {
+        admin: { aggressive: [], balanced: [], defensive: [] },
+        user: {
+            aggressive: [
+                'Forge 2 new nodes immediately — each adds compounding coeff. Delay = lost yield.',
+                '99.8% uptime is deployable headroom. Gas efficiency at 94.2% leaves 5.8% to optimize via batching.',
+                'Pending nodes resolve within 1 cycle. Queue next forge now to avoid downtime gap.',
+            ],
+            balanced: [
+                'Node fleet healthy. Uptime and efficiency both above baseline — no action required.',
+                'Pending nodes are normal sync lag. Monitor resolution within 24h.',
+                'Gas efficiency at 94.2% is solid. Rescore nodes quarterly to maintain.',
+            ],
+            defensive: [
+                'Do not forge new nodes until pending batch fully synced and confirmed.',
+                '99.8% uptime is critical — any new node adds deployment risk. Validate infra first.',
+                'Gas efficiency should stay above 90%. If it drops, pause forging and audit.',
+            ],
         },
     },
 };
@@ -824,6 +964,74 @@ function ChurnGauge({ churnRate, accent }: { churnRate: number; accent: string }
     );
 }
 
+// ── Asset Value AreaChart ─────────────────────────────────────────────────────
+function AssetValueAreaChart({ accent, data }: { accent: string; data: typeof ASSET_VALUE_HIST }) {
+    return (
+        <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={data} margin={{ left: -10, right: 8 }}>
+                <defs>
+                    <linearGradient id="avGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={accent} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={accent} stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }} />
+                <YAxis axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }}
+                    tickFormatter={v => `$${v}`} />
+                <Tooltip content={<ChartTooltip prefix="$" />} />
+                <Area type="monotone" dataKey="value" stroke={accent} strokeWidth={2.5}
+                    fill="url(#avGrad)"
+                    dot={{ r: 3, fill: accent, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: accent, stroke: '#0f172a', strokeWidth: 2 }} />
+            </AreaChart>
+        </ResponsiveContainer>
+    );
+}
+
+// ── Market Growth Yield ComposedChart ─────────────────────────────────────────
+function MarketYieldChart({ accent, data }: { accent: string; data: typeof MARKET_YIELD_HIST }) {
+    return (
+        <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={data} margin={{ left: -10, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }} />
+                <YAxis axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }}
+                    tickFormatter={v => `$${v}`} />
+                <Tooltip content={<ChartTooltip prefix="$" />} />
+                <Bar dataKey="index" fill="rgba(255,255,255,0.05)" radius={[4, 4, 0, 0]} barSize={18}
+                    name="Market Index" />
+                <Line type="monotone" dataKey="yield" stroke={accent} strokeWidth={2.5}
+                    dot={{ r: 3, fill: accent, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: accent, stroke: '#0f172a', strokeWidth: 2 }}
+                    name="Your Yield" />
+            </ComposedChart>
+        </ResponsiveContainer>
+    );
+}
+
+// ── Node Forge BarChart ───────────────────────────────────────────────────────
+function NodeForgeBarChart({ accent, data }: { accent: string; data: typeof NODE_FORGE_HIST }) {
+    return (
+        <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={data} margin={{ left: -20, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }} />
+                <YAxis axisLine={false} tickLine={false}
+                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="forged" fill={accent} radius={[4, 4, 0, 0]} barSize={14} name="Forged" />
+                <Bar dataKey="updated" fill={`${accent}50`} radius={[4, 4, 0, 0]} barSize={14} name="Updated" />
+            </BarChart>
+        </ResponsiveContainer>
+    );
+}
+
 // ─── Summary View (Dashboard density) ────────────────────────────────────────
 
 function SummaryView({ slug, cfg, displayVal, prefix, suffix, accent, histData, role, persona }: {
@@ -891,9 +1099,20 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     const suffix = cfg.suffix ?? '';
     const Icon = cfg.icon;
 
-    const displayVal = role === 'admin'
-        ? (stats?.totalRevenue !== undefined && slug === 'total-revenue' ? stats.totalRevenue : cfg.adminValue)
-        : cfg.userValue;
+    const displayVal = (() => {
+        if (role === 'admin') {
+            if (slug === 'total-revenue' && stats?.totalRevenue !== undefined) return stats.totalRevenue;
+            return cfg.adminValue;
+        }
+        // user role — prefer live stats
+        if (slug === 'total-revenue' && stats?.totalRevenue !== undefined) return stats.totalRevenue;
+        if (slug === 'total-profit' && stats?.totalProfit !== undefined) return stats.totalProfit;
+        if (slug === 'profit-margin' && stats?.profitMargin !== undefined) return stats.profitMargin;
+        if (slug === 'total-asset-value' && stats?.totalAssetValue !== undefined) return stats.totalAssetValue;
+        if (slug === 'market-growth-yield' && stats?.marketGrowthYield !== undefined) return stats.marketGrowthYield;
+        if (slug === 'active-nodes-count' && stats?.activeNodesCount !== undefined) return stats.activeNodesCount;
+        return cfg.userValue;
+    })();
 
     const histData = role === 'admin' ? REV_HIST : REV_HIST_USER;
     const microStats = (MICRO_STATS[slug] ?? (() => []))(role);
@@ -1181,6 +1400,78 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                     </div>
                 </>
             )}
+
+            {/* ── TOTAL ASSET VALUE ── */}
+            {slug === 'total-asset-value' && (() => {
+                const nodeCount = stats?.activeNodesCount ?? 0;
+                const assetVal = stats?.totalAssetValue ?? cfg.userValue;
+                const peakVal = Math.round(assetVal * 1.12);
+                const floorVal = Math.round(assetVal * 0.38);
+                const grade = assetVal > 2000 ? 'A+' : assetVal > 1200 ? 'A' : assetVal > 600 ? 'B+' : 'B';
+                // Scale chart to actual value
+                const scaledData = ASSET_VALUE_HIST.map((d, i) => ({
+                    ...d,
+                    value: Math.round(assetVal * (d.value / 1800)),
+                }));
+                return (
+                    <>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <StatCard label="Base Portfolio Value" value={`$${assetVal.toLocaleString()}`} sub="Current valuation" color={accent} />
+                            <StatCard label="Peak Asset Value" value={`$${peakVal.toLocaleString()}`} sub="Projected 6-mo" color={accent} />
+                            <StatCard label="Asset Floor Price" value={`$${floorVal.toLocaleString()}`} sub="Minimum floor" color={accent} />
+                            <StatCard label="Risk Grade" value={grade} sub="Asset quality" color={accent} />
+                        </div>
+                        <SectionCard title="ASSET VALUATION CURVE — ACCUMULATION OVER TIME">
+                            <AssetValueAreaChart accent={accent} data={scaledData} />
+                        </SectionCard>
+                    </>
+                );
+            })()}
+
+            {/* ── MARKET GROWTH YIELD ── */}
+            {slug === 'market-growth-yield' && (() => {
+                const yieldVal = stats?.marketGrowthYield ?? cfg.userValue;
+                const prevYield = Math.round(yieldVal / 1.178);
+                const momPct = (((yieldVal - prevYield) / prevYield) * 100).toFixed(1);
+                const scaledData = MARKET_YIELD_HIST.map(d => ({
+                    ...d,
+                    yield: Math.round(yieldVal * (d.yield / 324)),
+                    index: Math.round(yieldVal * (d.index / 295)),
+                }));
+                return (
+                    <>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <StatCard label="Current Yield" value={`$${yieldVal.toLocaleString()}`} sub="This period" color={accent} />
+                            <StatCard label="Yield MoM %" value={`+${momPct}%`} sub="vs last period" color={accent} />
+                            <StatCard label="Best Trajectory Day" value="Apr 14" sub="Peak single-day" color={accent} />
+                            <StatCard label="Volatility Factor" value="0.42" sub="Low = stable" color={accent} />
+                        </div>
+                        <SectionCard title="YIELD VS MARKET INDEX — COMPOUNDING LINE CHART">
+                            <MarketYieldChart accent={accent} data={scaledData} />
+                        </SectionCard>
+                    </>
+                );
+            })()}
+
+            {/* ── ACTIVE NODES COUNT ── */}
+            {slug === 'active-nodes-count' && (() => {
+                const total = stats?.activeNodesCount ?? cfg.userValue;
+                const pending = Math.max(0, Math.round(total * 0.15));
+                const active = total - pending;
+                return (
+                    <>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <StatCard label="Active Nodes" value={String(active)} sub="Live + synced" color={accent} />
+                            <StatCard label="Pending Nodes" value={String(pending)} sub="Syncing now" color={accent} />
+                            <StatCard label="System Uptime" value="99.8%" sub="30-day avg" color={accent} />
+                            <StatCard label="Gas Efficiency" value="94.2%" sub="vs 88% baseline" color={accent} />
+                        </div>
+                        <SectionCard title="NODE FORGE TIMELINE — FORGED VS UPDATED PER PERIOD">
+                            <NodeForgeBarChart accent={accent} data={NODE_FORGE_HIST} />
+                        </SectionCard>
+                    </>
+                );
+            })()}
 
             {/* Forensic Narrative — full bullets, always last */}
             <ForensicNarrative slug={slug} role={role} persona={persona} accentColor={accent} />

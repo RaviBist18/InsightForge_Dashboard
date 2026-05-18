@@ -58,7 +58,10 @@ const KPI_SLUGS = new Set([
 const ADMIN_ONLY_SLUGS = new Set(["total-orders", "active-users", "churn-rate"]);
 
 // Slugs available to users
-const USER_KPI_SLUGS = ["total-revenue", "total-profit", "profit-margin"];
+const USER_KPI_SLUGS = [
+    "total-revenue", "total-profit", "profit-margin",
+    "total-asset-value", "market-growth-yield", "active-nodes-count",
+];
 
 // All KPI slugs as array for admin tab rendering
 const ALL_KPI_SLUGS = [
@@ -519,6 +522,10 @@ export default function WorkspaceClient({
         efficiency: 78.5,
         latestNews: "Telemetry integrated.",
         mrrSparkline: mrrSparkline.map(d => d.mrr),
+        // ── NEW ──
+        totalAssetValue: Math.round(mrr * entities.reduce((sum, e) => sum + (1 + (e.sensitivity_score ?? 30) / 200), 0) || mrr * 1.3),
+        marketGrowthYield: Math.round(mrr * 0.18),
+        activeNodesCount: entities.filter(e => (e.sensitivity_score ?? 0) > 0).length || entities.length,
     };
 
     // ── RENDER ─────────────────────────────────────────────────────────────────
@@ -628,8 +635,10 @@ export default function WorkspaceClient({
                                     'total-orders', 'active-users', 'churn-rate',
                                 ] : [
                                     'total-revenue', 'total-profit', 'profit-margin',
+                                    'total-asset-value', 'market-growth-yield', 'active-nodes-count',
                                 ]}
                             />
+
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Internal Revenue Panel */}

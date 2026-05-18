@@ -104,6 +104,7 @@ export interface DashboardStats {
   totalAssetValue?: number;
   marketGrowthYield?: number;
   activeNodesCount?: number;
+
 }
 
 // ─── CANONICAL VALUES — single source of truth ────────────────────────────────
