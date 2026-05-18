@@ -623,9 +623,11 @@ export default function WorkspaceClient({
                             <KPISection
                                 stats={liveStats}
                                 onCardClick={(slug) => setActiveTab(slug as any)}
-                                allowedSlugs={[
+                                allowedSlugs={isAdmin ? [
                                     'total-revenue', 'total-profit', 'profit-margin',
                                     'total-orders', 'active-users', 'churn-rate',
+                                ] : [
+                                    'total-revenue', 'total-profit', 'profit-margin',
                                 ]}
                             />
 
