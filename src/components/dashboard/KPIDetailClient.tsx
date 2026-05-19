@@ -36,10 +36,16 @@ interface KPIDetailClientProps {
     role?: UserRole;
     persona?: AIPersona;
     userId?: string;
-    /** "summary" = hero + 1 chart + 2 bullets only (Dashboard).
-     *  "full"    = all forensic detail (Workspace). Default: "full" */
     viewMode?: 'full' | 'summary';
     onBack?: () => void;
+    entities?: BusinessEntity[];  // ← add this
+}
+interface BusinessEntity {
+    id: string; name: string; type: string;
+    sensitivity_score: number;
+    metadata: Record<string, unknown>;
+    base_value?: number;
+    created_at?: string;
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -1077,6 +1083,162 @@ function SummaryView({ slug, cfg, displayVal, prefix, suffix, accent, histData, 
     );
 }
 
+function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; accent: string }) {
+    const [selectedNode, setSelectedNode] = useState<BusinessEntity | null>(null);
+
+    return (
+        <div className="grid grid-cols-1 gap-4" style={{ gridTemplateColumns: '65% 35%' }}>
+
+            {/* ── LEFT: Registry Table ── */}
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/[0.06]">
+                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500" style={MONO}>
+                        📡 Node Registry — {entities.length} Assets
+                    </p>
+                </div>
+
+                {entities.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                        <p className="text-3xl">🔩</p>
+                        <p className="text-xs text-slate-600" style={MONO}>No nodes forged yet.</p>
+                    </div>
+                ) : (
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-white/[0.04]">
+                                {['Asset Name', 'Date Forged', 'Buy-In Price', 'Price Now'].map(h => (
+                                    <th key={h} className="px-4 py-3 text-left text-[8px] font-black uppercase tracking-widest text-slate-600" style={MONO}>
+                                        {h}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {entities.map((node, i) => {
+                                const isSelected = selectedNode?.id === node.id;
+                                const priceNow = Math.round((node.base_value ?? 0) * 1.15);
+                                return (
+                                    <motion.tr
+                                        key={node.id}
+                                        initial={{ opacity: 0, x: -8 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.05 }}
+                                        onClick={() => setSelectedNode(node)}
+                                        className="border-b border-white/[0.03] cursor-pointer transition-all"
+                                        style={{
+                                            background: isSelected ? `${accent}12` : 'transparent',
+                                            borderLeft: isSelected ? `2px solid ${accent}` : '2px solid transparent',
+                                        }}
+                                    >
+                                        <td className="px-4 py-3">
+                                            <p className="text-xs font-black text-white" style={MONO}>{node.name}</p>
+                                            <p className="text-[9px] text-slate-600 capitalize mt-0.5" style={MONO}>{node.type}</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <p className="text-[10px] text-slate-400" style={MONO}>
+                                                {node.created_at
+                                                    ? new Date(node.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                                    : '—'}
+                                            </p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <p className="text-[10px] font-bold text-slate-300 tabular-nums" style={MONO}>
+                                                ${(node.base_value ?? 0).toLocaleString()}
+                                            </p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <p className="text-[10px] font-black tabular-nums" style={{ color: accent, ...MONO }}>
+                                                ${priceNow.toLocaleString()}
+                                            </p>
+                                            <p className="text-[8px] text-emerald-400 mt-0.5" style={MONO}>+15%</p>
+                                        </td>
+                                    </motion.tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* ── RIGHT: Inspector ── */}
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                {!selectedNode ? (
+                    <div className="flex flex-col items-center justify-center h-full py-20 gap-3">
+                        <p className="text-3xl">🔍</p>
+                        <p className="text-xs text-slate-600 text-center" style={MONO}>
+                            Click a node row to inspect its forensic detail.
+                        </p>
+                    </div>
+                ) : (
+                    <motion.div
+                        key={selectedNode.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-5"
+                    >
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-2">
+                            <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1" style={MONO}>
+                                    Node Inspector
+                                </p>
+                                <p className="text-base font-black text-white" style={MONO}>{selectedNode.name}</p>
+                                <p className="text-[9px] text-slate-500 capitalize mt-0.5" style={MONO}>{selectedNode.type}</p>
+                            </div>
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest"
+                                style={{ background: '#10b98115', border: '1px solid #10b98140', color: '#10b981' }}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                ONLINE · RUNNING
+                            </span>
+                        </div>
+
+                        {/* Valuation Summary */}
+                        <div className="space-y-2">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-slate-600" style={MONO}>Valuation</p>
+                            {[
+                                { label: 'Buy-In Price', value: `$${(selectedNode.base_value ?? 0).toLocaleString()}`, color: '#94a3b8' },
+                                { label: 'Market Value Now', value: `$${Math.round((selectedNode.base_value ?? 0) * 1.15).toLocaleString()}`, color: accent },
+                                { label: 'Accrued Yield', value: `$${Math.round((selectedNode.base_value ?? 0) * 0.15).toLocaleString()}`, color: '#10b981' },
+                            ].map(row => (
+                                <div key={row.label} className="flex items-center justify-between p-3 rounded-xl"
+                                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <span className="text-[10px] text-slate-500" style={MONO}>{row.label}</span>
+                                    <span className="text-[11px] font-black tabular-nums" style={{ color: row.color, ...MONO }}>{row.value}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* System Diagnostics */}
+                        <div className="space-y-2">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-slate-600" style={MONO}>System Diagnostics</p>
+                            {[
+                                { label: 'Uptime', value: '99.96%', color: '#10b981' },
+                                { label: 'Sync State', value: 'Fully Synced', color: accent },
+                                { label: 'Gas Efficiency', value: '98.4%', color: '#10b981' },
+                            ].map(row => (
+                                <div key={row.label} className="flex items-center justify-between p-3 rounded-xl"
+                                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <span className="text-[10px] text-slate-500" style={MONO}>{row.label}</span>
+                                    <span className="text-[11px] font-black" style={{ color: row.color, ...MONO }}>{row.value}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Forged date */}
+                        <p className="text-[9px] text-slate-600 text-center pt-2 border-t border-white/[0.05]" style={MONO}>
+                            Forged {selectedNode.created_at
+                                ? new Date(selectedNode.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                                : '—'}
+                        </p>
+                    </motion.div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
@@ -1085,6 +1247,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     persona: initPersona = 'balanced',
     viewMode = 'full',
     onBack,
+    entities = [],  // ← add this
 }) => {
     const cfg = SLUG_CONFIG[slug];
     if (!cfg) return null;
@@ -1454,24 +1617,9 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
             })()}
 
             {/* ── ACTIVE NODES COUNT ── */}
-            {slug === 'active-nodes-count' && (() => {
-                const total = stats?.activeNodesCount ?? cfg.userValue;
-                const pending = Math.max(0, Math.round(total * 0.15));
-                const active = total - pending;
-                return (
-                    <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <StatCard label="Active Nodes" value={String(active)} sub="Live + synced" color={accent} />
-                            <StatCard label="Pending Nodes" value={String(pending)} sub="Syncing now" color={accent} />
-                            <StatCard label="System Uptime" value="99.8%" sub="30-day avg" color={accent} />
-                            <StatCard label="Gas Efficiency" value="94.2%" sub="vs 88% baseline" color={accent} />
-                        </div>
-                        <SectionCard title="NODE FORGE TIMELINE — FORGED VS UPDATED PER PERIOD">
-                            <NodeForgeBarChart accent={accent} data={NODE_FORGE_HIST} />
-                        </SectionCard>
-                    </>
-                );
-            })()}
+            {slug === 'active-nodes-count' && (
+                <NodeRegistryPanel entities={entities} accent={accent} />
+            )}
 
             {/* Forensic Narrative — full bullets, always last */}
             <ForensicNarrative slug={slug} role={role} persona={persona} accentColor={accent} />

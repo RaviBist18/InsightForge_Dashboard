@@ -10,6 +10,7 @@ import {
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { DashboardStats } from "@/lib/data";
 
 // ── IMPORT FORENSIC COMPONENTS ──────────────────────────────────────────────
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
@@ -25,7 +26,9 @@ interface ForensicSnapshot {
 }
 interface BusinessEntity {
     id: string; name: string; type: string;
-    sensitivity_score: number; metadata: Record<string, unknown>;
+    sensitivity_score: number;
+    metadata: Record<string, unknown>;
+    base_value?: number;  // ← add this
 }
 interface WhyFeedItem {
     headline: string; snippet: string;
@@ -103,6 +106,7 @@ const SHOCK_PRESETS = [
     { key: "vc_freeze", label: "VC Freeze", value: -15, icon: "🧊" },
     { key: "rate_hike", label: "Rate +0.75%", value: 0.75, icon: "🏦" },
 ];
+
 
 // ── SKELETON LOADER ───────────────────────────────────────────────────────────
 function FeedSkeleton({ accent }: { accent: string }) {
@@ -218,6 +222,7 @@ export default function WorkspaceClient({
     const [newEntity, setNewEntity] = useState({ name: "", type: "product" });
     const [scoringId, setScoringId] = useState<string | null>(null);
     const [addingEntity, setAddingEntity] = useState(false);
+    const [forgeBaseValue, setForgeBaseValue] = useState<string>("");
 
     // ── CUSTOMIZER ──
     const [persona, setPersona] = useState<string>(briefingSettings?.persona ?? "balanced");
@@ -434,6 +439,31 @@ export default function WorkspaceClient({
         } catch { /* silent */ } finally { setAddingEntity(false); }
     };
 
+    const handleForgeNode = async () => {
+        if (!newEntity.name.trim() || !forgeBaseValue || isReadOnly) return;
+        setAddingEntity(true);
+        try {
+            const { data, error } = await supabase
+                .from("business_entities")
+                .insert({
+                    user_id: userId,
+                    name: newEntity.name,
+                    type: newEntity.type ?? "custom",
+                    base_value: parseFloat(forgeBaseValue),
+                })
+                .select()
+                .single();
+
+            if (!error && data) {
+                setEntities(prev => [data, ...prev]);
+                setNewEntity({ name: "", type: "product" });
+                setForgeBaseValue("");
+                scoreEntity(data);
+            }
+        } catch { /* silent */ }
+        finally { setAddingEntity(false); }
+    };
+
     const scoreEntity = async (entity: BusinessEntity) => {
         setScoringId(entity.id);
         try {
@@ -508,11 +538,28 @@ export default function WorkspaceClient({
         { id: "customizer", label: "CEO Briefing", icon: "🎯" },
     ] as const;
 
+    // user-only tab — rendered separately in tab bar
+    const userOnlyTabs = !isAdmin ? [
+        { id: "forge-node", label: "Forge New Node", icon: "🔩" },
+    ] : [];
+
     // KPI slugs available to current role
     const availableKpiSlugs = isAdmin ? ALL_KPI_SLUGS : USER_KPI_SLUGS;
 
     // Shared stats object for KPIDetailClient
-    const liveStats = {
+    const userHasNodes = !isAdmin && entities.length > 0;
+
+    // ── user metric derivations ────────────────────────────────
+    const totalAssetValue = entities.reduce((sum, e) => sum + (e.base_value ?? 0), 0);
+    const totalRevenue = Math.round(totalAssetValue * 1.15);
+    const totalProfit = Math.round(totalRevenue * 0.95);
+    const profitMargin = totalRevenue > 0 ? parseFloat(((totalProfit / totalRevenue) * 100).toFixed(1)) : 0;
+    const marketGrowthYield = Math.round(totalAssetValue * 0.08);
+    const activeNodesCount = entities.length;
+
+
+
+    const liveStats: DashboardStats = isAdmin ? {
         totalRevenue: mrr,
         totalProfit: Math.round(mrr * 0.4),
         profitMargin: 40,
@@ -522,11 +569,21 @@ export default function WorkspaceClient({
         efficiency: 78.5,
         latestNews: "Telemetry integrated.",
         mrrSparkline: mrrSparkline.map(d => d.mrr),
-        // ── NEW ──
-        totalAssetValue: Math.round(mrr * entities.reduce((sum, e) => sum + (1 + (e.sensitivity_score ?? 30) / 200), 0) || mrr * 1.3),
-        marketGrowthYield: Math.round(mrr * 0.18),
-        activeNodesCount: entities.filter(e => (e.sensitivity_score ?? 0) > 0).length || entities.length,
+    } : {
+        totalRevenue,
+        totalProfit,
+        profitMargin,
+        totalOrders: activeNodesCount,
+        activeUsers: activeNodesCount > 0 ? 1 : 0,
+        churnRate: 0,
+        efficiency: activeNodesCount > 0 ? 78.5 : 0,
+        latestNews: "Telemetry integrated.",
+        mrrSparkline: [],
+        totalAssetValue,
+        marketGrowthYield,
+        activeNodesCount,
     };
+    const isForgeNodeTab = activeTab === ("forge-node" as any);
 
     // ── RENDER ─────────────────────────────────────────────────────────────────
     return (
@@ -614,10 +671,34 @@ export default function WorkspaceClient({
                             <span className="hidden sm:block">{tab.label}</span>
                         </button>
                     ))}
+                    {/* Forge Node button — user only, right side */}
+                    {!isAdmin && (
+                        <>
+                            <div className="flex-1" /> {/* pushes button to right */}
+                            <button
+                                onClick={() => setActiveTab("forge-node")}
+                                className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold whitespace-nowrap transition-all"
+                                style={{
+                                    background: activeTab === "forge-node"
+                                        ? `${accent}20`
+                                        : `linear-gradient(135deg, ${accent}30, ${accent}15)`,
+                                    border: `1px solid ${activeTab === "forge-node" ? accent : accent + "60"}`,
+                                    color: accent,
+                                    boxShadow: `0 0 16px ${accent}20`,
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                }}
+                            >
+                                <span>🔩</span>
+                                <span className="hidden sm:block">Forge New Node</span>
+                            </button>
+                        </>
+                    )}
 
                     {/* Divider */}
 
                 </div>
+
+
 
                 <AnimatePresence mode="wait">
 
@@ -641,84 +722,88 @@ export default function WorkspaceClient({
 
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
                                 {/* Internal Revenue Panel */}
-                                <div className="rounded-xl p-5"
-                                    style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 30px ${accent}08` }}>
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div>
-                                            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
-                                                {isAdmin ? "Internal Revenue" : "Your Revenue Contribution"}
-                                            </p>
-                                            {metricsLoading ? (
-                                                <motion.div className="h-9 w-40 rounded"
-                                                    animate={{ opacity: [0.3, 0.7, 0.3] }}
-                                                    transition={{ duration: 1.5, repeat: Infinity }}
-                                                    style={{ background: "rgba(255,255,255,0.06)" }} />
-                                            ) : (
-                                                <p className="text-3xl font-black text-white">
-                                                    ${mrr.toLocaleString()}
-                                                    <span className="text-sm text-slate-500 ml-2 font-normal">/mo</span>
+                                {isAdmin && (
+                                    <div className="rounded-xl p-5"
+
+                                        style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30`, boxShadow: `0 0 30px ${accent}08` }}>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
+                                                    {isAdmin ? "Internal Revenue" : "Your Revenue Contribution"}
                                                 </p>
+                                                {metricsLoading ? (
+                                                    <motion.div className="h-9 w-40 rounded"
+                                                        animate={{ opacity: [0.3, 0.7, 0.3] }}
+                                                        transition={{ duration: 1.5, repeat: Infinity }}
+                                                        style={{ background: "rgba(255,255,255,0.06)" }} />
+                                                ) : (
+                                                    <p className="text-3xl font-black text-white">
+                                                        ${mrr.toLocaleString()}
+                                                        <span className="text-sm text-slate-500 ml-2 font-normal">/mo</span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-slate-500">Churn</p>
+                                                <p className="text-lg font-bold" style={{ color: churn < 3 ? "#10b981" : "#f43f5e" }}>
+                                                    {churn}%
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="h-40">
+                                            {metricsLoading ? (
+                                                <div className="h-full flex items-end gap-1 px-2">
+                                                    {Array.from({ length: 12 }).map((_, i) => (
+                                                        <motion.div key={i} className="flex-1 rounded-t"
+                                                            animate={{ opacity: [0.2, 0.5, 0.2] }}
+                                                            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
+                                                            style={{ height: `${30 + Math.random() * 60}%`, background: `${accent}30` }} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <AreaChart data={mrrSparkline}>
+                                                        <defs>
+                                                            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                                                                <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+                                                        <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#475569" }} axisLine={false} tickLine={false} />
+                                                        <YAxis hide />
+                                                        <Tooltip
+                                                            contentStyle={{ background: "#080f1e", border: `1px solid ${accent}40`, borderRadius: 6, fontSize: 11, color: "#e2e8f0" }}
+                                                            formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
+                                                        />
+                                                        <Area type="monotone" dataKey="mrr" stroke="#38bdf8" strokeWidth={3}
+                                                            fill="url(#colorRevenue)"
+                                                            dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
+                                                            activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }} />
+                                                    </AreaChart>
+                                                </ResponsiveContainer>
                                             )}
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-xs text-slate-500">Churn</p>
-                                            <p className="text-lg font-bold" style={{ color: churn < 3 ? "#10b981" : "#f43f5e" }}>
-                                                {churn}%
-                                            </p>
+
+                                        <div className="grid grid-cols-2 gap-3 mt-3">
+                                            {[
+                                                { label: isAdmin ? "New Signups" : "Your Signups", value: isAdmin ? signups : 1, color: "#10b981" },
+                                                { label: "Subscribers", value: isAdmin ? Math.round(mrr / 49) : 1, color: accent },
+                                            ].map(m => (
+                                                <div key={m.label} className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                                                    <p className="text-xs text-slate-500 mb-1">{m.label}</p>
+                                                    <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-
-                                    <div className="h-40">
-                                        {metricsLoading ? (
-                                            <div className="h-full flex items-end gap-1 px-2">
-                                                {Array.from({ length: 12 }).map((_, i) => (
-                                                    <motion.div key={i} className="flex-1 rounded-t"
-                                                        animate={{ opacity: [0.2, 0.5, 0.2] }}
-                                                        transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
-                                                        style={{ height: `${30 + Math.random() * 60}%`, background: `${accent}30` }} />
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <AreaChart data={mrrSparkline}>
-                                                    <defs>
-                                                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
-                                                            <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
-                                                        </linearGradient>
-                                                    </defs>
-                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                                                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#475569" }} axisLine={false} tickLine={false} />
-                                                    <YAxis hide />
-                                                    <Tooltip
-                                                        contentStyle={{ background: "#080f1e", border: `1px solid ${accent}40`, borderRadius: 6, fontSize: 11, color: "#e2e8f0" }}
-                                                        formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
-                                                    />
-                                                    <Area type="monotone" dataKey="mrr" stroke="#38bdf8" strokeWidth={3}
-                                                        fill="url(#colorRevenue)"
-                                                        dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
-                                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#38bdf8" }} />
-                                                </AreaChart>
-                                            </ResponsiveContainer>
-                                        )}
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3 mt-3">
-                                        {[
-                                            { label: isAdmin ? "New Signups" : "Your Signups", value: isAdmin ? signups : 1, color: "#10b981" },
-                                            { label: "Subscribers", value: isAdmin ? Math.round(mrr / 49) : 1, color: accent },
-                                        ].map(m => (
-                                            <div key={m.label} className="p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                                                <p className="text-xs text-slate-500 mb-1">{m.label}</p>
-                                                <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                )}
 
                                 {/* Why Feed Panel */}
-                                <div className="rounded-xl p-5 flex flex-col"
+                                <div className={`rounded-xl p-5 flex flex-col ${!isAdmin ? "lg:col-span-2" : ""}`}
                                     style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
                                     <div className="flex items-center justify-between mb-4">
                                         <div>
@@ -808,6 +893,7 @@ export default function WorkspaceClient({
                                     persona={persona as any}
                                     viewMode="full"
                                     onBack={() => setActiveTab('pulse')}
+                                    entities={entities}  // ← add this
                                 />
                             </motion.div>
                         )}
@@ -1263,88 +1349,269 @@ export default function WorkspaceClient({
                     {activeTab === "customizer" && (
                         <motion.div key="customizer"
                             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                            className="max-w-2xl mx-auto space-y-6">
-                            <div className="rounded-xl p-5"
-                                style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30` }}>
-                                <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">🎯 Consultant Persona</p>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { id: "defensive", label: "Risk Defensive", icon: "🛡️", desc: "Focus on threats & mitigation" },
-                                        { id: "balanced", label: "Balanced", icon: "⚖️", desc: "Holistic strategic view" },
-                                        { id: "aggressive", label: "Growth Aggressive", icon: "🚀", desc: "Maximize growth opportunities" },
-                                    ].map(p => (
-                                        <button key={p.id} onClick={() => !isReadOnly && setPersona(p.id)}
-                                            className="p-4 rounded-xl text-center transition-all"
-                                            style={{
-                                                background: persona === p.id ? `${accent}15` : "rgba(255,255,255,0.03)",
-                                                border: `1px solid ${persona === p.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
-                                                boxShadow: persona === p.id ? `0 0 20px ${accent}15` : "none",
-                                                cursor: isReadOnly ? "not-allowed" : "pointer",
-                                            }}>
-                                            <p className="text-2xl mb-2">{p.icon}</p>
-                                            <p className="text-xs font-bold mb-1" style={{ color: persona === p.id ? accent : "#94a3b8" }}>{p.label}</p>
-                                            <p className="text-xs text-slate-600">{p.desc}</p>
-                                        </button>
-                                    ))}
+                            className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                            <div className="space-y-6">
+
+                                <div className="rounded-xl p-5"
+                                    style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${accent}30` }}>
+                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">🎯 Consultant Persona</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { id: "defensive", label: "Risk Defensive", icon: "🛡️", desc: "Focus on threats & mitigation" },
+                                            { id: "balanced", label: "Balanced", icon: "⚖️", desc: "Holistic strategic view" },
+                                            { id: "aggressive", label: "Growth Aggressive", icon: "🚀", desc: "Maximize growth opportunities" },
+                                        ].map(p => (
+                                            <button key={p.id} onClick={() => !isReadOnly && setPersona(p.id)}
+                                                className="p-4 rounded-xl text-center transition-all"
+                                                style={{
+                                                    background: persona === p.id ? `${accent}15` : "rgba(255,255,255,0.03)",
+                                                    border: `1px solid ${persona === p.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
+                                                    boxShadow: persona === p.id ? `0 0 20px ${accent}15` : "none",
+                                                    cursor: isReadOnly ? "not-allowed" : "pointer",
+                                                }}>
+                                                <p className="text-2xl mb-2">{p.icon}</p>
+                                                <p className="text-xs font-bold mb-1" style={{ color: persona === p.id ? accent : "#94a3b8" }}>{p.label}</p>
+                                                <p className="text-xs text-slate-600">{p.desc}</p>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
+
+                                <div className="rounded-xl p-5"
+                                    style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">📅 Briefing Frequency</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[
+                                            { id: "daily", label: "Daily Forensic Summary", icon: "📆" },
+                                            { id: "weekly", label: "Weekly Intelligence Report", icon: "📋" },
+                                        ].map(f => (
+                                            <button key={f.id} onClick={() => !isReadOnly && setFrequency(f.id)}
+                                                className="p-4 rounded-xl text-left transition-all"
+                                                style={{
+                                                    background: frequency === f.id ? `${accent}15` : "rgba(255,255,255,0.03)",
+                                                    border: `1px solid ${frequency === f.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
+                                                    cursor: isReadOnly ? "not-allowed" : "pointer",
+                                                }}>
+                                                <p className="text-xl mb-2">{f.icon}</p>
+                                                <p className="text-sm font-bold" style={{ color: frequency === f.id ? accent : "#94a3b8" }}>{f.label}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl p-5" style={{ background: `${accent}08`, border: `1px solid ${accent}25` }}>
+                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">Preview — Current Config</p>
+                                    <div className="space-y-2">
+                                        {[
+                                            { label: "Persona", value: persona.charAt(0).toUpperCase() + persona.slice(1) },
+                                            { label: "Delivery", value: frequency.charAt(0).toUpperCase() + frequency.slice(1) },
+                                            { label: "MRR Tracked", value: `$${mrr.toLocaleString()}` },
+                                            { label: "Entities Monitored", value: entities.length },
+                                            { label: "Access Level", value: isAdmin ? "Administrator" : "Member" },
+                                        ].map(row => (
+                                            <div key={row.label} className="flex items-center justify-between">
+                                                <span className="text-xs text-slate-500">{row.label}</span>
+                                                <span className="text-xs font-bold text-white">{row.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {!isReadOnly && (
+                                    <button onClick={saveSettings} disabled={savingSettings}
+                                        className="w-full py-3 rounded-xl font-bold text-sm transition-all"
+                                        style={{
+                                            background: settingsSaved ? "#10b981" : savingSettings ? `${accent}40` : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                                            color: "#000",
+                                            boxShadow: settingsSaved || savingSettings ? "none" : `0 4px 20px ${accent}40`,
+                                        }}>
+                                        {settingsSaved ? "✓ Settings Saved" : savingSettings ? "Saving..." : "Save Briefing Settings"}
+                                    </button>
+                                )}
                             </div>
 
-                            <div className="rounded-xl p-5"
-                                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">📅 Briefing Frequency</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {[
-                                        { id: "daily", label: "Daily Forensic Summary", icon: "📆" },
-                                        { id: "weekly", label: "Weekly Intelligence Report", icon: "📋" },
-                                    ].map(f => (
-                                        <button key={f.id} onClick={() => !isReadOnly && setFrequency(f.id)}
-                                            className="p-4 rounded-xl text-left transition-all"
-                                            style={{
-                                                background: frequency === f.id ? `${accent}15` : "rgba(255,255,255,0.03)",
-                                                border: `1px solid ${frequency === f.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
-                                                cursor: isReadOnly ? "not-allowed" : "pointer",
-                                            }}>
-                                            <p className="text-xl mb-2">{f.icon}</p>
-                                            <p className="text-sm font-bold" style={{ color: frequency === f.id ? accent : "#94a3b8" }}>{f.label}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="rounded-xl p-5" style={{ background: `${accent}08`, border: `1px solid ${accent}25` }}>
-                                <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">Preview — Current Config</p>
-                                <div className="space-y-2">
-                                    {[
-                                        { label: "Persona", value: persona.charAt(0).toUpperCase() + persona.slice(1) },
-                                        { label: "Delivery", value: frequency.charAt(0).toUpperCase() + frequency.slice(1) },
-                                        { label: "MRR Tracked", value: `$${mrr.toLocaleString()}` },
-                                        { label: "Entities Monitored", value: entities.length },
-                                        { label: "Access Level", value: isAdmin ? "Administrator" : "Member" },
-                                    ].map(row => (
-                                        <div key={row.label} className="flex items-center justify-between">
-                                            <span className="text-xs text-slate-500">{row.label}</span>
-                                            <span className="text-xs font-bold text-white">{row.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {!isReadOnly && (
-                                <button onClick={saveSettings} disabled={savingSettings}
-                                    className="w-full py-3 rounded-xl font-bold text-sm transition-all"
-                                    style={{
-                                        background: settingsSaved ? "#10b981" : savingSettings ? `${accent}40` : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                                        color: "#000",
-                                        boxShadow: settingsSaved || savingSettings ? "none" : `0 4px 20px ${accent}40`,
-                                    }}>
-                                    {settingsSaved ? "✓ Settings Saved" : savingSettings ? "Saving..." : "Save Briefing Settings"}
-                                </button>
-                            )}
                         </motion.div>
                     )}
 
+                    {/* ── FORGE NODE — full page, user only ─────────────────── */}
+
+                    {isForgeNodeTab && !isAdmin && (
+                        <motion.div key="forge-node"
+                            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                            className="space-y-6"
+                            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        >
+                            {/* Header */}
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-2 h-8 rounded-full"
+                                    style={{ background: `linear-gradient(to bottom, ${accent}, transparent)` }} />
+                                <div>
+                                    <h2 className="text-xl font-black tracking-tight" style={{ color: accent }}>
+                                        NODE FORGE TERMINAL
+                                    </h2>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Deploy a new asset node into your active registry.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Forge Form */}
+                                <div className="rounded-xl p-6 space-y-5"
+                                    style={{
+                                        background: "rgba(255,255,255,0.02)",
+                                        border: `1px solid ${accent}40`,
+                                        boxShadow: `0 0 40px ${accent}08`,
+                                    }}>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">
+                                        ⚡ Asset Configuration
+                                    </p>
+
+                                    {/* Node Name */}
+                                    <form onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        await handleForgeNode();
+                                        setActiveTab("active-nodes-count");
+                                    }}>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                Node Identifier
+                                            </label>
+                                            <input
+                                                value={newEntity.name}
+                                                onChange={e => setNewEntity(p => ({ ...p, name: e.target.value }))}
+                                                placeholder="e.g., Alpha-Node-01"
+                                                className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-slate-600 outline-none transition-all"
+                                                style={{
+                                                    background: "rgba(255,255,255,0.04)",
+                                                    border: `1px solid ${newEntity.name ? accent + '40' : 'rgba(255,255,255,0.08)'}`,
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Base Valuation */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                Base Valuation Capital
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-black">$</span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={forgeBaseValue}
+                                                    onChange={e => setForgeBaseValue(e.target.value)}
+                                                    placeholder="Enter allocation capital..."
+                                                    className="w-full pl-8 pr-4 py-3 rounded-lg text-sm text-white placeholder-slate-600 outline-none transition-all"
+                                                    style={{
+                                                        background: "rgba(255,255,255,0.04)",
+                                                        border: `1px solid ${forgeBaseValue ? accent + '40' : 'rgba(255,255,255,0.08)'}`,
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Node Type */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                                Node Type
+                                            </label>
+                                            <select
+                                                value={newEntity.type}
+                                                onChange={e => setNewEntity(p => ({ ...p, type: e.target.value }))}
+                                                className="w-full px-4 py-3 rounded-lg text-sm text-white outline-none transition-all"
+                                                style={{
+                                                    background: "rgba(255,255,255,0.04)",
+                                                    border: "1px solid rgba(255,255,255,0.08)",
+                                                }}>
+                                                {["product", "region", "tier", "custom"].map(t => (
+                                                    <option key={t} value={t} style={{ background: "#080f1e" }}>
+                                                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Forge Button */}
+                                        <button
+                                            type="submit"
+                                            disabled={addingEntity || !newEntity.name.trim() || !forgeBaseValue}
+                                            className="w-full py-4 rounded-lg text-sm font-black tracking-widest uppercase transition-all"
+                                            style={{
+                                                background: addingEntity
+                                                    ? `${accent}30`
+                                                    : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                                                color: "#000",
+                                                boxShadow: addingEntity ? "none" : `0 4px 24px ${accent}40`,
+                                                opacity: (!newEntity.name.trim() || !forgeBaseValue) ? 0.4 : 1,
+                                                letterSpacing: "0.15em",
+                                            }}
+                                        >
+                                            {addingEntity ? "⟳ Forging Node..." : "[ FORGE NODE ASSET ]"}
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {/* Live Registry Preview */}
+                                <div className="rounded-xl p-6 space-y-4"
+                                    style={{
+                                        background: "rgba(255,255,255,0.02)",
+                                        border: "1px solid rgba(255,255,255,0.06)",
+                                    }}>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">
+                                        📡 Active Node Registry
+                                    </p>
+                                    {entities.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                            <p className="text-3xl">🔩</p>
+                                            <p className="text-xs text-slate-600">No nodes forged yet.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 custom-scroll">
+                                            {entities.map((e, i) => (
+                                                <motion.div key={e.id}
+                                                    initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: i * 0.05 }}
+                                                    className="flex items-center justify-between p-3 rounded-lg"
+                                                    style={{
+                                                        background: "rgba(255,255,255,0.03)",
+                                                        border: `1px solid ${accent}20`,
+                                                    }}>
+                                                    <div>
+                                                        <p className="text-xs font-black text-white">{e.name}</p>
+                                                        <p className="text-[9px] text-slate-500 capitalize mt-0.5">{e.type}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-black tabular-nums" style={{ color: accent }}>
+                                                            ${(e.base_value ?? 0).toLocaleString()}
+                                                        </p>
+                                                        <p className="text-[9px] text-slate-600 mt-0.5">
+                                                            score {e.sensitivity_score ?? '—'}
+                                                        </p>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Portfolio total */}
+                                    {entities.length > 0 && (
+                                        <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between">
+                                            <span className="text-[9px] text-slate-500 uppercase tracking-widest">Total Portfolio</span>
+                                            <span className="text-lg font-black tabular-nums" style={{ color: accent }}>
+                                                ${entities.reduce((s, e) => s + (e.base_value ?? 0), 0).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+
                 </AnimatePresence>
-            </div>
+            </div >
 
             <style jsx global>{`
                 .custom-scroll::-webkit-scrollbar { width: 4px; }
@@ -1352,6 +1619,6 @@ export default function WorkspaceClient({
                 .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
                 input[type="range"]::-webkit-slider-thumb { cursor: pointer; }
             `}</style>
-        </div>
+        </div >
     );
 }

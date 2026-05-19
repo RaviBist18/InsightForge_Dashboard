@@ -1,8 +1,25 @@
 "use client";
 import { createContext, useContext, useState, ReactNode } from "react";
 
-type WorkspaceTab = "pulse" | "archives" | "forge" | "entities" | "customizer";
-type KPISlug = "total-revenue" | "total-profit" | "profit-margin" | "total-orders" | "active-users" | "churn-rate";
+type WorkspaceTab =
+    | "pulse"
+    | "archives"
+    | "forge"
+    | "entities"
+    | "customizer"
+    | "forge-node";
+
+type KPISlug =
+    | "total-revenue"
+    | "total-profit"
+    | "profit-margin"
+    | "total-orders"
+    | "active-users"
+    | "churn-rate"
+    | "total-asset-value"
+    | "market-growth-yield"
+    | "active-nodes-count";
+
 export type Tab = WorkspaceTab | KPISlug | null;
 
 interface WorkspaceContextType {
@@ -30,7 +47,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return (
         <WorkspaceContext.Provider value={{
             activeTab, setActiveTab,
-            mrr, setMrr, churn, setChurn,
+            mrr, setMrr,
+            churn, setChurn,
             entityCount, setEntityCount,
             snapshotCount, setSnapshotCount,
             mrrTrend, setMrrTrend,
