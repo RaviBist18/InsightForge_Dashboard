@@ -555,11 +555,12 @@ export default function WorkspaceClient({
 
     // ── user metric derivations ────────────────────────────────
     const totalAssetValue = entities.reduce((sum, e) => sum + (e.base_value ?? 0), 0);
+    const activeNodesCount = entities.length;  // ← move this UP before totalRevenue
     const totalRevenue = Math.round(totalAssetValue * 1.15);
-    const totalProfit = Math.round(totalRevenue * 0.95);
+    const gasFee = Math.round(totalAssetValue * 0.02 * activeNodesCount);
+    const totalProfit = Math.round(totalRevenue - gasFee);
     const profitMargin = totalRevenue > 0 ? parseFloat(((totalProfit / totalRevenue) * 100).toFixed(1)) : 0;
     const marketGrowthYield = Math.round(totalAssetValue * 0.08);
-    const activeNodesCount = entities.length;
 
 
 
