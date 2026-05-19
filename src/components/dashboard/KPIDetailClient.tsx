@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
     ArrowLeft, TrendingUp, TrendingDown,
@@ -39,6 +39,7 @@ interface KPIDetailClientProps {
     viewMode?: 'full' | 'summary';
     onBack?: () => void;
     entities?: BusinessEntity[];  // ← add this
+    onDeleteNode?: (id: string) => Promise<void>;
 }
 interface BusinessEntity {
     id: string; name: string; type: string;
@@ -1083,8 +1084,17 @@ function SummaryView({ slug, cfg, displayVal, prefix, suffix, accent, histData, 
     );
 }
 
-function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; accent: string }) {
+function NodeRegistryPanel({ entities, accent, onDelete }: {
+    entities: BusinessEntity[];
+    accent: string;
+    onDelete: (id: string) => Promise<void>;
+}) {
     const [selectedNode, setSelectedNode] = useState<BusinessEntity | null>(null);
+    const [localNodes, setLocalNodes] = useState<BusinessEntity[]>(entities);
+    const [decommissioning, setDecommissioning] = useState(false);
+    useEffect(() => {
+        setLocalNodes(entities);
+    }, [entities]);
 
     return (
         <div className="grid grid-cols-1 gap-4" style={{ gridTemplateColumns: '65% 35%' }}>
@@ -1093,11 +1103,11 @@ function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; a
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                 <div className="px-5 py-4 border-b border-white/[0.06]">
                     <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500" style={MONO}>
-                        📡 Node Registry — {entities.length} Assets
+                        📡 Node Registry — {localNodes.length} Assets
                     </p>
                 </div>
 
-                {entities.length === 0 ? (
+                {localNodes.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
                         <p className="text-3xl">🔩</p>
                         <p className="text-xs text-slate-600" style={MONO}>No nodes forged yet.</p>
@@ -1106,7 +1116,7 @@ function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; a
                     <table className="w-full">
                         <thead>
                             <tr className="border-b border-white/[0.04]">
-                                {['Asset Name', 'Date Forged', 'Buy-In Price', 'Price Now'].map(h => (
+                                {['Asset Name', 'Date Forged', 'Buy-In Price', 'Price Now', ''].map(h => (
                                     <th key={h} className="px-4 py-3 text-left text-[8px] font-black uppercase tracking-widest text-slate-600" style={MONO}>
                                         {h}
                                     </th>
@@ -1114,7 +1124,7 @@ function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; a
                             </tr>
                         </thead>
                         <tbody>
-                            {entities.map((node, i) => {
+                            {localNodes.map((node, i) => {
                                 const isSelected = selectedNode?.id === node.id;
                                 const priceNow = Math.round((node.base_value ?? 0) * 1.15);
                                 return (
@@ -1151,6 +1161,30 @@ function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; a
                                                 ${priceNow.toLocaleString()}
                                             </p>
                                             <p className="text-[8px] text-emerald-400 mt-0.5" style={MONO}>+15%</p>
+                                        </td>
+
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    setDecommissioning(true);
+                                                    try {
+                                                        await onDelete(node.id);
+                                                        setLocalNodes(prev => prev.filter(n => n.id !== node.id));
+                                                        if (selectedNode?.id === node.id) setSelectedNode(null);
+                                                    } catch { /* silent */ }
+                                                    finally { setDecommissioning(false); }
+                                                }}
+                                                className="p-1.5 rounded-lg transition-all hover:scale-110"
+                                                style={{
+                                                    background: 'rgba(244,63,94,0.08)',
+                                                    border: '1px solid rgba(244,63,94,0.25)',
+                                                    color: '#f43f5e',
+                                                }}
+                                                title="Decommission Node"
+                                            >
+                                                🗑
+                                            </button>
                                         </td>
                                     </motion.tr>
                                 );
@@ -1230,6 +1264,29 @@ function NodeRegistryPanel({ entities, accent }: { entities: BusinessEntity[]; a
                                 ? new Date(selectedNode.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
                                 : '—'}
                         </p>
+                        <button
+                            onClick={async () => {
+                                if (!selectedNode) return;
+                                setDecommissioning(true);
+                                try {
+                                    await onDelete(selectedNode.id);
+                                    setLocalNodes(prev => prev.filter(n => n.id !== selectedNode.id));
+                                    setSelectedNode(null);
+                                } catch { /* silent */ }
+                                finally { setDecommissioning(false); }
+                            }}
+                            disabled={decommissioning}
+                            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all mt-2"
+                            style={{
+                                background: decommissioning ? 'rgba(244,63,94,0.1)' : 'rgba(244,63,94,0.08)',
+                                border: '1px solid rgba(244,63,94,0.3)',
+                                color: decommissioning ? '#94a3b8' : '#f43f5e',
+                                boxShadow: decommissioning ? 'none' : '0 0 16px rgba(244,63,94,0.15)',
+                                fontFamily: "'JetBrains Mono', monospace",
+                            }}
+                        >
+                            {decommissioning ? '⟳ Decommissioning...' : '[ DECOMMISSION NODE ASSET ]'}
+                        </button>
                     </motion.div>
                 )}
             </div>
@@ -1248,6 +1305,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     viewMode = 'full',
     onBack,
     entities = [],  // ← add this
+    onDeleteNode,
 }) => {
     const cfg = SLUG_CONFIG[slug];
     if (!cfg) return null;
@@ -1618,7 +1676,11 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
 
             {/* ── ACTIVE NODES COUNT ── */}
             {slug === 'active-nodes-count' && (
-                <NodeRegistryPanel entities={entities} accent={accent} />
+                <NodeRegistryPanel
+                    entities={entities}
+                    accent={accent}
+                    onDelete={onDeleteNode!}
+                />
             )}
 
             {/* Forensic Narrative — full bullets, always last */}

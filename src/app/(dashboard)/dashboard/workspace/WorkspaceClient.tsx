@@ -498,6 +498,10 @@ export default function WorkspaceClient({
         setEntities(prev => prev.filter(e => e.id !== id));
     };
 
+    const deleteNode = async (id: string) => {
+        await supabase.from("business_entities").delete().eq("id", id);
+        setEntities(prev => prev.filter(e => e.id !== id));
+    };
     // ── SAVE SETTINGS ─────────────────────────────────────────────────────────
     const saveSettings = async () => {
         if (isReadOnly) return;
@@ -894,6 +898,7 @@ export default function WorkspaceClient({
                                     viewMode="full"
                                     onBack={() => setActiveTab('pulse')}
                                     entities={entities}  // ← add this
+                                    onDeleteNode={deleteNode}
                                 />
                             </motion.div>
                         )}
