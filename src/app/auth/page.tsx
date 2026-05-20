@@ -160,7 +160,8 @@ export default function AuthPage() {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        window.location.href = '/';
+        router.push('/');
+        router.refresh();
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
@@ -172,7 +173,8 @@ export default function AuthPage() {
           });
         }
         if (data.session) {
-          window.location.href = '/';
+          router.push('/');
+          router.refresh();
         } else {
           setSuccessMsg('Account created! Check your email to confirm before signing in.');
         }
