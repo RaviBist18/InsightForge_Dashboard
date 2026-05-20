@@ -7,7 +7,7 @@ import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle, CheckCircle2, Mail } fro
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-const VERCEL_URL = 'https://insight-forge-dashboard.vercel.app';
+const VERCEL_URL = 'https://insightforge.co';
 
 // ─── Google Icon ──────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
