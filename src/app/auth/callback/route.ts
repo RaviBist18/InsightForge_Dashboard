@@ -4,17 +4,15 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url)
+    const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
     const next = searchParams.get('next') ?? '/'
 
-    // If no code → just redirect to dashboard (email/password login)
     if (!code) {
-        return NextResponse.redirect('https://insight-forge-dashboard.vercel.app/')
+        return NextResponse.redirect(`${origin}/`)
     }
 
     const cookieStore = await cookies()
-
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -35,9 +33,13 @@ export async function GET(request: NextRequest) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
+    console.log('CALLBACK ERROR:', error)
+    console.log('ORIGIN:', origin)
+    console.log('NEXT:', next)
+
     if (!error) {
-        return NextResponse.redirect(`https://insight-forge-dashboard.vercel.app${next}`)
+        return NextResponse.redirect(`${origin}${next}`)
     }
 
-    return NextResponse.redirect('https://insight-forge-dashboard.vercel.app/auth')
+    return NextResponse.redirect(`${origin}/auth?error=${error.message}`)
 }

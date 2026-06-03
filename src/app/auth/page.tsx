@@ -7,7 +7,7 @@ import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle, CheckCircle2, Mail } fro
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-const VERCEL_URL = 'https://insightforge.co';
+const VERCEL_URL = 'https://insight-forge-dashboard.vercel.app';
 
 // ─── Google Icon ──────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -96,7 +96,9 @@ export default function AuthPage() {
 
   const getRedirectURL = () => {
     if (typeof window !== 'undefined') {
+      console.log('HOSTNAME:', window.location.hostname);
       const isLocal = window.location.hostname === 'localhost';
+      console.log('IS LOCAL:', isLocal);
       return isLocal
         ? 'http://localhost:3000/auth/callback'
         : `${VERCEL_URL}/auth/callback`;
