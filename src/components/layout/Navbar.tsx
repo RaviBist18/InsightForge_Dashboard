@@ -1,18 +1,28 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Bell, Menu, X, Loader2, CheckCircle2, Download, Shield } from 'lucide-react';
-import { TRANSACTIONS } from '@/data/mockData';
-import { usePathname, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { useUserRole } from '@/hooks/useUserRole';
-import { LogOut } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Search,
+  Bell,
+  Menu,
+  X,
+  Loader2,
+  CheckCircle2,
+  Download,
+  Shield,
+} from "lucide-react";
+import { TRANSACTIONS } from "@/data/mockData";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { LogOut } from "lucide-react";
 
 const getInitials = (nameOrEmail: string) => {
-  if (!nameOrEmail) return '??';
-  if (nameOrEmail.includes('@')) return nameOrEmail.substring(0, 2).toUpperCase();
+  if (!nameOrEmail) return "??";
+  if (nameOrEmail.includes("@"))
+    return nameOrEmail.substring(0, 2).toUpperCase();
   const parts = nameOrEmail.trim().split(/\s+/);
   return parts.length > 1
     ? (parts[0][0] + parts[1][0]).toUpperCase()
@@ -20,73 +30,117 @@ const getInitials = (nameOrEmail: string) => {
 };
 
 const ADMIN_NOTIFICATIONS = [
-  { id: 1, title: 'New transaction pending', desc: 'TX-1053 requires review', time: '2m ago', unread: true },
-  { id: 2, title: 'Revenue target hit', desc: '90% of Q2 goal reached', time: '1h ago', unread: true },
-  { id: 3, title: 'Churn rate alert', desc: 'Spike detected in EMEA region', time: '3h ago', unread: false },
+  {
+    id: 1,
+    title: "New transaction pending",
+    desc: "TX-1053 requires review",
+    time: "2m ago",
+    unread: true,
+  },
+  {
+    id: 2,
+    title: "Revenue target hit",
+    desc: "90% of Q2 goal reached",
+    time: "1h ago",
+    unread: true,
+  },
+  {
+    id: 3,
+    title: "Churn rate alert",
+    desc: "Spike detected in EMEA region",
+    time: "3h ago",
+    unread: false,
+  },
 ];
 
 const USER_NOTIFICATIONS = [
-  { id: 1, title: 'Dashboard updated', desc: 'New data available', time: '5m ago', unread: true },
-  { id: 2, title: 'Weekly report ready', desc: 'Your summary is ready to view', time: '2h ago', unread: false },
+  {
+    id: 1,
+    title: "Dashboard updated",
+    desc: "New data available",
+    time: "5m ago",
+    unread: true,
+  },
+  {
+    id: 2,
+    title: "Weekly report ready",
+    desc: "Your summary is ready to view",
+    time: "2h ago",
+    unread: false,
+  },
 ];
 
-export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) => {
+export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({
+  onMenuClick,
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const { role, name, email, loading: roleLoading } = useUserRole();
-  const isAdmin = role === 'admin';
+  const isAdmin = role === "admin";
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [exportState, setExportState] = useState<'idle' | 'generating' | 'done'>('idle');
+  const [exportState, setExportState] = useState<
+    "idle" | "generating" | "done"
+  >("idle");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [notifications, setNotifications] = useState(isAdmin ? ADMIN_NOTIFICATIONS : USER_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState(
+    isAdmin ? ADMIN_NOTIFICATIONS : USER_NOTIFICATIONS,
+  );
 
   // Update notifications when role loads
   useEffect(() => {
     setNotifications(isAdmin ? ADMIN_NOTIFICATIONS : USER_NOTIFICATIONS);
   }, [isAdmin]);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   useEffect(() => {
     const t = setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('globalSearch', { detail: searchQuery.toLowerCase() }));
+      window.dispatchEvent(
+        new CustomEvent("globalSearch", { detail: searchQuery.toLowerCase() }),
+      );
     }, 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  const handleSearchFocus = () => { if (pathname !== '/') router.push('/'); };
+  const handleSearchFocus = () => {
+    if (pathname !== "/") router.push("/");
+  };
 
   const handleExport = useCallback(() => {
     if (!isAdmin) return; // Guard — users can't export
-    setExportState('generating');
+    setExportState("generating");
     setTimeout(() => {
-      const csv = 'Date,Entity,Amount,Status\n' +
-        TRANSACTIONS.map(tx => `"${tx.date}","${tx.customer}","${tx.amount}","${tx.status}"`).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
+      const csv =
+        "Date,Entity,Amount,Status\n" +
+        TRANSACTIONS.map(
+          (tx) => `"${tx.date}","${tx.customer}","${tx.amount}","${tx.status}"`,
+        ).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `insightforge_mrr_export_${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
-      setExportState('done');
-      setTimeout(() => setExportState('idle'), 2500);
+      setExportState("done");
+      setTimeout(() => setExportState("idle"), 2500);
     }, 800);
   }, [isAdmin]);
 
-  const markAllRead = () => setNotifications(n => n.map(x => ({ ...x, unread: false })));
+  const markAllRead = () =>
+    setNotifications((n) => n.map((x) => ({ ...x, unread: false })));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('[data-dropdown]')) {
+      if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
         setShowNotifications(false);
         setShowProfile(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   return (
@@ -94,42 +148,73 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
       <AnimatePresence>
         {isLoggingOut && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center gap-4"
           >
             {/* FIX: Dynamic color for logout loader */}
-            <Loader2 className="w-10 h-10 animate-spin" style={{ color: 'var(--accent)' }} />
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Signing Out...</p>
+            <Loader2
+              className="w-10 h-10 animate-spin"
+              style={{ color: "var(--accent)" }}
+            />
+            <p
+              className="text-[11px] font-semibold uppercase tracking-[0.2em]"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Signing Out...
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="h-14 mx-2 mt-2 mb-0 rounded-xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl px-4 flex items-center justify-between sticky top-2 z-20 gap-4">
+      <header
+        className="h-14 border-b px-4 flex items-center justify-between sticky top-0 z-20 gap-4"
+        style={{
+          background: "var(--bg-surface)",
+          borderColor: "var(--border)",
+        }}
+      >
         <div className="flex items-center gap-3 flex-1 max-w-lg">
-          <button onClick={onMenuClick} className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-all">
+          <button
+            onClick={onMenuClick}
+            className="lg:hidden p-1.5 rounded-xl transition-colors"
+            style={{ color: "var(--text-secondary)" }}
+          >
             <Menu size={18} />
           </button>
           <div className="relative group flex-1">
-            {/* FIX: Dynamic color for search icon on focus */}
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 transition-colors"
-              style={searchQuery ? { color: 'var(--accent)' } : {}}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors"
+              style={{
+                color: searchQuery ? "var(--accent)" : "var(--text-muted)",
+              }}
             />
             <input
-              type="text" value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={handleSearchFocus}
-              onKeyDown={e => { if (e.key === 'Escape') setSearchQuery(''); }}
-              placeholder="Search intelligence, users, or metrics..."
-              className="w-full pl-9 pr-4 py-2 bg-white/[0.04] border border-white/[0.07] rounded-xl text-[12px] text-white placeholder-slate-600 focus:outline-none focus:bg-white/[0.06] transition-all"
-              style={{ borderColor: searchQuery ? 'var(--accent-alpha)' : 'rgba(255,255,255,0.07)' }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setSearchQuery("");
+              }}
+              placeholder="Search metrics, users, or reports..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl text-[13px] focus:outline-none transition-colors"
+              style={{
+                background: "var(--bg-primary)",
+                border: `1px solid ${searchQuery ? "var(--accent)" : "var(--border)"}`,
+                color: "var(--text-primary)",
+              }}
             />
             <AnimatePresence>
               {searchQuery && (
                 <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-white"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                  style={{ color: "var(--text-muted)" }}
                 >
                   <X size={12} />
                 </motion.button>
@@ -143,28 +228,56 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
           {isAdmin && (
             <motion.button
               onClick={handleExport}
-              disabled={exportState !== 'idle'}
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              disabled={exportState !== "idle"}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               className={cn(
-                'hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300',
-                exportState === 'done'
-                  ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
-                  : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/[0.16]'
+                "hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[11px] font-medium transition-colors duration-200",
               )}
+              style={{
+                background:
+                  exportState === "done"
+                    ? "var(--success-bg)"
+                    : "var(--bg-primary)",
+                borderColor:
+                  exportState === "done" ? "var(--success)" : "var(--border)",
+                color:
+                  exportState === "done"
+                    ? "var(--success)"
+                    : "var(--text-secondary)",
+              }}
             >
               <AnimatePresence mode="wait">
-                {exportState === 'idle' && (
-                  <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-1.5">
+                {exportState === "idle" && (
+                  <motion.span
+                    key="idle"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5"
+                  >
                     <Download size={11} /> Export CSV
                   </motion.span>
                 )}
-                {exportState === 'generating' && (
-                  <motion.span key="gen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-1.5">
+                {exportState === "generating" && (
+                  <motion.span
+                    key="gen"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5"
+                  >
                     <Loader2 size={11} className="animate-spin" /> Generating...
                   </motion.span>
                 )}
-                {exportState === 'done' && (
-                  <motion.span key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-1.5">
+                {exportState === "done" && (
+                  <motion.span
+                    key="done"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5"
+                  >
                     <CheckCircle2 size={11} /> Downloaded!
                   </motion.span>
                 )}
@@ -175,45 +288,95 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
           {/* Notifications */}
           <div className="relative" data-dropdown>
             <button
-              onClick={() => { router.push('/dashboard/settings'); }}
-              className="relative p-2 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.05] transition-all"
+              onClick={() => {
+                router.push("/dashboard/settings");
+              }}
+              className="relative p-2 rounded-xl transition-colors"
+              style={{ color: "var(--text-secondary)" }}
             >
               <Bell size={16} />
-              {/* FIX: Dynamic color for notification dot */}
-              {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />}
+              {unreadCount > 0 && (
+                <span
+                  className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+                  style={{ background: "var(--accent)" }}
+                />
+              )}
             </button>
             <AnimatePresence>
               {showNotifications && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.2 }}
-                  className="absolute right-0 top-full mt-2 w-80 bg-[#080f1f] border border-white/[0.1] rounded-2xl overflow-hidden shadow-2xl z-50"
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 top-full mt-2 w-80 rounded-xl overflow-hidden shadow-md z-50"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                  }}
                 >
-                  <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-white">Notifications</p>
+                  <div
+                    className="px-4 py-3 border-b flex items-center justify-between"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <p
+                      className="text-[12px] font-semibold"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      Notifications
+                    </p>
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllRead}
-                        className="text-[10px] font-bold hover:opacity-70 transition-all duration-200"
-                        style={{ color: 'var(--accent)' }}
+                        className="text-[11px] font-medium hover:opacity-70 transition-opacity"
+                        style={{ color: "var(--accent)" }}
                       >
                         Mark all read
                       </button>
                     )}
                   </div>
-                  <div className="divide-y divide-white/[0.04]">
-                    {notifications.map(n => (
-                      <div key={n.id}
-                        onClick={() => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, unread: false } : x))}
-                        className={cn('px-4 py-3 cursor-pointer transition-colors', n.unread ? 'bg-white/[0.02] hover:bg-white/[0.04]' : 'hover:bg-white/[0.02]')}
+                  <div
+                    className="divide-y"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() =>
+                          setNotifications((prev) =>
+                            prev.map((x) =>
+                              x.id === n.id ? { ...x, unread: false } : x,
+                            ),
+                          )
+                        }
+                        className="px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-primary)]"
                       >
                         <div className="flex items-start gap-2.5">
-                          {/* FIX: Dynamic color for unread item dot */}
-                          {n.unread && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: 'var(--accent)' }} />}
-                          <div className={cn(!n.unread && 'pl-4')}>
-                            <p className="text-[12px] font-bold text-white">{n.title}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">{n.desc}</p>
-                            <p className="text-[10px] text-slate-700 mt-1 font-bold uppercase tracking-widest">{n.time}</p>
+                          {n.unread && (
+                            <div
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                              style={{ background: "var(--accent)" }}
+                            />
+                          )}
+                          <div className={cn(!n.unread && "pl-4")}>
+                            <p
+                              className="text-[13px] font-medium"
+                              style={{ color: "var(--text-primary)" }}
+                            >
+                              {n.title}
+                            </p>
+                            <p
+                              className="text-[12px] mt-0.5"
+                              style={{ color: "var(--text-secondary)" }}
+                            >
+                              {n.desc}
+                            </p>
+                            <p
+                              className="text-[10px] mt-1 font-medium uppercase tracking-wider"
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {n.time}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -227,22 +390,25 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
           {/* Profile */}
           <div className="relative" data-dropdown>
             <button
-              onClick={() => { setShowProfile(v => !v); setShowNotifications(false); }}
-              className="flex items-center gap-2 p-1 rounded-xl hover:bg-white/[0.05] transition-all"
+              onClick={() => {
+                setShowProfile((v) => !v);
+                setShowNotifications(false);
+              }}
+              className="flex items-center gap-2 p-1 rounded-xl transition-colors"
             >
-              {roleLoading
-                ? <div className="w-7 h-7 rounded-full bg-slate-800 animate-pulse border border-white/10" />
-                : (
-                  <div className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white border border-white/10 flex-shrink-0',
-                    isAdmin
-                      ? 'bg-gradient-to-br from-sky-400 to-blue-600'
-                      : 'bg-gradient-to-br from-slate-500 to-slate-700'
-                  )}>
-                    {getInitials(name)}
-                  </div>
-                )
-              }
+              {roleLoading ? (
+                <div
+                  className="w-7 h-7 rounded-full animate-pulse"
+                  style={{ background: "var(--border)" }}
+                />
+              ) : (
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {getInitials(name)}
+                </div>
+              )}
             </button>
             <AnimatePresence>
               {showProfile && !roleLoading && (
@@ -251,29 +417,49 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.97 }}
                   transition={{ duration: 0.18 }}
-                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden shadow-2xl z-50"
-                  style={{ background: '#080f1f', border: '1px solid rgba(255,255,255,0.1)' }}
+                  className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden shadow-md z-50"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                  }}
                 >
                   {/* Avatar + name header */}
-                  <div className="px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div
+                    className="px-4 py-4 border-b"
+                    style={{ borderColor: "var(--border)" }}
+                  >
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={cn(
-                        'w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-black text-white flex-shrink-0 ring-2 ring-offset-1 ring-offset-[#080f1f]',
-                        isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600 ring-sky-500/40' : 'bg-gradient-to-br from-slate-500 to-slate-700 ring-slate-500/20'
-                      )}>
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-semibold text-white flex-shrink-0"
+                        style={{ background: "var(--accent)" }}
+                      >
                         {getInitials(name)}
                       </div>
                       <div className="overflow-hidden min-w-0">
-                        <p className="text-[13px] font-bold text-white truncate leading-tight">{name}</p>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{email}</p>
+                        <p
+                          className="text-[13px] font-semibold truncate leading-tight"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {name}
+                        </p>
+                        <p
+                          className="text-[12px] truncate mt-0.5"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          {email}
+                        </p>
                       </div>
                     </div>
-                    <div className={cn(
-                      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border',
-                      isAdmin ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                    )}>
+                    <div
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-widest"
+                      style={{
+                        background: "var(--accent-subtle)",
+                        color: "var(--accent)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
                       <Shield size={9} />
-                      {isAdmin ? 'Administrator' : 'Member'}
+                      {isAdmin ? "Administrator" : "Member"}
                     </div>
                   </div>
 
@@ -282,9 +468,10 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) 
                     onClick={async () => {
                       setIsLoggingOut(true);
                       await supabase.auth.signOut();
-                      window.location.href = '/auth';
+                      window.location.href = "/auth";
                     }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3.5 text-[12px] font-bold text-rose-400 hover:bg-rose-500/8 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-3.5 text-[13px] font-medium transition-colors"
+                    style={{ color: "var(--danger)" }}
                   >
                     <LogOut size={13} />
                     Sign out

@@ -1,197 +1,236 @@
 "use client";
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Zap, ShieldCheck, Fingerprint, Loader2 } from 'lucide-react';
-import { ForensicNode } from './DataTable';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, Plus, Loader2 } from "lucide-react";
+import { ForensicNode } from "./DataTable";
 
 interface AddNodeModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onAdd: (node: ForensicNode) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (node: ForensicNode) => void;
 }
 
-const generateHash = () =>
-    `0x${Array.from({ length: 10 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}...`;
-
 export function AddNodeModal({ isOpen, onClose, onAdd }: AddNodeModalProps) {
-    const [entity, setEntity] = useState('');
-    const [alpha, setAlpha] = useState('');
-    const [intent, setIntent] = useState('Strategic Function');
-    const [loading, setLoading] = useState(false);
+  const [entity, setEntity] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("SaaS");
+  const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async () => {
-        if (!entity.trim() || !alpha.trim()) return;
-        setLoading(true);
-        await new Promise(r => setTimeout(r, 600)); // simulate processing
+  const handleSubmit = async () => {
+    if (!entity.trim() || !amount.trim()) return;
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 500));
 
-        const newNode: ForensicNode = {
-            id: `node-${Date.now()}`,
-            hash: generateHash(),
-            velocity: 'Real-time',
-            entity: entity.trim().toUpperCase(),
-            intent: intent || 'Strategic Function',
-            correlation: 'Optimizing Portfolio',
-            alpha: parseFloat(alpha) || 0,
-            audit: 'Verified',
-            type: 'node_activation',
-            metadata: {
-                iso_timestamp: new Date().toISOString(),
-                shutter_speed: '1/200',
-                network_load: 'Optimal',
-                gas_fee: '$0.0012',
-                block_depth: Math.floor(Math.random() * 9000) + 1000,
-            },
-            briefing: {
-                status: `New node ${entity.trim().toUpperCase()} activated with $${parseFloat(alpha).toLocaleString()} growth fuel.`,
-                context: 'Forging internal node data with live market signals.',
-                action: 'Monitor node performance against market benchmarks.',
-            },
-        };
-
-        onAdd(newNode);
-        setLoading(false);
-        setEntity('');
-        setAlpha('');
-        onClose();
+    const newNode: ForensicNode = {
+      id: `node-${Date.now()}`,
+      status: "Settled",
+      entity: entity.trim(),
+      category: category || "SaaS",
+      amount: parseFloat(amount) || 0,
+      audit: "Verified",
+      type: "node_activation",
+      metadata: {
+        timestamp: new Date().toISOString(),
+      },
+      briefing: {
+        status: `${entity.trim()} added with $${parseFloat(amount).toLocaleString()}.`,
+        context: `Manually added ${category.toLowerCase()} record.`,
+        action: "Review against related transactions.",
+      },
     };
 
-    return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl"
-                    onClick={onClose}
+    onAdd(newNode);
+    setLoading(false);
+    setEntity("");
+    setAmount("");
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {/* Header */}
+            <div
+              className="px-6 pt-6 pb-4 flex items-center justify-between"
+              style={{ borderBottom: "1px solid var(--border)" }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="p-2.5 rounded-xl"
+                  style={{ background: "var(--accent-subtle)" }}
                 >
-                    <motion.div
-                        initial={{ scale: 0.92, opacity: 0, y: 20 }}
-                        animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.92, opacity: 0, y: 20 }}
-                        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                        onClick={e => e.stopPropagation()}
-                        className="relative w-full max-w-md rounded-3xl border border-white/[0.08] bg-[#080f1f] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.5)]"
-                    >
-                        {/* CRT scanline texture */}
-                        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.15)_50%)] bg-[length:100%_3px] pointer-events-none opacity-10" />
+                  <Plus size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div>
+                  <h3
+                    className="text-[14px] font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    Add Entity
+                  </h3>
+                  <p
+                    className="text-[11px] mt-0.5"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Add a new transaction record
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-xl transition-colors"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-                        {/* Top glow */}
-                        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent" />
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full bg-sky-400/5 blur-2xl pointer-events-none" />
+            {/* Form */}
+            <div className="px-6 py-6 space-y-4">
+              <div>
+                <label
+                  className="block text-[12px] font-medium mb-1.5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Entity Name
+                </label>
+                <input
+                  value={entity}
+                  onChange={(e) => setEntity(e.target.value)}
+                  placeholder="e.g. Acme Corp"
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl text-[13px] focus:outline-none transition-all"
+                  style={{
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                  }}
+                />
+              </div>
 
-                        {/* Header */}
-                        <div className="px-8 pt-8 pb-6 border-b border-white/[0.06] flex items-center justify-between relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20">
-                                        <Plus size={18} className="text-sky-400" />
-                                    </div>
-                                    <div className="absolute inset-0 bg-sky-400/10 blur-xl" />
-                                </div>
-                                <div>
-                                    <h3 className="text-[11px] font-black text-white uppercase tracking-[0.35em]">Quick Node Injection</h3>
-                                    <p className="text-[9px] font-mono text-slate-500 mt-0.5 uppercase tracking-widest">Forensic Ledger · Live</p>
-                                </div>
-                            </div>
-                            <button onClick={onClose}
-                                className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-500 hover:text-white transition-all">
-                                <X size={16} />
-                            </button>
-                        </div>
+              <div>
+                <label
+                  className="block text-[12px] font-medium mb-1.5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Amount ($)
+                </label>
+                <div className="relative">
+                  <span
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[13px]"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    $
+                  </span>
+                  <input
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    type="number"
+                    min="0"
+                    className="w-full pl-8 pr-4 py-3 rounded-xl text-[13px] focus:outline-none transition-all"
+                    style={{
+                      background: "var(--bg-primary)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                </div>
+              </div>
 
-                        {/* Form */}
-                        <div className="px-8 py-7 space-y-5 relative z-10">
-                            {/* Entity/Node */}
-                            <div>
-                                <label className="block text-[9px] font-black uppercase tracking-[0.25em] text-slate-500 mb-2">
-                                    Entity / Node Name
-                                </label>
-                                <input
-                                    value={entity}
-                                    onChange={e => setEntity(e.target.value)}
-                                    placeholder="e.g. ENTERPRISE_NODE_7"
-                                    autoFocus
-                                    className="w-full px-4 py-3.5 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-[12px] font-mono text-white placeholder:text-slate-700 focus:outline-none focus:border-sky-500/50 focus:bg-white/[0.05] transition-all uppercase tracking-wider"
-                                />
-                            </div>
+              <div>
+                <label
+                  className="block text-[12px] font-medium mb-1.5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Category
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-[13px] focus:outline-none transition-all cursor-pointer"
+                  style={{
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {[
+                    "SaaS",
+                    "Analytics",
+                    "Infrastructure",
+                    "Fintech",
+                    "Research",
+                    "Other",
+                  ].map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-                            {/* Growth Fuel */}
-                            <div>
-                                <label className="block text-[9px] font-black uppercase tracking-[0.25em] text-slate-500 mb-2">
-                                    Growth Fuel ($)
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-[12px] font-black">$</span>
-                                    <input
-                                        value={alpha}
-                                        onChange={e => setAlpha(e.target.value)}
-                                        placeholder="0.00"
-                                        type="number"
-                                        min="0"
-                                        className="w-full pl-8 pr-4 py-3.5 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-[12px] font-mono text-white placeholder:text-slate-700 focus:outline-none focus:border-sky-500/50 focus:bg-white/[0.05] transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Strategic Function */}
-                            <div>
-                                <label className="block text-[9px] font-black uppercase tracking-[0.25em] text-slate-500 mb-2">
-                                    Strategic Function
-                                </label>
-                                <select
-                                    value={intent}
-                                    onChange={e => setIntent(e.target.value)}
-                                    className="w-full px-4 py-3.5 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-[11px] font-black text-slate-300 focus:outline-none focus:border-sky-500/50 transition-all appearance-none cursor-pointer uppercase tracking-widest"
-                                >
-                                    {['Strategic Function', 'Crypto', 'Analytics', 'Infrastructure', 'SaaS', 'Fintech', 'Research'].map(o => (
-                                        <option key={o} value={o} className="bg-[#080f1f]">{o}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Auto-generated fields preview */}
-                            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] space-y-2">
-                                <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3">Auto-Generated Fields</p>
-                                {[
-                                    { label: 'Forensic Hash', value: 'Auto · 0x...random', icon: Fingerprint },
-                                    { label: 'Audit Integrity', value: 'VERIFIED', icon: ShieldCheck },
-                                    { label: 'Settlement Velocity', value: 'Real-time', icon: Zap },
-                                ].map(f => (
-                                    <div key={f.label} className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <f.icon size={9} className="text-slate-600" />
-                                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{f.label}</span>
-                                        </div>
-                                        <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">{f.value}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-8 pb-8 flex gap-3 relative z-10">
-                            <button onClick={onClose}
-                                className="flex-1 py-3.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] text-[10px] font-black text-slate-400 hover:text-white uppercase tracking-widest transition-all">
-                                Abort
-                            </button>
-                            <motion.button
-                                onClick={handleSubmit}
-                                disabled={!entity.trim() || !alpha.trim() || loading}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.97 }}
-                                className="flex-1 py-3.5 rounded-2xl bg-sky-500 hover:bg-sky-400 text-[10px] font-black text-white uppercase tracking-widest transition-all shadow-lg shadow-sky-500/25 disabled:opacity-40 flex items-center justify-center gap-2"
-                            >
-                                {loading
-                                    ? <><Loader2 size={13} className="animate-spin" /> Injecting...</>
-                                    : <><Plus size={13} /> Inject Node</>
-                                }
-                            </motion.button>
-                        </div>
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
-    );
+            {/* Footer */}
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 py-3 rounded-xl text-[12px] font-medium transition-colors"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Cancel
+              </button>
+              <motion.button
+                onClick={handleSubmit}
+                disabled={!entity.trim() || !amount.trim() || loading}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                className="flex-1 py-3 rounded-xl text-[12px] font-medium text-white disabled:opacity-40 flex items-center justify-center gap-2 transition-colors"
+                style={{ background: "var(--accent)" }}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" /> Adding...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={13} /> Add Entity
+                  </>
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }

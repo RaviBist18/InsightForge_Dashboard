@@ -1,36 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { KPISection } from '@/components/dashboard/KPISection';
-import { FiltersPanel } from '@/components/dashboard/FiltersPanel';
-import { ChartsSection } from '@/components/dashboard/ChartsSection';
-import { DataTable, ForensicNode } from '@/components/dashboard/DataTable';
-import { InsightsPanel } from '@/components/dashboard/InsightsPanel';
-import { RealTimeDashboard } from '@/components/dashboard/RealTimeDashboard';
-import { AIChat } from '@/components/dashboard/AIChat';
-import { CEOBriefing } from '@/components/CEOBriefing';
-import { AddNodeModal } from '@/components/dashboard/AddNodeModal';
-import { KPIDetailClient } from '@/components/dashboard/KPIDetailClient';
-import { useWorkspace } from '@/context/WorkspaceContext';
+import { useState, useEffect, useRef, useMemo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Loader2, Plus } from "lucide-react";
+import { KPISection } from "@/components/dashboard/KPISection";
+import { FiltersPanel } from "@/components/dashboard/FiltersPanel";
+import { ChartsSection } from "@/components/dashboard/ChartsSection";
+import { DataTable, ForensicNode } from "@/components/dashboard/DataTable";
+import { InsightsPanel } from "@/components/dashboard/InsightsPanel";
+import { RealTimeDashboard } from "@/components/dashboard/RealTimeDashboard";
+import { AIChat } from "@/components/dashboard/AIChat";
+import { CEOBriefing } from "@/components/CEOBriefing";
+import { AddNodeModal } from "@/components/dashboard/AddNodeModal";
+import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import {
   getTransactions,
   getInsights,
   getDashboardStats,
   getRevenueData,
   getCategoryData,
-  getRegionData
-} from '@/lib/data';
-
+  getRegionData,
+} from "@/lib/data";
 
 // KPI slugs that trigger the detail panel
 const KPI_SLUGS = new Set([
-  'total-revenue',
-  'total-profit',
-  'profit-margin',
-  'total-orders',
-  'active-users',
-  'churn-rate',
+  "total-revenue",
+  "total-profit",
+  "profit-margin",
+  "total-orders",
+  "active-users",
+  "churn-rate",
 ]);
 
 export default function Home({ searchParams }: { searchParams: any }) {
@@ -49,46 +49,52 @@ export default function Home({ searchParams }: { searchParams: any }) {
   useWorkspace();
 
   const tableRef = useRef<HTMLDivElement>(null);
-  const stableEfficiency = useMemo(() => stats?.efficiency ?? 0, [stats?.efficiency]);
-  const stableNews = useMemo(() => stats?.latestNews ?? "Market stable", [stats?.latestNews]);
+  const stableEfficiency = useMemo(
+    () => stats?.efficiency ?? 0,
+    [stats?.efficiency],
+  );
+  const stableNews = useMemo(
+    () => stats?.latestNews ?? "Market stable",
+    [stats?.latestNews],
+  );
 
   // 2. Fetch Initial Data
   useEffect(() => {
     async function initDashboard() {
-      const range = 'monthly';
+      const range = "monthly";
       const [tx, ins, st, rev, cat, reg] = await Promise.all([
         getTransactions(range),
         getInsights(range),
         getDashboardStats(range),
         getRevenueData(range),
         getCategoryData(range),
-        getRegionData(range)
+        getRegionData(range),
       ]);
 
       const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
-        const stringId = String(tx.id || '');
+        const stringId = String(tx.id || "");
         return {
           id: stringId,
-          hash: stringId.startsWith('0x')
-            ? stringId
-            : `0x${stringId.substring(0, 10)}${stringId.length > 10 ? '...' : ''}`,
-          velocity: "Real-time",
-          entity: tx.customer || "Global Node",
-          intent: tx.category || "Strategic Function",
-          correlation: "Optimizing Portfolio",
-          alpha: tx.amount,
-          audit: tx.status === 'Completed' ? 'Verified' : 'Forensic Audit',
-          type: 'transaction',
+          status: tx.status === "Completed" ? "Settled" : "Pending",
+          entity: tx.customer || "Unknown",
+          category: tx.category || "General",
+          amount: tx.amount,
+          audit: tx.status === "Completed" ? "Verified" : "Needs Review",
+          type: "transaction",
           metadata: {
-            iso_timestamp: new Date().toISOString(),
-            shutter_speed: "1/200",
-            network_load: "Optimal"
+            timestamp: new Date().toISOString(),
           },
           briefing: {
-            status: "Verified financial movement.",
-            context: "Forging internal data with global market trends.",
-            action: "Maintain liquidity buffer."
-          }
+            status:
+              tx.status === "Completed"
+                ? "Payment confirmed."
+                : "Awaiting settlement.",
+            context: `${tx.category || "Transaction"} from ${tx.customer || "customer"}.`,
+            action:
+              tx.status === "Completed"
+                ? "No action needed."
+                : "Follow up with customer.",
+          },
         };
       });
 
@@ -103,59 +109,61 @@ export default function Home({ searchParams }: { searchParams: any }) {
     initDashboard();
   }, []);
 
-  // 3. Live Pulse Engine
-  useEffect(() => {
-    if (nodes.length === 0 || loading) return;
-
-    const pulseEngine = setInterval(() => {
-      setNodes((prevNodes) =>
-        prevNodes.map((node) => {
-          const currentAlpha = typeof node.alpha === 'string' ? parseFloat(node.alpha) : node.alpha;
-          const changePercent = 1 + (Math.random() * 0.02 - 0.01);
-          const newAlpha = Math.max(0.01, currentAlpha * changePercent);
-          return {
-            ...node,
-            prevAlpha: currentAlpha,
-            alpha: newAlpha.toFixed(2),
-          };
-        })
-      );
-    }, 4000);
-
-    return () => clearInterval(pulseEngine);
-  }, [nodes.length, loading]);
-
   // 4. Handlers
   const handleAddNode = (newNode: ForensicNode) => {
     setNodes((prev) => [newNode, ...prev]);
     setTimeout(() => {
-      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
   };
 
   const handleDeleteNode = (id: string) => {
-    setNodes((prev) => prev.filter(node => node.id !== id));
+    setNodes((prev) => prev.filter((node) => node.id !== id));
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center text-sky-500 font-black italic uppercase tracking-widest">
-      Initializing InsightForge...
-    </div>
-  );
+  if (loading)
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center gap-2"
+        style={{
+          background: "var(--bg-primary)",
+          color: "var(--text-secondary)",
+        }}
+      >
+        <Loader2
+          className="w-4 h-4 animate-spin"
+          style={{ color: "var(--accent)" }}
+        />
+        <span className="text-[13px] font-medium">Loading dashboard...</span>
+      </div>
+    );
 
   const isKPIActive = localTab !== null && KPI_SLUGS.has(localTab);
 
   return (
-    <div className="min-h-screen bg-[#020617] selection:bg-sky-500/30">
+    <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
       <header className="mb-8 px-2 flex justify-between items-end pt-6">
         <div className="px-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
-            <span>Enterprise Dashboard</span>
-            <span className="opacity-30">/</span>
-            <span className="text-sky-400">Executive Summary</span>
+          <div
+            className="flex items-center gap-2 text-[12px] mb-2"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <span>Dashboard</span>
+            <span className="opacity-40">/</span>
+            <span style={{ color: "var(--accent)" }}>Overview</span>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">InsightForge Intelligence</h1>
-          <p className="text-slate-400 mt-1">Real-time tracking for revenue and market trends.</p>
+          <h1
+            className="text-[22px] font-semibold"
+            style={{ color: "var(--text-primary)" }}
+          >
+            Overview
+          </h1>
+          <p
+            className="text-[13px] mt-1"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            Real-time tracking for revenue and market trends
+          </p>
         </div>
 
         <div className="pb-1 px-4 flex items-center gap-3">
@@ -163,17 +171,22 @@ export default function Home({ searchParams }: { searchParams: any }) {
           {isKPIActive && (
             <button
               onClick={() => setLocalTab(null)}
-              className="px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-black text-slate-400 hover:text-white transition-all"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="px-4 py-2 rounded-xl text-[12px] font-medium transition-colors"
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+              }}
             >
               ← Dashboard
             </button>
           )}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-6 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-sky-500/20"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
+            style={{ background: "var(--accent)" }}
           >
-            Forge New Node
+            <Plus size={14} /> Add Entity
           </button>
         </div>
       </header>
@@ -187,8 +200,12 @@ export default function Home({ searchParams }: { searchParams: any }) {
           stats={stats}
           onCardClick={(slug) => setLocalTab(slug)}
           allowedSlugs={[
-            'total-revenue', 'total-profit', 'profit-margin',
-            'total-orders', 'active-users', 'churn-rate',
+            "total-revenue",
+            "total-profit",
+            "profit-margin",
+            "total-orders",
+            "active-users",
+            "churn-rate",
           ]}
         />
 

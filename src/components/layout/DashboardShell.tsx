@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from 'react';
-import { Sidebar } from './Sidebar';
-import { Navbar } from './Navbar';
+import { useState } from "react";
+import { Sidebar } from "./Sidebar";
+import { Navbar } from "./Navbar";
 
-import { ThemeProvider } from '@/context/ThemeContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import { usePathname } from 'next/navigation';
+import { ThemeProvider } from "@/context/ThemeContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -15,9 +15,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider>
-      <div className="flex h-screen font-sans overflow-hidden selection:bg-sky-500/30 selection:text-white relative"
-        style={{ background: 'var(--bg-primary, #020617)' }}>
-        <div className="mesh-bg" />
+      <div
+        className="flex h-screen font-sans overflow-hidden selection:bg-[var(--accent-subtle)] selection:text-[var(--accent)] relative"
+        style={{ background: "var(--bg-primary)" }}
+      >
         <Sidebar
           collapsed={sidebarCollapsed}
           setCollapsed={setSidebarCollapsed}
@@ -36,19 +37,34 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
                   className="page-content"
                 >
                   {children}
 
-                  <footer className="mt-16 pb-8 border-t border-white/5 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                      &copy; 2026 InsightForge Intelligence Systems. All rights reserved.
+                  <footer
+                    className="mt-16 pb-8 border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-4"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <p
+                      className="text-[12px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      &copy; 2026 InsightForge. All rights reserved.
                     </p>
-                    <div className="flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      <button className="hover:text-sky-400 transition-colors cursor-pointer text-left">Privacy</button>
-                      <button className="hover:text-sky-400 transition-colors cursor-pointer text-left">Terms</button>
-                      <button className="hover:text-sky-400 transition-colors cursor-pointer text-left">Status</button>
+                    <div
+                      className="flex gap-6 text-[12px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                        Privacy
+                      </button>
+                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                        Terms
+                      </button>
+                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                        Status
+                      </button>
                     </div>
                   </footer>
                 </motion.div>
@@ -56,7 +72,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </main>
-
       </div>
     </ThemeProvider>
   );

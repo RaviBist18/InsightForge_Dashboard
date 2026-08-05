@@ -1,24 +1,42 @@
 "use client";
 // src/components/layout/Sidebar.tsx
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
-  LayoutDashboard, Database, FileText, Bookmark, Settings, UserCog,
-  ChevronLeft, ChevronRight, X, Shield, Briefcase,
-  Zap, Archive, Flame, Map, Target, TrendingUp, TrendingDown, Minus
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '../../lib/utils';
-import { useUserRole } from '@/hooks/useUserRole';
-import { useWorkspace } from '@/context/WorkspaceContext';
-import { LogOut } from 'lucide-react';
+  LayoutDashboard,
+  Database,
+  FileText,
+  Bookmark,
+  Settings,
+  UserCog,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Shield,
+  Briefcase,
+  HelpCircle,
+  Zap,
+  Archive,
+  Flame,
+  Map,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "../../lib/utils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useWorkspace } from "@/context/WorkspaceContext";
+import { LogOut } from "lucide-react";
 
 const getInitials = (nameOrEmail: string) => {
-  if (!nameOrEmail) return '??';
-  if (nameOrEmail.includes('@')) return nameOrEmail.substring(0, 2).toUpperCase();
+  if (!nameOrEmail) return "??";
+  if (nameOrEmail.includes("@"))
+    return nameOrEmail.substring(0, 2).toUpperCase();
   const parts = nameOrEmail.trim().split(/\s+/);
   return parts.length > 1
     ? (parts[0][0] + parts[1][0]).toUpperCase()
@@ -26,28 +44,28 @@ const getInitials = (nameOrEmail: string) => {
 };
 
 const ADMIN_NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-  { icon: Database, label: 'Data Sources', href: '/dashboard/data-sources' },
-  { icon: FileText, label: 'Reports', href: '/dashboard/reports' },
-  { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
-  { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
-  { icon: UserCog, label: 'User Management', href: '/dashboard/admin/users' },
-  { icon: Briefcase, label: 'Workspace', href: '/dashboard/workspace' },
+  { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: Database, label: "Data Sources", href: "/dashboard/data-sources" },
+  { icon: FileText, label: "Reports", href: "/dashboard/reports" },
+  { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+  { icon: UserCog, label: "User Management", href: "/dashboard/admin/users" },
+  { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
 ];
 
 const USER_NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-  { icon: Bookmark, label: 'Saved Views', href: '/dashboard/saved-views' },
-  { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
-  { icon: Briefcase, label: 'Workspace', href: '/dashboard/workspace' },
+  { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+  { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
 ];
 
 const WAR_ROOM_SHORTCUTS = [
-  { label: 'Strategic Pulse', icon: Zap, tab: 'pulse' as const, color: '#38bdf8' },
-  { label: 'Intel Archives', icon: Archive, tab: 'archives' as const, color: '#a78bfa' },
-  { label: 'What-If Forge', icon: Flame, tab: 'forge' as const, color: '#fb923c' },
-  { label: 'Asset Registry', icon: Map, tab: 'entities' as const, color: '#34d399' },
-  { label: 'CEO Briefing', icon: Target, tab: 'customizer' as const, color: '#f472b6' },
+  { label: "Live Metrics", icon: Zap, tab: "pulse" as const },
+  { label: "Data Archive", icon: Archive, tab: "archives" as const },
+  { label: "Scenario Planner", icon: Flame, tab: "forge" as const },
+  { label: "Asset Directory", icon: Map, tab: "entities" as const },
+  { label: "Executive Summary", icon: Target, tab: "customizer" as const },
 ];
 
 interface SidebarProps {
@@ -58,33 +76,46 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  collapsed, setCollapsed, mobileOpen, setMobileOpen
+  collapsed,
+  setCollapsed,
+  mobileOpen,
+  setMobileOpen,
 }) => {
   const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const { role, name, email, loading: roleLoading } = useUserRole();
   const {
-    activeTab, setActiveTab,
-    mrr, churn, entityCount, snapshotCount, mrrTrend,
+    activeTab,
+    setActiveTab,
+    mrr,
+    churn,
+    entityCount,
+    snapshotCount,
+    mrrTrend,
     isWorkspacePage,
   } = useWorkspace();
 
-  const isAdmin = role === 'admin';
+  const isAdmin = role === "admin";
   const navItems = isAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
-  const isOnWorkspace = pathname.startsWith('/dashboard/workspace');
+  const isOnWorkspace = pathname.startsWith("/dashboard/workspace");
 
   React.useEffect(() => {
     if (!roleLoading) setLoading(false);
   }, [roleLoading]);
 
   const isActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname.startsWith(href);
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const TrendIcon = mrrTrend > 0 ? TrendingUp : mrrTrend < 0 ? TrendingDown : Minus;
-  const trendColor = mrrTrend > 0 ? '#4ade80' : mrrTrend < 0 ? '#fb7185' : '#94a3b8';
+  const TrendIcon =
+    mrrTrend > 0 ? TrendingUp : mrrTrend < 0 ? TrendingDown : Minus;
 
-  const renderNavItem = (item: { icon: any; label: string; href: string; color?: string }) => {
+  const renderNavItem = (item: {
+    icon: any;
+    label: string;
+    href: string;
+    color?: string;
+  }) => {
     const active = isActive(item.href);
     return (
       <Link
@@ -92,29 +123,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
         href={item.href}
         onClick={() => setMobileOpen?.(false)}
         className={cn(
-          'relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-[12px] font-bold',
-          active ? 'text-white' : 'text-slate-500 hover:text-slate-200'
+          "relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 group text-[13px] font-medium",
+          active
+            ? "text-[color:var(--accent)]"
+            : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]",
         )}
       >
         {active && (
-          <motion.div layoutId="sidebar-active-bg"
-            className="absolute inset-0 rounded-xl bg-white/[0.08] border border-white/[0.1]"
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }} />
+          <motion.div
+            layoutId="sidebar-active-bg"
+            className="absolute inset-0 rounded-xl"
+            style={{ background: "var(--accent-subtle)" }}
+            transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+          />
         )}
         {active && (
-          <motion.div layoutId="sidebar-accent"
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5 rounded-r-full"
-            style={{ background: 'var(--accent)' }}
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }} />
+          <motion.div
+            layoutId="sidebar-accent"
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
+            style={{ background: "var(--accent)" }}
+            transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+          />
         )}
-        <item.icon className={cn('w-4 h-4 flex-shrink-0 relative z-10 transition-colors duration-200',
-          active ? 'text-sky-400' : 'text-slate-600 group-hover:text-slate-400'
-        )} />
+        <item.icon
+          className={cn(
+            "w-4 h-4 flex-shrink-0 relative z-10 transition-colors duration-150",
+            active
+              ? "text-[color:var(--accent)]"
+              : "text-[color:var(--text-muted)] group-hover:text-[color:var(--text-secondary)]",
+          )}
+        />
         <AnimatePresence>
           {(!collapsed || mobileOpen) && (
-            <motion.span initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.15 }}
-              className="whitespace-nowrap relative z-10 tracking-wide">
+            <motion.span
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -4 }}
+              transition={{ duration: 0.15 }}
+              className="whitespace-nowrap relative z-10 tracking-wide"
+            >
               {item.label}
             </motion.span>
           )}
@@ -127,41 +174,71 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             onClick={() => setMobileOpen?.(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" />
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          />
         )}
       </AnimatePresence>
 
       <motion.aside
         initial={false}
         animate={{ width: collapsed ? 72 : 256 }}
-        transition={{ type: 'spring', bounce: 0.1, duration: 0.45 }}
+        transition={{ type: "spring", bounce: 0.1, duration: 0.45 }}
         className={cn(
-          'relative flex flex-col h-screen border-r border-white/[0.07] bg-white/[0.02] backdrop-blur-xl z-50 overflow-hidden',
-          'lg:m-2 lg:mr-0 lg:rounded-xl lg:rounded-r-none',
-          mobileOpen ? 'flex fixed inset-y-0 left-0' : 'hidden lg:flex'
+          "relative flex flex-col h-screen border-r z-50 overflow-hidden",
+          mobileOpen ? "flex fixed inset-y-0 left-0" : "hidden lg:flex",
         )}
+        style={{
+          background: "var(--bg-sidebar)",
+          borderColor: "var(--border)",
+        }}
       >
-        <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-sky-400/[0.04] to-transparent pointer-events-none" />
-
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
+        <div
+          className="flex items-center gap-3 px-4 py-5 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-[11px] font-black text-white shadow-lg shadow-sky-500/30 group-hover:bg-sky-400 transition-colors">
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold text-white transition-colors"
+              style={{ background: "var(--accent)" }}
+            >
               IF
             </div>
             <AnimatePresence>
               {(!collapsed || mobileOpen) && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="font-black text-white text-[15px] tracking-tight whitespace-nowrap">
-                  InsightForge
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col leading-tight"
+                >
+                  <span
+                    className="font-semibold text-[15px] tracking-tight whitespace-nowrap"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    InsightForge
+                  </span>
+                  <span
+                    className="text-[10px] whitespace-nowrap"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Enterprise Analytics
+                  </span>
                 </motion.span>
               )}
             </AnimatePresence>
           </Link>
           {mobileOpen && (
-            <button onClick={() => setMobileOpen?.(false)} className="ml-auto text-slate-500 hover:text-white">
+            <button
+              onClick={() => setMobileOpen?.(false)}
+              className="ml-auto"
+              style={{ color: "var(--text-secondary)" }}
+            >
               <X size={18} />
             </button>
           )}
@@ -169,48 +246,106 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto no-scrollbar">
           {/* Main Nav */}
-          <div className="space-y-0.5">
-            {navItems.map(renderNavItem)}
-          </div>
+          <div className="space-y-0.5">{navItems.map(renderNavItem)}</div>
 
           {/* ── Business Health Scorecard ── */}
           <AnimatePresence>
             {(!collapsed || mobileOpen) && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <p className="px-3 mb-2 text-[9px] font-black text-slate-600 uppercase tracking-[0.22em]">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <p
+                  className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   Business Health
                 </p>
-                <div className="mx-0 p-3 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div
+                  className="mx-0 p-3 rounded-xl"
+                  style={{
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
                   {/* MRR Row */}
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <p className="text-[9px] text-slate-600 uppercase tracking-widest">MRR</p>
-                      <p className="text-[13px] font-black text-white" style={{ fontFamily: 'monospace' }}>
-                        ${mrr > 0 ? mrr.toLocaleString() : '—'}
+                      <p
+                        className="text-[10px] uppercase tracking-widest"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        MRR
+                      </p>
+                      <p
+                        className="text-[13px] font-semibold"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        ${mrr > 0 ? mrr.toLocaleString() : "—"}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1" style={{ color: trendColor }}>
+                    <div
+                      className="flex items-center gap-1"
+                      style={{
+                        color:
+                          mrrTrend > 0
+                            ? "var(--success)"
+                            : mrrTrend < 0
+                              ? "var(--danger)"
+                              : "var(--text-muted)",
+                      }}
+                    >
                       <TrendIcon size={11} />
-                      <span className="text-[10px] font-bold" style={{ fontFamily: 'monospace' }}>
-                        {mrrTrend > 0 ? '+' : ''}{mrrTrend.toFixed(1)}%
+                      <span className="text-[10px] font-medium">
+                        {mrrTrend > 0 ? "+" : ""}
+                        {mrrTrend.toFixed(1)}%
                       </span>
                     </div>
                   </div>
 
-                  <div className="h-px w-full mb-2" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                  <div
+                    className="h-px w-full mb-2"
+                    style={{ background: "var(--border)" }}
+                  />
 
                   {/* Stats Grid */}
                   <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { label: 'Churn', value: churn > 0 ? `${churn}%` : '—', color: churn > 3 ? '#fb7185' : '#4ade80' },
-                      { label: 'Assets', value: entityCount, color: '#38bdf8' },
-                      { label: 'Seals', value: snapshotCount, color: '#a78bfa' },
-                    ].map(m => (
-                      <div key={m.label} className="text-center p-1.5 rounded-lg"
-                        style={{ background: 'rgba(255,255,255,0.03)' }}>
-                        <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-0.5">{m.label}</p>
-                        <p className="text-[11px] font-black" style={{ color: m.color, fontFamily: 'monospace' }}>
+                      {
+                        label: "Churn",
+                        value: churn > 0 ? `${churn}%` : "—",
+                        color: churn > 3 ? "var(--danger)" : "var(--success)",
+                      },
+                      {
+                        label: "Assets",
+                        value: entityCount,
+                        color: "var(--text-primary)",
+                      },
+                      {
+                        label: "Snapshots",
+                        value: snapshotCount,
+                        color: "var(--text-primary)",
+                      },
+                    ].map((m) => (
+                      <div
+                        key={m.label}
+                        className="text-center p-1.5 rounded-xl"
+                        style={{
+                          background: "var(--bg-surface)",
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        <p
+                          className="text-[8px] uppercase tracking-widest mb-0.5"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          {m.label}
+                        </p>
+                        <p
+                          className="text-[11px] font-semibold"
+                          style={{ color: m.color }}
+                        >
                           {m.value}
                         </p>
                       </div>
@@ -225,14 +360,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div>
             <AnimatePresence>
               {(!collapsed || mobileOpen) && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="px-3 mb-2 text-[9px] font-black text-slate-600 uppercase tracking-[0.22em]">
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   Workspace
                 </motion.p>
               )}
             </AnimatePresence>
             <div className="space-y-0.5">
-              {WAR_ROOM_SHORTCUTS.map(item => {
+              {WAR_ROOM_SHORTCUTS.map((item) => {
                 const isTabActive = isOnWorkspace && activeTab === item.tab;
                 return (
                   <button
@@ -244,27 +384,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }
                       setActiveTab(item.tab);
                     }}
-                    className="w-full relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group text-[11px] font-bold"
+                    className="w-full relative flex items-center gap-3 px-3 py-2 rounded-xl transition-colors duration-150 group text-[12px] font-medium"
                     style={{
-                      background: isTabActive ? `${item.color}12` : 'transparent',
-                      border: isTabActive ? `1px solid ${item.color}30` : '1px solid transparent',
+                      background: isTabActive
+                        ? "var(--accent-subtle)"
+                        : "transparent",
                     }}
                   >
                     {isTabActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-r-full"
-                        style={{ background: item.color }} />
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full"
+                        style={{ background: "var(--accent)" }}
+                      />
                     )}
                     <item.icon
-                      className="w-3.5 h-3.5 flex-shrink-0 transition-colors duration-200"
-                      style={{ color: isTabActive ? item.color : item.color + '66' }}
+                      className="w-3.5 h-3.5 flex-shrink-0 transition-colors duration-150"
+                      style={{
+                        color: isTabActive
+                          ? "var(--accent)"
+                          : "var(--text-muted)",
+                      }}
                     />
                     <AnimatePresence>
                       {(!collapsed || mobileOpen) && (
                         <motion.span
-                          initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.15 }}
+                          initial={{ opacity: 0, x: -4 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -4 }}
+                          transition={{ duration: 0.15 }}
                           className="whitespace-nowrap relative z-10 tracking-wide"
-                          style={{ color: isTabActive ? item.color : item.color + '88' }}
+                          style={{
+                            color: isTabActive
+                              ? "var(--accent)"
+                              : "var(--text-secondary)",
+                          }}
                         >
                           {item.label}
                         </motion.span>
@@ -278,43 +431,71 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* User Menu */}
-        <div className="px-3 pb-4 pt-3 border-t border-white/[0.06]">
+        <div
+          className="px-3 pb-4 pt-3 border-t"
+          style={{ borderColor: "var(--border)" }}
+        >
           <div className="relative">
             <AnimatePresence>
               {showUserMenu && (!collapsed || mobileOpen) && (
-                <motion.div key="user-menu"
+                <motion.div
+                  key="user-menu"
                   initial={{ opacity: 0, y: 8, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.97 }}
                   transition={{ duration: 0.18 }}
-                  className="absolute bottom-full left-0 right-0 mb-2 rounded-2xl overflow-hidden shadow-2xl z-50"
-                  style={{ background: '#0a1628', border: '1px solid rgba(255,255,255,0.1)' }}
+                  className="absolute bottom-full left-0 right-0 mb-2 rounded-xl overflow-hidden shadow-md z-50"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                  }}
                 >
                   {/* User info block */}
-                  <div className="px-4 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div
+                    className="px-4 py-3.5 border-b"
+                    style={{ borderColor: "var(--border)" }}
+                  >
                     <div className="flex items-center gap-3 mb-2.5">
-                      <div className={cn(
-                        'w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-black text-white',
-                        isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600' : 'bg-gradient-to-br from-slate-500 to-slate-700'
-                      )}>
+                      <div
+                        className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
+                        style={{ background: "var(--accent)" }}
+                      >
                         {getInitials(name)}
                       </div>
                       <div className="overflow-hidden">
-                        <p className="text-[12px] font-bold text-white truncate leading-tight">{name}</p>
-                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{email}</p>
+                        <p
+                          className="text-[12px] font-semibold truncate leading-tight"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {name}
+                        </p>
+                        <p
+                          className="text-[10px] truncate mt-0.5"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          {email}
+                        </p>
                       </div>
                     </div>
-                    <div className={cn(
-                      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest',
-                      isAdmin ? 'bg-sky-500/12 text-sky-400 border border-sky-500/20' : 'bg-slate-500/12 text-slate-400 border border-slate-500/20'
-                    )}>
+                    <div
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[9px] font-semibold uppercase tracking-widest"
+                      style={{
+                        background: "var(--accent-subtle)",
+                        color: "var(--accent)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
                       <Shield size={9} />
-                      {isAdmin ? 'Administrator' : 'Member'}
+                      {isAdmin ? "Administrator" : "Member"}
                     </div>
                   </div>
                   <button
-                    onClick={async () => { await supabase.auth.signOut(); window.location.href = '/auth'; }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] font-bold text-rose-400 hover:bg-rose-500/8 transition-colors"
+                    onClick={async () => {
+                      await supabase.auth.signOut();
+                      window.location.href = "/auth";
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] font-medium transition-colors"
+                    style={{ color: "var(--danger)" }}
                   >
                     <LogOut size={13} />
                     Sign out
@@ -324,47 +505,92 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </AnimatePresence>
 
             <button
-              onClick={() => !loading && setShowUserMenu(v => !v)}
+              onClick={() => !loading && setShowUserMenu((v) => !v)}
               className={cn(
-                'w-full flex items-center rounded-xl p-2.5 transition-all group',
-                showUserMenu ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]',
-                (!collapsed || mobileOpen) ? 'gap-3' : 'justify-center'
+                "w-full flex items-center rounded-xl p-2.5 transition-colors group",
+                !collapsed || mobileOpen ? "gap-3" : "justify-center",
               )}
+              style={{
+                background: showUserMenu ? "var(--bg-primary)" : "transparent",
+              }}
             >
               {loading ? (
-                <div className="w-8 h-8 rounded-full bg-slate-800 animate-pulse border border-white/10 flex-shrink-0" />
+                <div
+                  className="w-8 h-8 rounded-full animate-pulse flex-shrink-0"
+                  style={{ background: "var(--border)" }}
+                />
               ) : (
-                <div className={cn(
-                  'w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-black text-white ring-2 ring-offset-1 ring-offset-transparent',
-                  isAdmin ? 'bg-gradient-to-br from-sky-400 to-blue-600 ring-sky-500/30' : 'bg-gradient-to-br from-slate-500 to-slate-700 ring-slate-500/20'
-                )}>
+                <div
+                  className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
+                  style={{ background: "var(--accent)" }}
+                >
                   {getInitials(name)}
                 </div>
               )}
               <AnimatePresence>
                 {(!collapsed || mobileOpen) && !loading && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="flex flex-col items-start overflow-hidden flex-1 min-w-0">
-                    <span className="text-[12px] font-bold text-white truncate w-full">{name}</span>
-                    <span className={cn('text-[9px] font-black uppercase tracking-widest',
-                      isAdmin ? 'text-sky-500' : 'text-slate-600')}>
-                      {isAdmin ? 'Administrator' : 'Member'}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-start overflow-hidden flex-1 min-w-0"
+                  >
+                    <span
+                      className="text-[12px] font-semibold truncate w-full"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {name}
+                    </span>
+                    <span
+                      className="text-[9px] font-semibold uppercase tracking-widest"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      {isAdmin ? "Administrator" : "Member"}
                     </span>
                   </motion.div>
                 )}
               </AnimatePresence>
               {(!collapsed || mobileOpen) && !loading && (
-                <ChevronRight size={13} className={cn('text-slate-600 flex-shrink-0 transition-transform', showUserMenu && 'rotate-[-90deg]')} />
+                <ChevronRight
+                  size={13}
+                  className={cn(
+                    "flex-shrink-0 transition-transform",
+                    showUserMenu && "rotate-[-90deg]",
+                  )}
+                  style={{ color: "var(--text-muted)" }}
+                />
               )}
             </button>
           </div>
 
           <button
-            onClick={() => { setCollapsed(!collapsed); setShowUserMenu(false); }}
-            className="hidden lg:flex w-full items-center justify-center gap-2 p-2 mt-1 rounded-xl text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-all text-[11px] font-bold"
+            onClick={() => {
+              setCollapsed(!collapsed);
+              setShowUserMenu(false);
+            }}
+            className="hidden lg:flex w-full items-center justify-center gap-2 p-2 mt-1 rounded-xl transition-colors text-[11px] font-medium"
+            style={{ color: "var(--text-muted)" }}
           >
-            {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={14} /><span>Collapse</span></>}
+            {collapsed ? (
+              <ChevronRight size={16} />
+            ) : (
+              <>
+                <ChevronLeft size={14} />
+                <span>Collapse</span>
+              </>
+            )}
           </button>
+
+          {(!collapsed || mobileOpen) && (
+            <a
+              href="mailto:support@insightforge.com"
+              className="flex items-center gap-2 px-2 py-2 mt-1 text-[12px] font-medium transition-colors"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <HelpCircle size={14} />
+              <span>Help Center</span>
+            </a>
+          )}
         </div>
       </motion.aside>
     </>
