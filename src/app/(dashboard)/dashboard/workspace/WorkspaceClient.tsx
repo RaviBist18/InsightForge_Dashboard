@@ -31,7 +31,7 @@ interface BriefingSettings {
   persona: string;
   frequency: string;
 }
-interface ForensicSnapshot {
+interface DecisionSnapshot {
   id: string;
   created_at: string;
   label: string;
@@ -64,7 +64,7 @@ interface SimulationResult {
   subscriber_delta_pct: number;
   runway_months: number;
   risk_level: string;
-  counter_forge: string;
+  recommended_action: string;
   summary: string;
 }
 interface Ticker {
@@ -78,7 +78,7 @@ interface Props {
   userEmail: string;
   profile: Profile | null;
   briefingSettings: BriefingSettings | null;
-  initialSnapshots: ForensicSnapshot[];
+  initialSnapshots: DecisionSnapshot[];
   initialEntities: BusinessEntity[];
   mrr: number;
   churn: number;
@@ -168,14 +168,14 @@ function FeedSkeleton({ accent }: { accent: string }) {
           transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
           className="p-3 rounded-lg"
           style={{
-            background: "rgba(255,255,255,0.025)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "rgba(0,0,0,0.025)",
+            border: "1px solid rgba(0,0,0,0.05)",
           }}
         >
           <div className="flex items-center justify-between mb-2 gap-2">
             <div
               className="h-2 rounded flex-1"
-              style={{ background: "rgba(255,255,255,0.06)" }}
+              style={{ background: "rgba(0,0,0,0.06)" }}
             />
             <div
               className="h-4 w-12 rounded"
@@ -184,11 +184,11 @@ function FeedSkeleton({ accent }: { accent: string }) {
           </div>
           <div
             className="h-2 rounded w-full mb-1.5"
-            style={{ background: "rgba(255,255,255,0.04)" }}
+            style={{ background: "rgba(0,0,0,0.04)" }}
           />
           <div
             className="h-2 rounded w-3/4"
-            style={{ background: "rgba(255,255,255,0.04)" }}
+            style={{ background: "rgba(0,0,0,0.04)" }}
           />
           <motion.div
             className="h-px w-full mt-2 rounded"
@@ -212,7 +212,7 @@ function FeedSkeleton({ accent }: { accent: string }) {
           />
         ))}
         <span className="text-xs ml-1" style={{ color: accent }}>
-          Forging intelligence...
+          Analyzing...
         </span>
       </div>
     </div>
@@ -298,7 +298,7 @@ export default function WorkspaceClient({
 
   // ── ARCHIVES ──
   const [snapshots, setSnapshots] =
-    useState<ForensicSnapshot[]>(initialSnapshots);
+    useState<DecisionSnapshot[]>(initialSnapshots);
   const [sealLabel, setSealLabel] = useState("");
   const [sealing, setSealing] = useState(false);
   const [sealSuccess, setSealSuccess] = useState(false);
@@ -704,38 +704,38 @@ export default function WorkspaceClient({
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
   const impactColor = (type: string, delta: number) => {
-    if (type === "opportunity" || delta > 0) return "#10b981";
-    if (type === "risk" || type === "churn") return "#f43f5e";
-    return "#f59e0b";
+    if (type === "opportunity" || delta > 0) return "var(--success)";
+    if (type === "risk" || type === "churn") return "var(--danger)";
+    return "var(--warning)";
   };
 
   const riskLevelColor = (level: string) =>
     ({
-      LOW: "#10b981",
-      MEDIUM: "#f59e0b",
-      HIGH: "#f97316",
-      CRITICAL: "#f43f5e",
-    })[level] ?? "#94a3b8";
+      LOW: "var(--success)",
+      MEDIUM: "var(--warning)",
+      HIGH: "var(--warning)",
+      CRITICAL: "var(--danger)",
+    })[level] ?? "var(--text-muted)";
 
   const sensitivityColor = (score: number) => {
-    if (score >= 75) return "#f43f5e";
-    if (score >= 50) return "#f97316";
-    if (score >= 25) return "#f59e0b";
-    return "#10b981";
+    if (score >= 75) return "var(--danger)";
+    if (score >= 50) return "var(--warning)";
+    if (score >= 25) return "var(--warning)";
+    return "var(--success)";
   };
 
   // ── TAB DEFINITIONS ───────────────────────────────────────────────────────
   const workspaceTabs = [
-    { id: "pulse", label: "Strategic Pulse", icon: "⚡" },
-    { id: "archives", label: "Intelligence Archives", icon: "🔒" },
-    { id: "forge", label: "What-If Forge", icon: "🔥" },
+    { id: "pulse", label: "Live Metrics", icon: "⚡" },
+    { id: "archives", label: "Snapshot Archive", icon: "🔒" },
+    { id: "forge", label: "Scenario Simulator", icon: "🔥" },
     { id: "entities", label: "Asset Registry", icon: "🗺️" },
     { id: "customizer", label: "CEO Briefing", icon: "🎯" },
   ] as const;
 
   // user-only tab — rendered separately in tab bar
   const userOnlyTabs = !isAdmin
-    ? [{ id: "forge-node", label: "Forge New Node", icon: "🔩" }]
+    ? [{ id: "forge-node", label: "Add Entity", icon: "🔩" }]
     : [];
 
   // KPI slugs available to current role
@@ -789,14 +789,7 @@ export default function WorkspaceClient({
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        background:
-          "linear-gradient(135deg, #050a15 0%, #080f1e 50%, #060c18 100%)",
-        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-      }}
-    >
+    <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
       {/* Read-Only Banner */}
       <AnimatePresence>
         {isReadOnly && (
@@ -804,10 +797,13 @@ export default function WorkspaceClient({
             initial={{ y: -50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-3 py-2 px-4"
-            style={{ background: "#78350f", borderBottom: "1px solid #f59e0b" }}
+            style={{
+              background: "var(--warning-bg)",
+              borderBottom: "1px solid var(--warning)",
+            }}
           >
-            <span className="text-amber-400 text-xs font-bold tracking-[0.2em] uppercase">
-              🔒 READ-ONLY FORENSIC ACCESS — ARCHIVE INTEGRITY ACTIVE
+            <span className="text-[var(--warning)] text-xs font-bold tracking-[0.1em] uppercase">
+              🔒 Read-only access — viewing archived data
             </span>
           </motion.div>
         )}
@@ -832,17 +828,17 @@ export default function WorkspaceClient({
               />
               <div>
                 <h1
-                  className="text-2xl font-black tracking-tight"
+                  className="text-2xl font-bold tracking-tight"
                   style={{ color: accent }}
                 >
-                  {isAdmin ? "STRATEGIC WAR ROOM" : "PERSONAL INTELLIGENCE HUB"}
+                  {isAdmin ? "Workspace" : "My Workspace"}
                 </h1>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                   {profile?.full_name ?? userEmail} · {persona.toUpperCase()}{" "}
                   MODE
                   {!isAdmin && (
                     <span
-                      className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase"
+                      className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
                       style={{ background: `${accent}20`, color: accent }}
                     >
                       MEMBER VIEW
@@ -859,20 +855,23 @@ export default function WorkspaceClient({
                     key={t.symbol}
                     className="flex items-center gap-2 px-3 py-1.5 rounded"
                     style={{
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
+                      background: "rgba(0,0,0,0.03)",
+                      border: "1px solid rgba(0,0,0,0.06)",
                     }}
                   >
-                    <span className="text-xs text-slate-400 font-bold">
+                    <span className="text-xs text-[var(--text-secondary)] font-bold">
                       {t.symbol}
                     </span>
-                    <span className="text-xs text-white font-mono">
+                    <span className="text-xs text-[var(--text-primary)] font-mono">
                       {t.price != null ? `$${t.price.toFixed(2)}` : "—"}
                     </span>
                     {t.change != null && (
                       <span
                         className="text-xs font-bold"
-                        style={{ color: t.change >= 0 ? "#10b981" : "#f43f5e" }}
+                        style={{
+                          color:
+                            t.change >= 0 ? "var(--success)" : "var(--danger)",
+                        }}
                       >
                         {t.change >= 0 ? "+" : ""}
                         {t.change.toFixed(2)}%
@@ -901,11 +900,9 @@ export default function WorkspaceClient({
               className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold whitespace-nowrap transition-all"
               style={{
                 background:
-                  activeTab === tab.id
-                    ? `${accent}20`
-                    : "rgba(255,255,255,0.03)",
-                border: `1px solid ${activeTab === tab.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
-                color: activeTab === tab.id ? accent : "#64748b",
+                  activeTab === tab.id ? `${accent}20` : "rgba(0,0,0,0.03)",
+                border: `1px solid ${activeTab === tab.id ? accent + "60" : "rgba(0,0,0,0.06)"}`,
+                color: activeTab === tab.id ? accent : "var(--text-secondary)",
               }}
             >
               <span>{tab.icon}</span>
@@ -927,11 +924,10 @@ export default function WorkspaceClient({
                   border: `1px solid ${activeTab === "forge-node" ? accent : accent + "60"}`,
                   color: accent,
                   boxShadow: `0 0 16px ${accent}20`,
-                  fontFamily: "'JetBrains Mono', monospace",
                 }}
               >
                 <span>🔩</span>
-                <span className="hidden sm:block">Forge New Node</span>
+                <span className="hidden sm:block">Add Entity</span>
               </button>
             </>
           )}
@@ -979,14 +975,14 @@ export default function WorkspaceClient({
                   <div
                     className="rounded-xl p-5"
                     style={{
-                      background: "rgba(255,255,255,0.02)",
+                      background: "rgba(0,0,0,0.02)",
                       border: `1px solid ${accent}30`,
                       boxShadow: `0 0 30px ${accent}08`,
                     }}
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
+                        <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-1">
                           {isAdmin
                             ? "Internal Revenue"
                             : "Your Revenue Contribution"}
@@ -996,22 +992,27 @@ export default function WorkspaceClient({
                             className="h-9 w-40 rounded"
                             animate={{ opacity: [0.3, 0.7, 0.3] }}
                             transition={{ duration: 1.5, repeat: Infinity }}
-                            style={{ background: "rgba(255,255,255,0.06)" }}
+                            style={{ background: "rgba(0,0,0,0.06)" }}
                           />
                         ) : (
-                          <p className="text-3xl font-black text-white">
+                          <p className="text-3xl font-bold text-[var(--text-primary)]">
                             ${mrr.toLocaleString()}
-                            <span className="text-sm text-slate-500 ml-2 font-normal">
+                            <span className="text-sm text-[var(--text-secondary)] ml-2 font-normal">
                               /mo
                             </span>
                           </p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-slate-500">Churn</p>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          Churn
+                        </p>
                         <p
                           className="text-lg font-bold"
-                          style={{ color: churn < 3 ? "#10b981" : "#f43f5e" }}
+                          style={{
+                            color:
+                              churn < 3 ? "var(--success)" : "var(--danger)",
+                          }}
                         >
                           {churn}%
                         </p>
@@ -1051,12 +1052,12 @@ export default function WorkspaceClient({
                               >
                                 <stop
                                   offset="5%"
-                                  stopColor="#38bdf8"
+                                  stopColor="var(--accent)"
                                   stopOpacity={0.3}
                                 />
                                 <stop
                                   offset="95%"
-                                  stopColor="#38bdf8"
+                                  stopColor="var(--accent)"
                                   stopOpacity={0}
                                 />
                               </linearGradient>
@@ -1064,22 +1065,22 @@ export default function WorkspaceClient({
                             <CartesianGrid
                               strokeDasharray="3 3"
                               vertical={false}
-                              stroke="#1e293b"
+                              stroke="var(--border)"
                             />
                             <XAxis
                               dataKey="month"
-                              tick={{ fontSize: 9, fill: "#475569" }}
+                              tick={{ fontSize: 9, fill: "var(--text-muted)" }}
                               axisLine={false}
                               tickLine={false}
                             />
                             <YAxis hide />
                             <Tooltip
                               contentStyle={{
-                                background: "#080f1e",
+                                background: "var(--bg-surface)",
                                 border: `1px solid ${accent}40`,
                                 borderRadius: 6,
                                 fontSize: 11,
-                                color: "#e2e8f0",
+                                color: "var(--text-primary)",
                               }}
                               formatter={(v: number) => [
                                 `$${v.toLocaleString()}`,
@@ -1089,14 +1090,18 @@ export default function WorkspaceClient({
                             <Area
                               type="monotone"
                               dataKey="mrr"
-                              stroke="#38bdf8"
+                              stroke="var(--accent)"
                               strokeWidth={3}
                               fill="url(#colorRevenue)"
-                              dot={{ r: 3, fill: "#38bdf8", strokeWidth: 0 }}
+                              dot={{
+                                r: 3,
+                                fill: "var(--accent)",
+                                strokeWidth: 0,
+                              }}
                               activeDot={{
                                 r: 6,
                                 strokeWidth: 0,
-                                fill: "#38bdf8",
+                                fill: "var(--accent)",
                               }}
                             />
                           </AreaChart>
@@ -1109,7 +1114,7 @@ export default function WorkspaceClient({
                         {
                           label: isAdmin ? "New Signups" : "Your Signups",
                           value: isAdmin ? signups : 1,
-                          color: "#10b981",
+                          color: "var(--success)",
                         },
                         {
                           label: "Subscribers",
@@ -1120,9 +1125,9 @@ export default function WorkspaceClient({
                         <div
                           key={m.label}
                           className="p-3 rounded-lg"
-                          style={{ background: "rgba(255,255,255,0.03)" }}
+                          style={{ background: "rgba(0,0,0,0.03)" }}
                         >
-                          <p className="text-xs text-slate-500 mb-1">
+                          <p className="text-xs text-[var(--text-secondary)] mb-1">
                             {m.label}
                           </p>
                           <p
@@ -1141,16 +1146,16 @@ export default function WorkspaceClient({
                 <div
                   className={`rounded-xl p-5 flex flex-col ${!isAdmin ? "lg:col-span-2" : ""}`}
                   style={{
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(0,0,0,0.02)",
+                    border: "1px solid rgba(0,0,0,0.06)",
                   }}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
+                      <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-1">
                         Intelligence Feed
                       </p>
-                      <p className="text-sm font-bold text-white">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">
                         Why Your Numbers Are Moving
                       </p>
                     </div>
@@ -1160,7 +1165,7 @@ export default function WorkspaceClient({
                       className="px-3 py-1.5 rounded text-xs font-bold transition-all"
                       style={{
                         background: feedLoading
-                          ? "rgba(255,255,255,0.05)"
+                          ? "rgba(0,0,0,0.05)"
                           : `${accent}20`,
                         border: `1px solid ${accent}40`,
                         color: accent,
@@ -1179,12 +1184,12 @@ export default function WorkspaceClient({
                         className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4"
                       >
                         <p className="text-2xl">⚠️</p>
-                        <p className="text-xs text-amber-400 font-bold">
-                          Intelligence Forge Offline
+                        <p className="text-xs text-[var(--warning)] font-bold">
+                          AI Insights Unavailable
                         </p>
-                        <p className="text-xs text-slate-500 leading-relaxed">
-                          Market signals detected, but intelligence forge is
-                          offline. Check API keys.
+                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                          Market signals detected, but AI analysis is offline.
+                          Check API keys.
                         </p>
                         <button
                           onClick={fetchWhyFeed}
@@ -1209,13 +1214,13 @@ export default function WorkspaceClient({
                           transition={{ delay: i * 0.08 }}
                           className="p-3 rounded-lg"
                           style={{
-                            background: "rgba(255,255,255,0.025)",
+                            background: "rgba(0,0,0,0.025)",
                             border: `1px solid ${impactColor(item.impact_type, item.impact_delta)}25`,
                             borderLeft: `3px solid ${impactColor(item.impact_type, item.impact_delta)}`,
                           }}
                         >
                           <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="text-xs text-slate-400 line-clamp-1">
+                            <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
                               {item.headline}
                             </p>
                             <span
@@ -1232,17 +1237,17 @@ export default function WorkspaceClient({
                               {(item.impact_delta ?? 0).toFixed(1)}%
                             </span>
                           </div>
-                          <p className="text-xs text-slate-200 leading-relaxed">
+                          <p className="text-xs text-[var(--text-primary)] leading-relaxed">
                             {item.snippet}
                           </p>
-                          <p className="text-xs text-slate-600 mt-1">
+                          <p className="text-xs text-[var(--text-muted)] mt-1">
                             {item.source} · {item.impact_type.toUpperCase()}
                           </p>
                         </motion.div>
                       ))}
                     {!feedLoading && !feedError && whyFeed.length === 0 && (
                       <div className="flex flex-col items-center justify-center py-12 gap-2">
-                        <p className="text-slate-600 text-sm">
+                        <p className="text-[var(--text-muted)] text-sm">
                           No intelligence yet.
                         </p>
                         <button
@@ -1296,10 +1301,10 @@ export default function WorkspaceClient({
                 className="flex flex-col items-center justify-center py-24 gap-4"
               >
                 <p className="text-4xl">🔒</p>
-                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                <p className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-widest">
                   Admin Access Required
                 </p>
-                <p className="text-xs text-slate-600 text-center max-w-xs">
+                <p className="text-xs text-[var(--text-muted)] text-center max-w-xs">
                   This KPI is restricted to administrator accounts. Contact your
                   admin for access.
                 </p>
@@ -1329,22 +1334,22 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-5 mb-6"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
+                    background: "rgba(0,0,0,0.02)",
                     border: `1px solid ${accent}30`,
                   }}
                 >
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">
-                    🔒 Seal Forensic Snapshot
+                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
+                    🔒 Save Decision Snapshot
                   </p>
                   <div className="flex gap-3">
                     <input
                       value={sealLabel}
                       onChange={(e) => setSealLabel(e.target.value)}
                       placeholder="Decision label (e.g. 'Launched EU Campaign')"
-                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 outline-none"
+                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none"
                       style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(0,0,0,0.04)",
+                        border: "1px solid rgba(0,0,0,0.08)",
                       }}
                       onKeyDown={(e) => e.key === "Enter" && handleSeal()}
                     />
@@ -1354,22 +1359,22 @@ export default function WorkspaceClient({
                       className="px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
                       style={{
                         background: sealSuccess
-                          ? "#10b981"
+                          ? "var(--success)"
                           : sealing
                             ? `${accent}40`
                             : accent,
-                        color: "#000",
+                        color: "#FFFFFF",
                         opacity: !sealLabel.trim() ? 0.4 : 1,
                       }}
                     >
                       {sealSuccess
-                        ? "✓ Sealed"
+                        ? "✓ Saved"
                         : sealing
-                          ? "Sealing..."
-                          : "Seal Snapshot"}
+                          ? "Saving..."
+                          : "Save Snapshot"}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-600 mt-2">
+                  <p className="text-xs text-[var(--text-muted)] mt-2">
                     Captures: internal metrics + market conditions + AI advice →
                     SHA-256 hash
                   </p>
@@ -1378,8 +1383,8 @@ export default function WorkspaceClient({
               {snapshots.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                   <p className="text-4xl">🔒</p>
-                  <p className="text-slate-500 text-sm">
-                    No forensic snapshots sealed yet.
+                  <p className="text-[var(--text-secondary)] text-sm">
+                    No snapshots saved yet.
                   </p>
                 </div>
               ) : (
@@ -1392,16 +1397,16 @@ export default function WorkspaceClient({
                       transition={{ delay: i * 0.05 }}
                       className="rounded-xl p-4"
                       style={{
-                        background: "rgba(255,255,255,0.025)",
-                        border: "1px solid rgba(255,255,255,0.07)",
+                        background: "rgba(0,0,0,0.025)",
+                        border: "1px solid rgba(0,0,0,0.07)",
                       }}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="text-sm font-bold text-white">
+                          <p className="text-sm font-bold text-[var(--text-primary)]">
                             {snap.label}
                           </p>
-                          <p className="text-xs text-slate-600 mt-0.5">
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
                             {new Date(snap.created_at).toLocaleDateString(
                               "en-US",
                               {
@@ -1433,10 +1438,12 @@ export default function WorkspaceClient({
                           <div
                             key={m.label}
                             className="text-center p-2 rounded"
-                            style={{ background: "rgba(255,255,255,0.03)" }}
+                            style={{ background: "rgba(0,0,0,0.03)" }}
                           >
-                            <p className="text-xs text-slate-500">{m.label}</p>
-                            <p className="text-sm font-bold text-white">
+                            <p className="text-xs text-[var(--text-secondary)]">
+                              {m.label}
+                            </p>
+                            <p className="text-sm font-bold text-[var(--text-primary)]">
                               {m.value}
                             </p>
                           </div>
@@ -1444,20 +1451,22 @@ export default function WorkspaceClient({
                       </div>
                       <div
                         className="p-3 rounded-lg mb-3"
-                        style={{ background: "rgba(255,255,255,0.03)" }}
+                        style={{ background: "rgba(0,0,0,0.03)" }}
                       >
-                        <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">
+                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-3">
                           {snap.ai_advice}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <div
-                          className="flex-1 px-2 py-1 rounded font-mono text-xs text-slate-600 truncate"
+                          className="flex-1 px-2 py-1 rounded font-mono text-xs text-[var(--text-muted)] truncate"
                           style={{ background: "rgba(0,0,0,0.3)" }}
                         >
                           #{snap.hash.slice(0, 20)}...
                         </div>
-                        <span className="text-green-500 text-xs">✓ SEALED</span>
+                        <span className="text-[var(--success)] text-xs">
+                          ✓ SAVED
+                        </span>
                       </div>
                     </motion.div>
                   ))}
@@ -1478,18 +1487,18 @@ export default function WorkspaceClient({
               <div
                 className="rounded-xl p-5"
                 style={{
-                  background: "rgba(255,255,255,0.02)",
+                  background: "rgba(0,0,0,0.02)",
                   border: `1px solid ${accent}30`,
                 }}
               >
-                <p className="text-xs text-slate-500 uppercase tracking-widest mb-5">
+                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-5">
                   🔥 Macro Shock Simulator
                 </p>
                 <div className="space-y-5">
                   {SHOCK_PRESETS.map((preset) => (
                     <div key={preset.key}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-slate-300">
+                        <span className="text-sm text-[var(--text-secondary)]">
                           {preset.icon} {preset.label}
                         </span>
                         <span
@@ -1498,9 +1507,11 @@ export default function WorkspaceClient({
                             background:
                               shocks[preset.key] !== 0
                                 ? `${accent}20`
-                                : "rgba(255,255,255,0.05)",
+                                : "rgba(0,0,0,0.05)",
                             color:
-                              shocks[preset.key] !== 0 ? accent : "#475569",
+                              shocks[preset.key] !== 0
+                                ? accent
+                                : "var(--text-muted)",
                           }}
                         >
                           {shocks[preset.key] > 0 ? "+" : ""}
@@ -1538,11 +1549,11 @@ export default function WorkspaceClient({
                     background: simLoading
                       ? `${accent}40`
                       : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                    color: "#000",
+                    color: "#FFFFFF",
                     boxShadow: simLoading ? "none" : `0 4px 20px ${accent}40`,
                   }}
                 >
-                  {simLoading ? "⟳ Forging Scenario..." : "⚡ Run Simulation"}
+                  {simLoading ? "⟳ Running Simulation..." : "⚡ Run Simulation"}
                 </button>
                 <button
                   onClick={() => {
@@ -1555,7 +1566,7 @@ export default function WorkspaceClient({
                     });
                     setSimulation(null);
                   }}
-                  className="w-full mt-2 py-2 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+                  className="w-full mt-2 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   Reset All Shocks
                 </button>
@@ -1564,17 +1575,17 @@ export default function WorkspaceClient({
               <div
                 className="rounded-xl p-5"
                 style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "rgba(0,0,0,0.02)",
+                  border: "1px solid rgba(0,0,0,0.06)",
                 }}
               >
-                <p className="text-xs text-slate-500 uppercase tracking-widest mb-5">
+                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-5">
                   📊 Projected Impact
                 </p>
                 {!simulation && !simLoading && (
                   <div className="flex flex-col items-center justify-center py-20 gap-3">
                     <p className="text-4xl">🔮</p>
-                    <p className="text-slate-500 text-sm text-center">
+                    <p className="text-[var(--text-secondary)] text-sm text-center">
                       Apply shocks and run simulation
                     </p>
                   </div>
@@ -1585,7 +1596,7 @@ export default function WorkspaceClient({
                       className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
                       style={{ borderColor: accent }}
                     />
-                    <p className="text-slate-500 text-sm">
+                    <p className="text-[var(--text-secondary)] text-sm">
                       AI projecting scenario...
                     </p>
                   </div>
@@ -1597,9 +1608,11 @@ export default function WorkspaceClient({
                     className="space-y-4"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-400">Risk Level</span>
+                      <span className="text-sm text-[var(--text-secondary)]">
+                        Risk Level
+                      </span>
                       <span
-                        className="text-sm font-black px-3 py-1 rounded font-mono"
+                        className="text-sm font-bold px-3 py-1 rounded font-mono"
                         style={{
                           background: `${riskLevelColor(simulation.risk_level)}20`,
                           color: riskLevelColor(simulation.risk_level),
@@ -1630,15 +1643,18 @@ export default function WorkspaceClient({
                         <div
                           key={m.label}
                           className="p-3 rounded-lg text-center"
-                          style={{ background: "rgba(255,255,255,0.03)" }}
+                          style={{ background: "rgba(0,0,0,0.03)" }}
                         >
-                          <p className="text-xs text-slate-500 mb-1">
+                          <p className="text-xs text-[var(--text-secondary)] mb-1">
                             {m.label}
                           </p>
                           <p
-                            className="text-xl font-black"
+                            className="text-xl font-bold"
                             style={{
-                              color: m.value >= 0 ? "#10b981" : "#f43f5e",
+                              color:
+                                m.value >= 0
+                                  ? "var(--success)"
+                                  : "var(--danger)",
                             }}
                           >
                             {m.value >= 0 ? "+" : ""}
@@ -1650,26 +1666,26 @@ export default function WorkspaceClient({
                     </div>
                     <div
                       className="flex items-center justify-between p-3 rounded-lg"
-                      style={{ background: "rgba(255,255,255,0.03)" }}
+                      style={{ background: "rgba(0,0,0,0.03)" }}
                     >
-                      <span className="text-sm text-slate-400">
+                      <span className="text-sm text-[var(--text-secondary)]">
                         Projected Runway
                       </span>
-                      <span className="text-sm font-bold text-white">
+                      <span className="text-sm font-bold text-[var(--text-primary)]">
                         {simulation.runway_months} months
                       </span>
                     </div>
                     <div
                       className="p-4 rounded-lg"
                       style={{
-                        background: "rgba(255,255,255,0.03)",
+                        background: "rgba(0,0,0,0.03)",
                         border: `1px solid ${accent}20`,
                       }}
                     >
-                      <p className="text-xs text-slate-500 mb-2 font-bold">
+                      <p className="text-xs text-[var(--text-secondary)] mb-2 font-bold">
                         EXECUTIVE SUMMARY
                       </p>
-                      <p className="text-xs text-slate-300 leading-relaxed">
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                         {simulation.summary}
                       </p>
                     </div>
@@ -1681,13 +1697,13 @@ export default function WorkspaceClient({
                       }}
                     >
                       <p
-                        className="text-xs font-black mb-2"
+                        className="text-xs font-bold mb-2"
                         style={{ color: accent }}
                       >
-                        ⚔️ COUNTER-FORGE STRATEGY
+                        RECOMMENDED ACTION
                       </p>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        {simulation.counter_forge}
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                        {simulation.recommended_action}
                       </p>
                     </div>
                   </motion.div>
@@ -1708,11 +1724,11 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-5 mb-6"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
+                    background: "rgba(0,0,0,0.02)",
                     border: `1px solid ${accent}30`,
                   }}
                 >
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">
+                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
                     🗺️ Register Business Node
                   </p>
                   <div className="flex gap-3">
@@ -1722,10 +1738,10 @@ export default function WorkspaceClient({
                         setNewEntity((p) => ({ ...p, name: e.target.value }))
                       }
                       placeholder="Entity name (e.g. Product A, EU Region)"
-                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 outline-none"
+                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none"
                       style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(0,0,0,0.04)",
+                        border: "1px solid rgba(0,0,0,0.08)",
                       }}
                     />
                     <select
@@ -1733,17 +1749,17 @@ export default function WorkspaceClient({
                       onChange={(e) =>
                         setNewEntity((p) => ({ ...p, type: e.target.value }))
                       }
-                      className="px-3 py-2.5 rounded-lg text-sm text-white outline-none"
+                      className="px-3 py-2.5 rounded-lg text-sm text-[var(--text-primary)] outline-none"
                       style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(0,0,0,0.04)",
+                        border: "1px solid rgba(0,0,0,0.08)",
                       }}
                     >
                       {["product", "region", "tier", "custom"].map((t) => (
                         <option
                           key={t}
                           value={t}
-                          style={{ background: "#080f1e" }}
+                          style={{ background: "var(--bg-surface)" }}
                         >
                           {t.charAt(0).toUpperCase() + t.slice(1)}
                         </option>
@@ -1755,7 +1771,7 @@ export default function WorkspaceClient({
                       className="px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
                       style={{
                         background: addingEntity ? `${accent}40` : accent,
-                        color: "#000",
+                        color: "#FFFFFF",
                         opacity: !newEntity.name.trim() ? 0.4 : 1,
                       }}
                     >
@@ -1768,7 +1784,7 @@ export default function WorkspaceClient({
               {entities.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                   <p className="text-4xl">🗺️</p>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-[var(--text-secondary)] text-sm">
                     No business nodes registered.
                   </p>
                 </div>
@@ -1784,23 +1800,23 @@ export default function WorkspaceClient({
                         transition={{ delay: i * 0.05 }}
                         className="rounded-xl p-4"
                         style={{
-                          background: "rgba(255,255,255,0.025)",
-                          border: "1px solid rgba(255,255,255,0.07)",
+                          background: "rgba(0,0,0,0.025)",
+                          border: "1px solid rgba(0,0,0,0.07)",
                         }}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <p className="text-sm font-bold text-white">
+                            <p className="text-sm font-bold text-[var(--text-primary)]">
                               {entity.name}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5 capitalize">
+                            <p className="text-xs text-[var(--text-secondary)] mt-0.5 capitalize">
                               {entity.type}
                             </p>
                           </div>
                           {!isReadOnly && (
                             <button
                               onClick={() => deleteEntity(entity.id)}
-                              className="text-slate-700 hover:text-rose-500 text-xs transition-colors"
+                              className="text-[var(--text-muted)] hover:text-[var(--danger)] text-xs transition-colors"
                             >
                               ✕
                             </button>
@@ -1808,16 +1824,16 @@ export default function WorkspaceClient({
                         </div>
                         <div className="mb-3">
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-[var(--text-secondary)]">
                               Market Sensitivity
                             </span>
                             {scoringId === entity.id ? (
-                              <span className="text-xs text-slate-600">
+                              <span className="text-xs text-[var(--text-muted)]">
                                 Scoring...
                               </span>
                             ) : (
                               <span
-                                className="text-sm font-black"
+                                className="text-sm font-bold"
                                 style={{ color: sensitivityColor(score) }}
                               >
                                 {score.toFixed(0)}
@@ -1826,7 +1842,7 @@ export default function WorkspaceClient({
                           </div>
                           <div
                             className="h-1.5 rounded-full overflow-hidden"
-                            style={{ background: "rgba(255,255,255,0.06)" }}
+                            style={{ background: "rgba(0,0,0,0.06)" }}
                           >
                             <motion.div
                               initial={{ width: 0 }}
@@ -1836,7 +1852,7 @@ export default function WorkspaceClient({
                               style={{ background: sensitivityColor(score) }}
                             />
                           </div>
-                          <div className="flex justify-between text-xs text-slate-700 mt-1">
+                          <div className="flex justify-between text-xs text-[var(--text-muted)] mt-1">
                             <span>Resilient</span>
                             <span>Volatile</span>
                           </div>
@@ -1847,9 +1863,9 @@ export default function WorkspaceClient({
                             disabled={scoringId === entity.id}
                             className="w-full py-1.5 rounded text-xs font-bold transition-all"
                             style={{
-                              background: "rgba(255,255,255,0.04)",
-                              border: "1px solid rgba(255,255,255,0.08)",
-                              color: "#94a3b8",
+                              background: "rgba(0,0,0,0.04)",
+                              border: "1px solid rgba(0,0,0,0.08)",
+                              color: "var(--text-muted)",
                             }}
                           >
                             {scoringId === entity.id
@@ -1871,7 +1887,7 @@ export default function WorkspaceClient({
                   transition={{ delay: 0.2 }}
                   className="mt-8 rounded-xl p-5"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
+                    background: "rgba(0,0,0,0.02)",
                     border: `1px solid ${accent}30`,
                     boxShadow: `0 0 40px ${accent}08`,
                   }}
@@ -1884,14 +1900,14 @@ export default function WorkspaceClient({
                           className="w-1.5 h-1.5 rounded-full animate-pulse"
                           style={{ background: accent }}
                         />
-                        <p className="text-xs text-slate-500 uppercase tracking-widest">
-                          ⚡ Node Vault
+                        <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest">
+                          ⚡ Portfolio Projection
                         </p>
                       </div>
-                      <p className="text-sm font-bold text-white">
-                        Asset Performance Engine
+                      <p className="text-sm font-bold text-[var(--text-primary)]">
+                        Growth Projection
                       </p>
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         Compounded growth · equity coefficient model
                       </p>
                     </div>
@@ -1904,9 +1920,9 @@ export default function WorkspaceClient({
                           border: `1px solid ${accent}40`,
                         }}
                       >
-                        LIVE · EQUITY MODEL
+                        PROJECTED MODEL
                       </span>
-                      <span className="text-xs text-slate-600">
+                      <span className="text-xs text-[var(--text-muted)]">
                         {entities.length} node{entities.length !== 1 ? "s" : ""}{" "}
                         tracked
                       </span>
@@ -1942,13 +1958,13 @@ export default function WorkspaceClient({
                       <CartesianGrid
                         strokeDasharray="3 3"
                         vertical={false}
-                        stroke="rgba(255,255,255,0.04)"
+                        stroke="rgba(0,0,0,0.04)"
                       />
                       <XAxis
                         dataKey="month"
                         tick={{
                           fontSize: 9,
-                          fill: "#475569",
+                          fill: "var(--text-muted)",
                           fontFamily: "monospace",
                         }}
                         axisLine={false}
@@ -1957,7 +1973,7 @@ export default function WorkspaceClient({
                       <YAxis
                         tick={{
                           fontSize: 9,
-                          fill: "#475569",
+                          fill: "var(--text-muted)",
                           fontFamily: "monospace",
                         }}
                         axisLine={false}
@@ -1966,12 +1982,12 @@ export default function WorkspaceClient({
                       />
                       <Tooltip
                         contentStyle={{
-                          background: "#080f1e",
+                          background: "var(--bg-surface)",
                           border: `1px solid ${accent}40`,
                           borderRadius: 8,
                           fontSize: 11,
                           fontFamily: "monospace",
-                          color: "#e2e8f0",
+                          color: "var(--text-primary)",
                         }}
                         formatter={(v: number) => [
                           `$${v.toLocaleString()}`,
@@ -1980,13 +1996,13 @@ export default function WorkspaceClient({
                       />
                       <ReferenceLine
                         y={mrr}
-                        stroke="#10b981"
+                        stroke="var(--success)"
                         strokeDasharray="4 4"
                         strokeOpacity={0.5}
                         label={{
                           value: "BASE MRR",
                           position: "insideTopLeft",
-                          fill: "#10b981",
+                          fill: "var(--success)",
                           fontSize: 8,
                           fontFamily: "monospace",
                         }}
@@ -2005,7 +2021,7 @@ export default function WorkspaceClient({
 
                   {/* Per-node breakdown */}
                   <div className="mt-5">
-                    <p className="text-xs text-slate-600 uppercase tracking-widest mb-3">
+                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">
                       6-Month Node Projections
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2023,21 +2039,21 @@ export default function WorkspaceClient({
                             key={entity.id}
                             className="flex items-center justify-between p-3 rounded-lg"
                             style={{
-                              background: "rgba(255,255,255,0.03)",
-                              border: "1px solid rgba(255,255,255,0.06)",
+                              background: "rgba(0,0,0,0.03)",
+                              border: "1px solid rgba(0,0,0,0.06)",
                             }}
                           >
                             <div>
-                              <p className="text-xs font-bold text-white">
+                              <p className="text-xs font-bold text-[var(--text-primary)]">
                                 {entity.name}
                               </p>
-                              <p className="text-xs text-slate-500 capitalize mt-0.5">
+                              <p className="text-xs text-[var(--text-secondary)] capitalize mt-0.5">
                                 {entity.type} · coeff {coeff.toFixed(2)}x
                               </p>
                             </div>
                             <div className="text-right">
                               <p
-                                className="text-sm font-black tabular-nums"
+                                className="text-sm font-bold tabular-nums"
                                 style={{
                                   color: accent,
                                   fontFamily: "monospace",
@@ -2047,7 +2063,7 @@ export default function WorkspaceClient({
                               </p>
                               <p
                                 className="text-xs font-bold mt-0.5"
-                                style={{ color: "#10b981" }}
+                                style={{ color: "var(--success)" }}
                               >
                                 +{growth}%
                               </p>
@@ -2057,7 +2073,7 @@ export default function WorkspaceClient({
                       })}
                     </div>
                     {entities.length > 4 && (
-                      <p className="text-xs text-slate-600 text-center mt-3">
+                      <p className="text-xs text-[var(--text-muted)] text-center mt-3">
                         +{entities.length - 4} more nodes tracked
                       </p>
                     )}
@@ -2072,15 +2088,15 @@ export default function WorkspaceClient({
                     }}
                   >
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-widest">
+                      <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest">
                         Total Portfolio · 6mo
                       </p>
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         Compounded across all {entities.length} nodes
                       </p>
                     </div>
                     <p
-                      className="text-2xl font-black tabular-nums"
+                      className="text-2xl font-bold tabular-nums"
                       style={{ color: accent, fontFamily: "monospace" }}
                     >
                       $
@@ -2116,11 +2132,11 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-5"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
+                    background: "rgba(0,0,0,0.02)",
                     border: `1px solid ${accent}30`,
                   }}
                 >
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">
+                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-4">
                     🎯 Consultant Persona
                   </p>
                   <div className="grid grid-cols-3 gap-3">
@@ -2152,8 +2168,8 @@ export default function WorkspaceClient({
                           background:
                             persona === p.id
                               ? `${accent}15`
-                              : "rgba(255,255,255,0.03)",
-                          border: `1px solid ${persona === p.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
+                              : "rgba(0,0,0,0.03)",
+                          border: `1px solid ${persona === p.id ? accent + "60" : "rgba(0,0,0,0.06)"}`,
                           boxShadow:
                             persona === p.id ? `0 0 20px ${accent}15` : "none",
                           cursor: isReadOnly ? "not-allowed" : "pointer",
@@ -2163,12 +2179,15 @@ export default function WorkspaceClient({
                         <p
                           className="text-xs font-bold mb-1"
                           style={{
-                            color: persona === p.id ? accent : "#94a3b8",
+                            color:
+                              persona === p.id ? accent : "var(--text-muted)",
                           }}
                         >
                           {p.label}
                         </p>
-                        <p className="text-xs text-slate-600">{p.desc}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {p.desc}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -2177,23 +2196,23 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-5"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(0,0,0,0.02)",
+                    border: "1px solid rgba(0,0,0,0.06)",
                   }}
                 >
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-4">
+                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-4">
                     📅 Briefing Frequency
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       {
                         id: "daily",
-                        label: "Daily Forensic Summary",
+                        label: "Daily Summary",
                         icon: "📆",
                       },
                       {
                         id: "weekly",
-                        label: "Weekly Intelligence Report",
+                        label: "Weekly Summary",
                         icon: "📋",
                       },
                     ].map((f) => (
@@ -2205,8 +2224,8 @@ export default function WorkspaceClient({
                           background:
                             frequency === f.id
                               ? `${accent}15`
-                              : "rgba(255,255,255,0.03)",
-                          border: `1px solid ${frequency === f.id ? accent + "60" : "rgba(255,255,255,0.06)"}`,
+                              : "rgba(0,0,0,0.03)",
+                          border: `1px solid ${frequency === f.id ? accent + "60" : "rgba(0,0,0,0.06)"}`,
                           cursor: isReadOnly ? "not-allowed" : "pointer",
                         }}
                       >
@@ -2214,7 +2233,8 @@ export default function WorkspaceClient({
                         <p
                           className="text-sm font-bold"
                           style={{
-                            color: frequency === f.id ? accent : "#94a3b8",
+                            color:
+                              frequency === f.id ? accent : "var(--text-muted)",
                           }}
                         >
                           {f.label}
@@ -2231,7 +2251,7 @@ export default function WorkspaceClient({
                     border: `1px solid ${accent}25`,
                   }}
                 >
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">
+                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
                     Preview — Current Config
                   </p>
                   <div className="space-y-2">
@@ -2261,10 +2281,10 @@ export default function WorkspaceClient({
                         key={row.label}
                         className="flex items-center justify-between"
                       >
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-[var(--text-secondary)]">
                           {row.label}
                         </span>
-                        <span className="text-xs font-bold text-white">
+                        <span className="text-xs font-bold text-[var(--text-primary)]">
                           {row.value}
                         </span>
                       </div>
@@ -2279,11 +2299,11 @@ export default function WorkspaceClient({
                     className="w-full py-3 rounded-xl font-bold text-sm transition-all"
                     style={{
                       background: settingsSaved
-                        ? "#10b981"
+                        ? "var(--success)"
                         : savingSettings
                           ? `${accent}40`
                           : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                      color: "#000",
+                      color: "#FFFFFF",
                       boxShadow:
                         settingsSaved || savingSettings
                           ? "none"
@@ -2310,7 +2330,6 @@ export default function WorkspaceClient({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               className="space-y-6"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
               {/* Header */}
               <div className="flex items-center gap-3 mb-2">
@@ -2322,12 +2341,12 @@ export default function WorkspaceClient({
                 />
                 <div>
                   <h2
-                    className="text-xl font-black tracking-tight"
+                    className="text-xl font-bold tracking-tight"
                     style={{ color: accent }}
                   >
-                    NODE FORGE TERMINAL
+                    Add Entity
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     Deploy a new asset node into your active registry.
                   </p>
                 </div>
@@ -2338,12 +2357,12 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-6 space-y-5"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
+                    background: "rgba(0,0,0,0.02)",
                     border: `1px solid ${accent}40`,
                     boxShadow: `0 0 40px ${accent}08`,
                   }}
                 >
-                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
                     ⚡ Asset Configuration
                   </p>
 
@@ -2356,7 +2375,7 @@ export default function WorkspaceClient({
                     }}
                   >
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
                         Node Identifier
                       </label>
                       <input
@@ -2365,21 +2384,21 @@ export default function WorkspaceClient({
                           setNewEntity((p) => ({ ...p, name: e.target.value }))
                         }
                         placeholder="e.g., Alpha-Node-01"
-                        className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-slate-600 outline-none transition-all"
+                        className="w-full px-4 py-3 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all"
                         style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border: `1px solid ${newEntity.name ? accent + "40" : "rgba(255,255,255,0.08)"}`,
+                          background: "rgba(0,0,0,0.04)",
+                          border: `1px solid ${newEntity.name ? accent + "40" : "rgba(0,0,0,0.08)"}`,
                         }}
                       />
                     </div>
 
                     {/* Base Valuation */}
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
                         Base Valuation Capital
                       </label>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-black">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] text-sm font-bold">
                           $
                         </span>
                         <input
@@ -2388,10 +2407,10 @@ export default function WorkspaceClient({
                           value={forgeBaseValue}
                           onChange={(e) => setForgeBaseValue(e.target.value)}
                           placeholder="Enter allocation capital..."
-                          className="w-full pl-8 pr-4 py-3 rounded-lg text-sm text-white placeholder-slate-600 outline-none transition-all"
+                          className="w-full pl-8 pr-4 py-3 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all"
                           style={{
-                            background: "rgba(255,255,255,0.04)",
-                            border: `1px solid ${forgeBaseValue ? accent + "40" : "rgba(255,255,255,0.08)"}`,
+                            background: "rgba(0,0,0,0.04)",
+                            border: `1px solid ${forgeBaseValue ? accent + "40" : "rgba(0,0,0,0.08)"}`,
                           }}
                         />
                       </div>
@@ -2399,7 +2418,7 @@ export default function WorkspaceClient({
 
                     {/* Node Type */}
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
                         Node Type
                       </label>
                       <select
@@ -2407,17 +2426,17 @@ export default function WorkspaceClient({
                         onChange={(e) =>
                           setNewEntity((p) => ({ ...p, type: e.target.value }))
                         }
-                        className="w-full px-4 py-3 rounded-lg text-sm text-white outline-none transition-all"
+                        className="w-full px-4 py-3 rounded-lg text-sm text-[var(--text-primary)] outline-none transition-all"
                         style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(0,0,0,0.04)",
+                          border: "1px solid rgba(0,0,0,0.08)",
                         }}
                       >
                         {["product", "region", "tier", "custom"].map((t) => (
                           <option
                             key={t}
                             value={t}
-                            style={{ background: "#080f1e" }}
+                            style={{ background: "var(--bg-surface)" }}
                           >
                             {t.charAt(0).toUpperCase() + t.slice(1)}
                           </option>
@@ -2433,12 +2452,12 @@ export default function WorkspaceClient({
                         !newEntity.name.trim() ||
                         !forgeBaseValue
                       }
-                      className="w-full py-4 rounded-lg text-sm font-black tracking-widest uppercase transition-all"
+                      className="w-full py-4 rounded-lg text-sm font-bold tracking-widest uppercase transition-all"
                       style={{
                         background: addingEntity
                           ? `${accent}30`
                           : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                        color: "#000",
+                        color: "#FFFFFF",
                         boxShadow: addingEntity
                           ? "none"
                           : `0 4px 24px ${accent}40`,
@@ -2447,9 +2466,7 @@ export default function WorkspaceClient({
                         letterSpacing: "0.15em",
                       }}
                     >
-                      {addingEntity
-                        ? "⟳ Forging Node..."
-                        : "[ FORGE NODE ASSET ]"}
+                      {addingEntity ? "Adding..." : "Add Entity"}
                     </button>
                   </form>
                 </div>
@@ -2458,18 +2475,18 @@ export default function WorkspaceClient({
                 <div
                   className="rounded-xl p-6 space-y-4"
                   style={{
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(0,0,0,0.02)",
+                    border: "1px solid rgba(0,0,0,0.06)",
                   }}
                 >
-                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
                     📡 Active Node Registry
                   </p>
                   {entities.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-3">
                       <p className="text-3xl">🔩</p>
-                      <p className="text-xs text-slate-600">
-                        No nodes forged yet.
+                      <p className="text-xs text-[var(--text-muted)]">
+                        No entities added yet.
                       </p>
                     </div>
                   ) : (
@@ -2482,26 +2499,26 @@ export default function WorkspaceClient({
                           transition={{ delay: i * 0.05 }}
                           className="flex items-center justify-between p-3 rounded-lg"
                           style={{
-                            background: "rgba(255,255,255,0.03)",
+                            background: "rgba(0,0,0,0.03)",
                             border: `1px solid ${accent}20`,
                           }}
                         >
                           <div>
-                            <p className="text-xs font-black text-white">
+                            <p className="text-xs font-bold text-[var(--text-primary)]">
                               {e.name}
                             </p>
-                            <p className="text-[9px] text-slate-500 capitalize mt-0.5">
+                            <p className="text-[9px] text-[var(--text-secondary)] capitalize mt-0.5">
                               {e.type}
                             </p>
                           </div>
                           <div className="text-right">
                             <p
-                              className="text-sm font-black tabular-nums"
+                              className="text-sm font-bold tabular-nums"
                               style={{ color: accent }}
                             >
                               ${(e.base_value ?? 0).toLocaleString()}
                             </p>
-                            <p className="text-[9px] text-slate-600 mt-0.5">
+                            <p className="text-[9px] text-[var(--text-muted)] mt-0.5">
                               score {e.sensitivity_score ?? "—"}
                             </p>
                           </div>
@@ -2513,11 +2530,11 @@ export default function WorkspaceClient({
                   {/* Portfolio total */}
                   {entities.length > 0 && (
                     <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between">
-                      <span className="text-[9px] text-slate-500 uppercase tracking-widest">
+                      <span className="text-[9px] text-[var(--text-secondary)] uppercase tracking-widest">
                         Total Portfolio
                       </span>
                       <span
-                        className="text-lg font-black tabular-nums"
+                        className="text-lg font-bold tabular-nums"
                         style={{ color: accent }}
                       >
                         $
