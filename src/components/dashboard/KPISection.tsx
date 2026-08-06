@@ -45,8 +45,8 @@ interface KPICardProps {
   prefix?: string;
   suffix?: string;
   isFloat?: boolean;
-  change: number;
-  trend: "up" | "down";
+  change?: number;
+  trend?: "up" | "down";
   icon: React.ElementType;
   delay?: number;
   slug: string;
@@ -99,19 +99,23 @@ const KPICard: React.FC<KPICardProps> = ({
         >
           <Icon className="w-4 h-4" style={{ color: "var(--accent)" }} />
         </div>
-        <div
-          className={cn(
-            "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-medium",
-          )}
-          style={{ color: trend === "up" ? "var(--success)" : "var(--danger)" }}
-        >
-          {trend === "up" ? (
-            <ArrowUpRight size={11} />
-          ) : (
-            <ArrowDownRight size={11} />
-          )}
-          {Math.abs(change).toFixed(1)}%
-        </div>
+        {change !== undefined && trend && (
+          <div
+            className={cn(
+              "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-medium",
+            )}
+            style={{
+              color: trend === "up" ? "var(--success)" : "var(--danger)",
+            }}
+          >
+            {trend === "up" ? (
+              <ArrowUpRight size={11} />
+            ) : (
+              <ArrowDownRight size={11} />
+            )}
+            {Math.abs(change).toFixed(1)}%
+          </div>
+        )}
       </div>
       <p
         className="text-[12px] mb-1"
@@ -134,11 +138,13 @@ interface KPISectionProps {
   stats: DashboardStats;
   allowedSlugs?: string[];
   onCardClick?: (slug: string) => void;
+  revenueChangePct?: number;
 }
 export const KPISection: React.FC<KPISectionProps> = ({
   stats,
   allowedSlugs,
   onCardClick,
+  revenueChangePct,
 }) => {
   if (!stats)
     return (
@@ -155,8 +161,12 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.totalRevenue,
       displayValue: `$${stats.totalRevenue}`,
       icon: DollarSign,
-      change: 12.5,
-      trend: "up" as const,
+      ...(revenueChangePct !== undefined && revenueChangePct !== 0
+        ? {
+            change: revenueChangePct,
+            trend: revenueChangePct >= 0 ? ("up" as const) : ("down" as const),
+          }
+        : {}),
     },
     {
       title: "Total Profit",
@@ -164,8 +174,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.totalProfit,
       displayValue: `$${stats.totalProfit}`,
       icon: Briefcase,
-      change: 8.2,
-      trend: "up" as const,
     },
     {
       title: "Profit Margin",
@@ -175,8 +183,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       suffix: "%",
       isFloat: true,
       icon: Percent,
-      change: 2.1,
-      trend: "down" as const,
     },
     {
       title: "Total Orders",
@@ -184,8 +190,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.totalOrders,
       displayValue: `${stats.totalOrders}`,
       icon: ShoppingCart,
-      change: 14.7,
-      trend: "up" as const,
     },
     {
       title: "Active Users",
@@ -193,8 +197,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.activeUsers,
       displayValue: `${stats.activeUsers}`,
       icon: Users,
-      change: 5.4,
-      trend: "up" as const,
     },
     {
       title: "Churn Rate",
@@ -204,8 +206,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       suffix: "%",
       isFloat: true,
       icon: Activity,
-      change: 0.3,
-      trend: "down" as const,
     },
     {
       title: "Total Asset Value",
@@ -214,8 +214,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       displayValue: `$${stats.totalAssetValue ?? 0}`,
       prefix: "$",
       icon: Database,
-      change: 4.2,
-      trend: "up" as const,
     },
     {
       title: "Market Growth Yield",
@@ -224,8 +222,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       displayValue: `$${stats.marketGrowthYield ?? 0}`,
       prefix: "$",
       icon: TrendingUp,
-      change: 2.8,
-      trend: "up" as const,
     },
     {
       title: "Active Nodes",
@@ -233,8 +229,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.activeNodesCount ?? 0,
       displayValue: `${stats.activeNodesCount ?? 0}`,
       icon: Zap,
-      change: 1.5,
-      trend: "up" as const,
     },
   ];
 

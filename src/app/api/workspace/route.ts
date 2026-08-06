@@ -219,11 +219,6 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { action, userId } = body;
 
-  // Optional: Internal logging for Forensic Audit Trail
-  console.log(
-    `[FORENSIC_AUDIT] Action: ${action} | UserID: ${userId} | Timestamp: ${new Date().toISOString()}`,
-  );
-
   switch (action) {
     case "why-feed":
       return handleWhyFeed(body);

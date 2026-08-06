@@ -151,7 +151,7 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center gap-4"
+            className="fixed inset-0 z-[100] bg-black/70 flex flex-col items-center justify-center gap-4"
           >
             {/* FIX: Dynamic color for logout loader */}
             <Loader2

@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 export default function Error({
   error,
@@ -10,20 +10,21 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // error logged to monitoring service
+    console.error("Unhandled error boundary:", error);
   }, [error]);
-
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-      <h2 className="text-4xl font-bold text-white mb-4">Intelligence Failure</h2>
-      <p className="text-slate-400 mb-8 tracking-tight">
-        An unexpected error occurred while processing the telemetry data.
+      <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4">
+        Something Went Wrong
+      </h2>
+      <p className="text-[var(--text-secondary)] mb-8">
+        An unexpected error occurred. Please try again.
       </p>
       <button
         onClick={() => reset()}
-        className="px-6 py-3 glass bg-sky-500/10 border-sky-500/50 text-sky-400 font-bold uppercase tracking-widest text-xs hover:bg-sky-500/20 transition-all"
+        className="px-6 py-3 rounded-xl bg-[var(--accent)] text-white font-bold text-sm hover:bg-[var(--accent-hover)] transition-all"
       >
-        Reboot Module
+        Try Again
       </button>
     </div>
   );

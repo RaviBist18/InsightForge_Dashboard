@@ -1,10 +1,19 @@
 "use client";
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, TrendingUp, AlertTriangle, Lightbulb, ArrowUpRight, Zap, Target, BarChart3 } from 'lucide-react';
-import { Insight } from '../../data/mockData';
-import { cn } from '../../lib/utils';
+import React from "react";
+import { motion } from "framer-motion";
+import {
+  Sparkles,
+  TrendingUp,
+  AlertTriangle,
+  Lightbulb,
+  ArrowUpRight,
+  Zap,
+  Target,
+  BarChart3,
+} from "lucide-react";
+import { Insight } from "../../data/mockData";
+import { cn } from "../../lib/utils";
 
 interface InsightsPanelProps {
   insights: Insight[];
@@ -12,17 +21,21 @@ interface InsightsPanelProps {
 
 // ─── UTILITY: THE FORGE PARSER ────────────────────────────────
 // This function splits the AI's "Boardroom" response into UI-ready sections.
-const parseAiForge = (description: string) => {
+const parseInsightDescription = (description: string) => {
   const parts = {
     briefing: description,
     marginImpact: "Calculating...",
-    action: "Awaiting strategic pivot..."
+    action: "Awaiting strategic pivot...",
   };
 
   // Logic to catch the "Briefing:", "Margin Impact:", and "Executive Action:" labels
-  if (description.includes('Briefing:')) {
-    const briefingMatch = description.match(/Briefing:\s*(.*?)(?=\s*Margin Impact:|$)/s);
-    const marginMatch = description.match(/Margin Impact:\s*(.*?)(?=\s*Executive Action:|$)/s);
+  if (description.includes("Briefing:")) {
+    const briefingMatch = description.match(
+      /Briefing:\s*(.*?)(?=\s*Margin Impact:|$)/s,
+    );
+    const marginMatch = description.match(
+      /Margin Impact:\s*(.*?)(?=\s*Executive Action:|$)/s,
+    );
     const actionMatch = description.match(/Executive Action:\s*(.*)/s);
 
     if (briefingMatch) parts.briefing = briefingMatch[1].trim();
@@ -35,36 +48,40 @@ const parseAiForge = (description: string) => {
 
 const PRIORITY_CONFIG = {
   critical: {
-    border: 'border-rose-500/30',
-    bg: 'bg-rose-500/[0.04]',
-    glow: '#f43f5e',
-    badge: 'bg-rose-500/15 text-rose-400 border-rose-500/25',
-    dot: 'bg-rose-400',
-    label: 'Critical Forge', // Updated for AI context
+    border: "border-[var(--danger)]/20",
+    bg: "bg-[var(--danger-bg)]",
+    glow: "var(--danger)",
+    badge:
+      "bg-[var(--danger-bg)] text-[var(--danger)] border-[var(--danger)]/20",
+    dot: "bg-[var(--danger)]",
+    label: "Critical",
   },
   high: {
-    border: 'border-sky-500/25',
-    bg: 'bg-sky-500/[0.04]',
-    glow: '#38bdf8',
-    badge: 'bg-sky-500/15 text-sky-400 border-sky-500/25',
-    dot: 'bg-sky-400',
-    label: 'High Priority',
+    border: "border-[var(--accent)]/20",
+    bg: "bg-[var(--accent-subtle)]",
+    glow: "var(--accent)",
+    badge:
+      "bg-[var(--accent-subtle)] text-[var(--accent)] border-[var(--accent)]/20",
+    dot: "bg-[var(--accent)]",
+    label: "High Priority",
   },
   medium: {
-    border: 'border-emerald-500/25',
-    bg: 'bg-emerald-500/[0.04]',
-    glow: '#10b981',
-    badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-    dot: 'bg-emerald-400',
-    label: 'Medium',
+    border: "border-[var(--success)]/20",
+    bg: "bg-[var(--success-bg)]",
+    glow: "var(--success)",
+    badge:
+      "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/20",
+    dot: "bg-[var(--success)]",
+    label: "Medium",
   },
   low: {
-    border: 'border-slate-500/25',
-    bg: 'bg-slate-500/[0.04]',
-    glow: '#64748b',
-    badge: 'bg-slate-500/15 text-slate-400 border-slate-500/25',
-    dot: 'bg-slate-400',
-    label: 'Low',
+    border: "border-[var(--border)]",
+    bg: "bg-[var(--bg-primary)]",
+    glow: "var(--text-muted)",
+    badge:
+      "bg-[var(--bg-primary)] text-[var(--text-muted)] border-[var(--border)]",
+    dot: "bg-[var(--text-muted)]",
+    label: "Low",
   },
 };
 
@@ -79,15 +96,12 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights }) => {
     <div className="mt-6">
       <div className="flex items-center justify-between mb-4 px-1">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-sky-400/10">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+          <div className="p-1.5 rounded-lg bg-[var(--accent-subtle)]">
+            <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
           </div>
-          <h3 className="font-black text-white text-[11px] uppercase tracking-[0.18em]">
-            Strategic Forge Insights
+          <h3 className="font-bold text-[var(--text-primary)] text-xs uppercase tracking-widest">
+            AI Insights
           </h3>
-          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 ml-1 animate-pulse">
-            Live Intelligence
-          </span>
         </div>
       </div>
 
@@ -97,7 +111,7 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights }) => {
           const Icon = TYPE_ICON[insight.type] ?? Lightbulb;
 
           // Apply the parser to the AI-generated description
-          const forgeData = parseAiForge(insight.description);
+          const insightData = parseInsightDescription(insight.description);
 
           return (
             <motion.div
@@ -107,68 +121,80 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights }) => {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.1 }}
               whileHover={{ opacity: 0.8 }}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: "pointer" }}
               className={cn(
-                'relative rounded-2xl border p-5 overflow-hidden group transition-all duration-300',
-                cfg.border, cfg.bg,
-                insight.priority === 'critical' ? 'ring-1 ring-rose-500/20' : ''
+                "relative rounded-xl border p-5 overflow-hidden group transition-all duration-300 bg-[var(--bg-surface)]",
+                cfg.border,
+                insight.priority === "critical"
+                  ? "ring-1 ring-[var(--danger)]/20"
+                  : "",
               )}
             >
-              {/* Cinematic Pulse for Critical Alerts */}
-              {insight.priority === 'critical' && (
-                <div className="absolute inset-0 bg-rose-500/[0.02] animate-pulse pointer-events-none" />
-              )}
-
               <div className="flex items-start justify-between mb-4 relative z-10">
-                <div className="p-2 rounded-xl" style={{ background: `${cfg.glow}18` }}>
+                <div
+                  className="p-2 rounded-xl"
+                  style={{ background: `${cfg.glow}18` }}
+                >
                   <Icon className="w-4 h-4" style={{ color: cfg.glow }} />
                 </div>
-                <div className={cn('flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest', cfg.badge)}>
-                  <div className={cn('w-1 h-1 rounded-full', insight.priority === 'critical' ? 'animate-ping' : '', cfg.dot)} />
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest",
+                    cfg.badge,
+                  )}
+                >
+                  <div className={cn("w-1 h-1 rounded-full", cfg.dot)} />
                   {cfg.label}
                 </div>
               </div>
 
-              <h4 className="font-black text-white text-sm tracking-tight mb-3 relative z-10">
+              <h4 className="font-bold text-[var(--text-primary)] text-sm tracking-tight mb-3 relative z-10">
                 {insight.title}
               </h4>
 
               {/* SECTION 1: THE BRIEFING */}
               <div className="mb-4 relative z-10">
-                <p className="text-[11px] text-slate-300 leading-relaxed italic">
-                  &ldquo;{forgeData.briefing}&rdquo;
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed italic">
+                  &ldquo;{insightData.briefing}&rdquo;
                 </p>
               </div>
 
-              {/* SECTION 2: AI FORGE STATS */}
               <div className="grid grid-cols-2 gap-2 mb-4 relative z-10">
-                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2">
+                <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-2">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <BarChart3 size={10} className="text-sky-400" />
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Margin Impact</span>
+                    <BarChart3 size={10} className="text-[var(--accent)]" />
+                    <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
+                      Margin Impact
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-white">{forgeData.marginImpact}</span>
+                  <span className="text-[10px] font-bold text-[var(--text-primary)]">
+                    {insightData.marginImpact}
+                  </span>
                 </div>
-                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2">
+                <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-2">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Target size={10} className="text-emerald-400" />
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Executive Move</span>
+                    <Target size={10} className="text-[var(--success)]" />
+                    <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
+                      Recommended Move
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-white truncate block">{forgeData.action}</span>
+                  <span className="text-[10px] font-bold text-[var(--text-primary)] truncate block">
+                    {insightData.action}
+                  </span>
                 </div>
               </div>
 
-              {/* SECTION 3: THE ACTION */}
-              <div className="mt-4 pt-3 border-t border-white/[0.05] relative z-10">
+              <div className="mt-4 pt-3 border-t border-[var(--border)] relative z-10">
                 <div className="flex items-center gap-2 mb-2">
-                  <Zap size={10} className="text-sky-400 animate-pulse" />
-                  <span className="text-[9px] font-black text-sky-400 uppercase tracking-widest">Strategic Action</span>
+                  <Zap size={10} className="text-[var(--accent)]" />
+                  <span className="text-[9px] font-bold text-[var(--accent)] uppercase tracking-widest">
+                    Recommended Action
+                  </span>
                 </div>
-                <p className="text-[10px] font-bold text-white leading-tight">
-                  {forgeData.action}
+                <p className="text-[10px] font-bold text-[var(--text-primary)] leading-tight">
+                  {insightData.action}
                 </p>
               </div>
-
             </motion.div>
           );
         })}

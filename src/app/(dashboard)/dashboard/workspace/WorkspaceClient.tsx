@@ -269,6 +269,7 @@ export default function WorkspaceClient({
     setChurn: setCtxChurn,
     setEntityCount,
     setSnapshotCount,
+    mrrTrend,
     setMrrTrend,
     setIsWorkspacePage,
   } = useWorkspace();
@@ -948,6 +949,7 @@ export default function WorkspaceClient({
               <KPISection
                 stats={liveStats}
                 onCardClick={(slug) => setActiveTab(slug as any)}
+                revenueChangePct={isAdmin ? mrrTrend : undefined}
                 allowedSlugs={
                   isAdmin
                     ? [
