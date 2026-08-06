@@ -353,6 +353,10 @@ export default function WorkspaceClient({
 
   // ── FETCH REAL MRR ────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!isAdmin) {
+      setMetricsLoading(false);
+      return;
+    }
     async function fetchMetrics() {
       setMetricsLoading(true);
       try {
@@ -406,7 +410,7 @@ export default function WorkspaceClient({
       }
     }
     fetchMetrics();
-  }, [initialMrr, setMrrTrend]);
+  }, [initialMrr, setMrrTrend, isAdmin]);
 
   function generateMockSparkline(baseMrr: number) {
     return Array.from({ length: 12 }, (_, i) => ({
@@ -510,11 +514,11 @@ export default function WorkspaceClient({
   }, [setIsWorkspacePage]);
 
   useEffect(() => {
-    setCtxMrr(mrr);
-  }, [mrr, setCtxMrr]);
+    if (isAdmin) setCtxMrr(mrr);
+  }, [mrr, isAdmin, setCtxMrr]);
   useEffect(() => {
-    setCtxChurn(churn);
-  }, [churn, setCtxChurn]);
+    if (isAdmin) setCtxChurn(churn);
+  }, [churn, isAdmin, setCtxChurn]);
   useEffect(() => {
     setEntityCount(entities.length);
   }, [entities.length, setEntityCount]);

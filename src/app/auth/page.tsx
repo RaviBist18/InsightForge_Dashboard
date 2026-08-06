@@ -138,6 +138,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -232,15 +233,22 @@ export default function AuthPage() {
         router.push("/");
         router.refresh();
       } else {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const inviteToken =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("invite")
+            : null;
+
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName || undefined,
+              ...(inviteToken ? { invite_token: inviteToken } : {}),
+            },
+          },
+        });
         if (error) throw error;
-        if (data.user) {
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            full_name: email.split("@")[0],
-            role: "user",
-          });
-        }
         if (data.session) {
           router.push("/");
           router.refresh();
@@ -460,6 +468,17 @@ export default function AuthPage() {
                     <Divider label="or" />
 
                     <form onSubmit={handleSubmit} className="space-y-4">
+                      {mode === "signup" && (
+                        <InputField
+                          id="fullName"
+                          label="Full Name"
+                          type="text"
+                          value={fullName}
+                          onChange={setFullName}
+                          placeholder="Enter your full name"
+                          autoComplete="name"
+                        />
+                      )}
                       <InputField
                         id="email"
                         label="Email"

@@ -15,6 +15,9 @@ import {
   Eye,
   Lock,
   AlertTriangle,
+  UserPlus,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -72,6 +75,239 @@ function ReadOnlyBar() {
         Read-Only Mode — Viewing as Another User
       </span>
       <AlertTriangle size={13} style={{ color: "var(--warning)" }} />
+    </motion.div>
+  );
+}
+
+function InviteModal({
+  onClose,
+  onInvited,
+}: {
+  onClose: () => void;
+  onInvited: (msg: string, type: "success" | "error") => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "user">("user");
+  const [loading, setLoading] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCreate = async () => {
+    if (!email.includes("@")) {
+      onInvited("Enter a valid email address", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: membership } = await supabase
+        .from("memberships")
+        .select("company_id, companies(name)")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (!membership?.company_id) throw new Error("No company found");
+
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          role,
+          companyId: membership.company_id,
+          invitedBy: user.id,
+          companyName: (membership as any).companies?.name,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send invite");
+
+      setLink(data.link);
+    } catch (err: any) {
+      onInvited(err.message || "Failed to create invite", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!link) return;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.5)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border p-6"
+        style={{
+          background: "var(--bg-surface)",
+          borderColor: "var(--border)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "var(--accent-subtle)" }}
+            >
+              <UserPlus size={15} style={{ color: "var(--accent)" }} />
+            </div>
+            <h2
+              className="text-[15px] font-semibold"
+              style={{ color: "var(--text-primary)" }}
+            >
+              Invite Teammate
+            </h2>
+          </div>
+          <button onClick={onClose} style={{ color: "var(--text-muted)" }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {!link ? (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label
+                className="block text-[12px] font-medium"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Email
+              </label>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="teammate@company.com"
+                className="w-full px-4 py-2.5 rounded-xl text-[13px] focus:outline-none"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-primary)",
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label
+                className="block text-[12px] font-medium"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Role
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as "admin" | "user")}
+                className="w-full px-4 py-2.5 rounded-xl text-[13px] focus:outline-none cursor-pointer"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleCreate}
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl text-[13px] font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ background: "var(--accent)" }}
+            >
+              {loading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <UserPlus size={14} />
+              )}
+              {loading ? "Sending Invite..." : "Send Invite Email"}
+            </motion.button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div
+              className="flex items-start gap-3 rounded-xl p-3.5"
+              style={{
+                background: "var(--success-bg)",
+                border: "1px solid var(--success)",
+              }}
+            >
+              <Check
+                size={16}
+                style={{ color: "var(--success)" }}
+                className="flex-shrink-0 mt-0.5"
+              />
+              <p
+                className="text-[13px] leading-relaxed"
+                style={{ color: "var(--success)" }}
+              >
+                Email sent to <b>{email}</b>. You can also share the link below
+                directly.
+              </p>
+            </div>
+            <p
+              className="text-[13px] leading-relaxed"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Invite link (expires in 7 days):
+            </p>
+            <div
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border"
+              style={{
+                background: "var(--bg-primary)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <span
+                className="flex-1 text-[12px] truncate font-mono"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {link}
+              </span>
+              <button
+                onClick={handleCopy}
+                style={{ color: copied ? "var(--success)" : "var(--accent)" }}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                onInvited("Invite created", "success");
+                onClose();
+              }}
+              className="w-full py-2.5 rounded-xl text-[13px] font-medium"
+              style={{
+                background: "var(--accent-subtle)",
+                color: "var(--accent)",
+              }}
+            >
+              Done
+            </motion.button>
+          </div>
+        )}
+      </motion.div>
     </motion.div>
   );
 }
@@ -224,6 +460,7 @@ function AdminUsersContent() {
     msg: string;
     type: "success" | "error";
   } | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
 
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ msg, type });
@@ -334,21 +571,33 @@ function AdminUsersContent() {
               View accounts and manage role access
             </p>
           </div>
-          <motion.button
-            onClick={fetchUsers}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium transition-all"
-            style={{
-              background: "var(--bg-surface)",
-              borderColor: "var(--border)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-            Refresh
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <motion.button
+              onClick={() => setShowInvite(true)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-white transition-all"
+              style={{ background: "var(--accent)" }}
+            >
+              <UserPlus size={14} />
+              Invite Teammate
+            </motion.button>
+            <motion.button
+              onClick={fetchUsers}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium transition-all"
+              style={{
+                background: "var(--bg-surface)",
+                borderColor: "var(--border)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+              Refresh
+            </motion.button>
+          </div>
         </div>
       </div>
 
@@ -479,6 +728,15 @@ function AdminUsersContent() {
 
       <AnimatePresence>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showInvite && (
+          <InviteModal
+            onClose={() => setShowInvite(false)}
+            onInvited={showToast}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
