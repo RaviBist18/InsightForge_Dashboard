@@ -20,6 +20,7 @@ import {
   getDashboardStats,
   getBucketedRevenue,
   getCategoryData,
+  getCurrentCompanyId,
 } from "@/lib/data";
 
 // KPI slugs that trigger the detail panel
@@ -41,6 +42,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
   const [categoryData, setCategoryData] = useState<any>([]);
   const [insights, setInsights] = useState<any>([]);
   const [loading, setLoading] = useState(true);
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Active KPI tab — null = main dashboard, slug string = detail panel
   const [localTab, setLocalTab] = useState<string | null>(null);
@@ -60,13 +62,16 @@ export default function Home({ searchParams }: { searchParams: any }) {
   useEffect(() => {
     async function initDashboard() {
       const range = "monthly";
-      const [tx, ins, st, rev, cat] = await Promise.all([
+      const [tx, ins, st, rev, cat, cid] = await Promise.all([
         getTransactions(),
         getInsights(range),
         getDashboardStats(range),
         getBucketedRevenue(range),
         getCategoryData(range),
+        getCurrentCompanyId(),
       ]);
+
+      setCompanyId(cid);
 
       const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
         const stringId = String(tx.id || "");
@@ -179,7 +184,8 @@ export default function Home({ searchParams }: { searchParams: any }) {
           )}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
+            disabled={!companyId}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors disabled:opacity-40"
             style={{ background: "var(--accent)" }}
           >
             <Plus size={14} /> Add Entity
@@ -255,6 +261,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onAdd={handleAddNode}
+          companyId={companyId ?? ""}
         />
       </div>
     </div>

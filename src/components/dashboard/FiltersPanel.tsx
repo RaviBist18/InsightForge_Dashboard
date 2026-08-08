@@ -108,9 +108,14 @@ export const FiltersPanel: React.FC = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       const { supabase } = await import("@/lib/supabase");
+      const { getCurrentCompanyId } = await import("@/lib/data");
+      const companyId = await getCurrentCompanyId();
+      if (!companyId) return;
+
       const { data, error } = await supabase
         .from("transactions")
-        .select("category");
+        .select("category")
+        .eq("company_id", companyId);
       if (error || !data) return;
       const unique: string[] = Array.from(
         new Set(data.map((d: any) => d.category as string).filter(Boolean)),

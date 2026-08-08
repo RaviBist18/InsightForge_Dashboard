@@ -47,10 +47,22 @@ export default function WorkspacePage() {
         .select("*")
         .eq("user_id", user.id)
         .maybeSingle();
-      const transactionsRes = await supabase
-        .from("transactions")
-        .select("amount, status, customer, created_at")
-        .order("created_at", { ascending: true }); // ascending — needed to find each customer's FIRST transaction
+
+      const membershipRes = await supabase
+        .from("memberships")
+        .select("company_id, companies(name)")
+        .eq("user_id", user.id)
+        .single();
+      const companyId = membershipRes.data?.company_id ?? null;
+      const companyName = (membershipRes.data as any)?.companies?.name ?? null;
+
+      const transactionsRes = companyId
+        ? await supabase
+            .from("transactions")
+            .select("amount, status, customer, created_at")
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: true }) // ascending — needed to find each customer's FIRST transaction
+        : { data: [] as any[] };
 
       const transactions = transactionsRes.data ?? [];
 
@@ -111,6 +123,8 @@ export default function WorkspacePage() {
       setProps({
         userId: user.id,
         userEmail: user.email ?? "",
+        companyId,
+        companyName,
         profile: profileRes.data,
         briefingSettings: briefingRes.data,
         initialSnapshots: snapshotsRes.data ?? [],

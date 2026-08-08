@@ -17,12 +17,50 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { email, role, companyId, invitedBy, companyName } = await req.json();
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
-    if (!email || !role || !companyId || !invitedBy) {
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const { email, role, companyId, companyName } = await req.json();
+
+    if (!email || !role || !companyId) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
+      );
+    }
+
+    // verify caller is actually admin/co-admin of THIS company
+    const { data: membership, error: memErr } = await supabaseAdmin
+      .from("memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("company_id", companyId)
+      .single();
+
+    if (
+      memErr ||
+      !membership ||
+      !["admin", "co-admin"].includes(membership.role)
+    ) {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
+
+    // only full admins can invite someone as admin (spec: promote/admin-grant stays admin-only)
+    if (role === "admin" && membership.role !== "admin") {
+      return NextResponse.json(
+        { error: "Only admins can invite new admins" },
+        { status: 403 },
       );
     }
 
@@ -32,7 +70,7 @@ export async function POST(req: Request) {
         company_id: companyId,
         email,
         role,
-        invited_by: invitedBy,
+        invited_by: user.id,
       })
       .select("token")
       .single();

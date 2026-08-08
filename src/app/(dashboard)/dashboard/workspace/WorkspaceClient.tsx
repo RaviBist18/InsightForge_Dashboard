@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { DashboardStats } from "@/lib/data";
+import { Building2 } from "lucide-react";
 
 // ── IMPORT FORENSIC COMPONENTS ──────────────────────────────────────────────
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
@@ -76,6 +77,8 @@ interface Ticker {
 interface Props {
   userId: string;
   userEmail: string;
+  companyId: string | null;
+  companyName: string | null;
   profile: Profile | null;
   briefingSettings: BriefingSettings | null;
   initialSnapshots: DecisionSnapshot[];
@@ -250,6 +253,8 @@ function generateNodeVaultData(entities: BusinessEntity[], baseMrr: number) {
 export default function WorkspaceClient({
   userId,
   userEmail,
+  companyId,
+  companyName,
   profile,
   briefingSettings,
   initialSnapshots,
@@ -362,9 +367,16 @@ export default function WorkspaceClient({
     async function fetchMetrics() {
       setMetricsLoading(true);
       try {
+        if (!companyId) {
+          setMrrSparkline(generateMockSparkline(initialMrr));
+          setMetricsLoading(false);
+          return;
+        }
+
         const { data } = await supabase
           .from("transactions")
           .select("amount, status, created_at")
+          .eq("company_id", companyId)
           .order("created_at", { ascending: true });
 
         if (data && data.length > 0) {
@@ -424,7 +436,7 @@ export default function WorkspaceClient({
       }
     }
     fetchMetrics();
-  }, [initialMrr, setMrrTrend, isAdmin]);
+  }, [initialMrr, setMrrTrend, isAdmin, companyId]);
 
   function generateMockSparkline(baseMrr: number) {
     return Array.from({ length: 12 }, (_, i) => ({
@@ -852,12 +864,23 @@ export default function WorkspaceClient({
                 >
                   {isAdmin ? "Workspace" : "My Workspace"}
                 </h1>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  {profile?.full_name ?? userEmail} · {persona.toUpperCase()}{" "}
-                  MODE
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center flex-wrap gap-1.5">
+                  <span>
+                    {profile?.full_name ?? userEmail} · {persona.toUpperCase()}{" "}
+                    MODE
+                  </span>
+                  {companyName && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase"
+                      style={{ background: `${accent}20`, color: accent }}
+                    >
+                      <Building2 size={9} />
+                      {companyName}
+                    </span>
+                  )}
                   {!isAdmin && (
                     <span
-                      className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
                       style={{ background: `${accent}20`, color: accent }}
                     >
                       MEMBER VIEW

@@ -4,14 +4,21 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Loader2 } from "lucide-react";
 import { ForensicNode } from "./DataTable";
+import { supabase } from "@/lib/supabase";
 
 interface AddNodeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (node: ForensicNode) => void;
+  companyId: string;
 }
 
-export function AddNodeModal({ isOpen, onClose, onAdd }: AddNodeModalProps) {
+export function AddNodeModal({
+  isOpen,
+  onClose,
+  onAdd,
+  companyId,
+}: AddNodeModalProps) {
   const [entity, setEntity] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("SaaS");
@@ -19,29 +26,48 @@ export function AddNodeModal({ isOpen, onClose, onAdd }: AddNodeModalProps) {
 
   const handleSubmit = async () => {
     if (!entity.trim() || !amount.trim()) return;
+    if (!companyId) {
+      console.error("ADD_ENTITY_ERROR: companyId not loaded yet");
+      return; // TODO: surface real error toast — "Still loading, try again"
+    }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
+
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert({
+        company_id: companyId,
+        customer: entity.trim(),
+        category: category || "SaaS",
+        amount: parseFloat(amount) || 0,
+        status: "Settled",
+      })
+      .select()
+      .single();
+
+    setLoading(false);
+
+    if (error || !data) {
+      console.error("INSERT_TRANSACTION_ERROR:", error);
+      return; // TODO: surface a real error toast instead of silent fail
+    }
 
     const newNode: ForensicNode = {
-      id: `node-${Date.now()}`,
+      id: data.id,
       status: "Settled",
-      entity: entity.trim(),
-      category: category || "SaaS",
-      amount: parseFloat(amount) || 0,
+      entity: data.customer,
+      category: data.category,
+      amount: data.amount,
       audit: "Verified",
       type: "node_activation",
-      metadata: {
-        timestamp: new Date().toISOString(),
-      },
+      metadata: { timestamp: data.created_at },
       briefing: {
-        status: `${entity.trim()} added with $${parseFloat(amount).toLocaleString()}.`,
-        context: `Manually added ${category.toLowerCase()} record.`,
+        status: `${data.customer} added with $${Number(data.amount).toLocaleString()}.`,
+        context: `Manually added ${(data.category ?? "").toLowerCase()} record.`,
         action: "Review against related transactions.",
       },
     };
 
     onAdd(newNode);
-    setLoading(false);
     setEntity("");
     setAmount("");
     onClose();

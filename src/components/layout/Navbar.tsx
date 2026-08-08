@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Download,
   Shield,
+  Building2,
 } from "lucide-react";
 import { TRANSACTIONS } from "@/data/mockData";
 import { usePathname, useRouter } from "next/navigation";
@@ -69,10 +70,10 @@ const USER_NOTIFICATIONS = [
     unread: false,
   },
 ];
-
-export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({
-  onMenuClick,
-}) => {
+export const Navbar: React.FC<{
+  onMenuClick?: () => void;
+  companyName?: string | null;
+}> = ({ onMenuClick, companyName }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { role, name, email, loading: roleLoading } = useUserRole();
@@ -224,6 +225,29 @@ export const Navbar: React.FC<{ onMenuClick?: () => void }> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {companyName && (
+            <div
+              className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-[12px]"
+              style={{
+                background: "var(--bg-primary)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <div
+                className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                style={{ background: "var(--accent-subtle)" }}
+              >
+                <Building2 size={11} style={{ color: "var(--accent)" }} />
+              </div>
+              <span
+                className="font-semibold truncate max-w-[140px]"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {companyName}
+              </span>
+            </div>
+          )}
+
           {/* Export CSV — Admin only */}
           {isAdmin && (
             <motion.button

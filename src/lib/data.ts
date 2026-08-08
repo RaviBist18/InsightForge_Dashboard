@@ -26,11 +26,31 @@ export interface Transaction {
   status: string;
 }
 
+export async function getCurrentCompanyId(): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("memberships")
+    .select("company_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (error || !data) return null;
+  return data.company_id;
+}
+
 // ─── shared helper — fetch + bucket real transactions by month ───────────
 async function fetchTransactionsBucketed() {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { rows: [], monthMap: {} as Record<string, number> };
+
   const { data, error } = await supabase
     .from("transactions")
     .select("id, created_at, customer, category, amount, status")
+    .eq("company_id", companyId)
     .order("created_at", { ascending: true });
 
   if (error || !data)
@@ -100,9 +120,13 @@ export const getDashboardStats = async (
 
 // ─── getTransactions — real, CoinGecko stripped ────────────────────────────
 export const getTransactions = async (): Promise<Transaction[]> => {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return [];
+
   const { data, error } = await supabase
     .from("transactions")
     .select("*")
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
@@ -167,9 +191,13 @@ export const getRevenueData = async (range?: string) => {
 };
 
 export const getCategoryData = async (range?: string) => {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return [];
+
   const { data, error } = await supabase
     .from("transactions")
-    .select("category, amount");
+    .select("category, amount")
+    .eq("company_id", companyId);
   if (error || !data) return [];
 
   const byCategory: Record<string, number> = {};
@@ -184,7 +212,13 @@ export const getCategoryData = async (range?: string) => {
 };
 // ─── getStatusBreakdown — real, replaces old fake region pie ─────────────
 export const getStatusBreakdown = async (range?: string) => {
-  const { data, error } = await supabase.from("transactions").select("status");
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return [];
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("status")
+    .eq("company_id", companyId);
   if (error || !data?.length) return [];
 
   const counts: Record<string, number> = {};
@@ -203,9 +237,13 @@ export const getStatusBreakdown = async (range?: string) => {
 // daily → today's hours, weekly → last 7 days, monthly → real month buckets,
 // quarterly/annually → roll-up of the same real monthly buckets (no new query).
 export const getBucketedRevenue = async (range?: string) => {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return [];
+
   const { data, error } = await supabase
     .from("transactions")
     .select("created_at, amount")
+    .eq("company_id", companyId)
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];

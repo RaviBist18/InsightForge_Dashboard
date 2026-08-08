@@ -29,7 +29,7 @@ import { RoleGuard } from "@/components/common/RoleGuard";
 interface UserRecord {
   id: string;
   full_name: string | null;
-  role: "admin" | "user";
+  role: "admin" | "co-admin" | "user";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ function InviteModal({
   onInvited: (msg: string, type: "success" | "error") => void;
 }) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "user">("user");
+  const [role, setRole] = useState<"admin" | "co-admin" | "user">("user");
   const [loading, setLoading] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -113,14 +113,19 @@ function InviteModal({
 
       if (!membership?.company_id) throw new Error("No company found");
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const res = await fetch("/api/invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({
           email,
           role,
           companyId: membership.company_id,
-          invitedBy: user.id,
           companyName: (membership as any).companies?.name,
         }),
       });
@@ -214,7 +219,9 @@ function InviteModal({
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as "admin" | "user")}
+                onChange={(e) =>
+                  setRole(e.target.value as "admin" | "co-admin" | "user")
+                }
                 className="w-full px-4 py-2.5 rounded-xl text-[13px] focus:outline-none cursor-pointer"
                 style={{
                   background: "var(--bg-primary)",
@@ -223,6 +230,7 @@ function InviteModal({
                 }}
               >
                 <option value="user">User</option>
+                <option value="co-admin">Co-Admin</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -318,6 +326,7 @@ function UserRow({
   user,
   index,
   currentUserId,
+  currentUserRole,
   isReadOnly,
   updatingId,
   onRoleChange,
@@ -326,9 +335,10 @@ function UserRow({
   user: UserRecord;
   index: number;
   currentUserId: string | null;
+  currentUserRole: "admin" | "co-admin" | "user";
   isReadOnly: boolean;
   updatingId: string | null;
-  onRoleChange: (id: string, role: "admin" | "user") => void;
+  onRoleChange: (id: string, role: "admin" | "co-admin" | "user") => void;
   onViewPortfolio: (id: string) => void;
 }) {
   const isCurrentUser = user.id === currentUserId;
@@ -394,7 +404,10 @@ function UserRow({
           <select
             value={user.role}
             onChange={(e) =>
-              onRoleChange(user.id, e.target.value as "admin" | "user")
+              onRoleChange(
+                user.id,
+                e.target.value as "admin" | "co-admin" | "user",
+              )
             }
             disabled={isUpdating || isCurrentUser || isReadOnly}
             className={cn(
@@ -409,7 +422,10 @@ function UserRow({
             }}
           >
             <option value="user">User</option>
-            <option value="admin">Admin</option>
+            <option value="co-admin">Co-Admin</option>
+            {currentUserRole === "admin" && (
+              <option value="admin">Admin</option>
+            )}
           </select>
           <ChevronDown
             size={11}
@@ -456,11 +472,27 @@ function AdminUsersContent() {
   const [searchQuery, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<
+    "admin" | "co-admin" | "user"
+  >("user");
   const [toast, setToast] = useState<{
     msg: string;
     type: "success" | "error";
   } | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<
+    {
+      id: string;
+      user_id: string;
+      company_id: string;
+      status: string;
+      requested_at: string;
+      requester_name: string | null;
+      requester_email: string | null;
+    }[]
+  >([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ msg, type });
@@ -474,6 +506,17 @@ function AdminUsersContent() {
         data: { user },
       } = await supabase.auth.getUser();
       setCurrentUserId(user?.id || null);
+
+      if (user) {
+        const { data: myProfile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setCurrentUserRole(
+          (myProfile?.role as "admin" | "co-admin" | "user") || "user",
+        );
+      }
 
       const { data, error } = await supabase
         .from("profiles")
@@ -496,26 +539,110 @@ function AdminUsersContent() {
     }
   };
 
+  const fetchPendingRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: membership, error: memErr } = await supabase
+        .from("memberships")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+      if (memErr || !membership?.company_id)
+        throw new Error("No company found");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/pending-requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ companyId: membership.company_id }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to load");
+
+      setPendingRequests(result.requests);
+    } catch (err: any) {
+      console.error("fetchPendingRequests error:", err);
+      showToast(err.message || "Failed to load join requests", "error");
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleResolveRequest = async (
+    requestId: string,
+    action: "approve" | "reject",
+  ) => {
+    setResolvingId(requestId);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch("/api/join-requests/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ requestId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resolve request");
+
+      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      showToast(
+        action === "approve" ? "Request approved" : "Request rejected",
+        "success",
+      );
+      if (action === "approve") fetchUsers();
+    } catch (err: any) {
+      showToast(err.message || "Failed to resolve request", "error");
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchPendingRequests();
   }, []);
 
   const handleRoleChange = async (
     userId: string,
-    newRole: "admin" | "user",
+    newRole: "admin" | "co-admin" | "user",
   ) => {
     if (isReadOnly) return;
-    if (userId === currentUserId && newRole === "user") {
-      showToast("Cannot demote yourself", "error");
+    if (userId === currentUserId && newRole !== currentUserRole) {
+      showToast("Cannot change your own role", "error");
+      return;
+    }
+    if (newRole === "admin" && currentUserRole !== "admin") {
+      showToast("Only admins can grant admin access", "error");
       return;
     }
     setUpdatingId(userId);
     try {
-      const { error } = await supabase
+      const { error: profileErr } = await supabase
         .from("profiles")
         .update({ role: newRole })
         .eq("id", userId);
-      if (error) throw error;
+      if (profileErr) throw profileErr;
+
+      const { error: membershipErr } = await supabase
+        .from("memberships")
+        .update({ role: newRole })
+        .eq("user_id", userId);
+      if (membershipErr) throw membershipErr;
+
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
       );
@@ -600,6 +727,98 @@ function AdminUsersContent() {
           </div>
         </div>
       </div>
+
+      {pendingRequests.length > 0 && (
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{
+            background: "var(--bg-surface)",
+            borderColor: "var(--warning)",
+          }}
+        >
+          <div
+            className="px-5 py-3 border-b flex items-center gap-2"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <AlertTriangle size={14} style={{ color: "var(--warning)" }} />
+            <span
+              className="text-[12px] font-medium"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {pendingRequests.length} pending join request
+              {pendingRequests.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <AnimatePresence>
+            {pendingRequests.map((req, i) => (
+              <motion.div
+                key={req.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ delay: i * 0.03 }}
+                className="flex items-center gap-4 flex-wrap px-5 py-4 border-b last:border-0"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-[13px] font-semibold text-white flex-shrink-0"
+                  style={{ background: "var(--warning)" }}
+                >
+                  {(req.requester_name ||
+                    req.requester_email ||
+                    "U")[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="text-[13px] font-medium truncate"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {req.requester_name || "Unnamed User"}
+                  </p>
+                  <p
+                    className="text-[11px] truncate"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {req.requester_email || "No email"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    disabled={resolvingId === req.id}
+                    onClick={() => handleResolveRequest(req.id, "approve")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white disabled:opacity-50 transition-all"
+                    style={{ background: "var(--success)" }}
+                  >
+                    {resolvingId === req.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Check size={12} />
+                    )}
+                    Approve
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    disabled={resolvingId === req.id}
+                    onClick={() => handleResolveRequest(req.id, "reject")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium disabled:opacity-50 transition-all"
+                    style={{
+                      background: "var(--bg-primary)",
+                      borderColor: "var(--danger)",
+                      color: "var(--danger)",
+                    }}
+                  >
+                    <X size={12} />
+                    Reject
+                  </motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 max-w-md">
         {[
@@ -715,6 +934,7 @@ function AdminUsersContent() {
                   user={user}
                   index={i}
                   currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
                   isReadOnly={isReadOnly}
                   updatingId={updatingId}
                   onRoleChange={handleRoleChange}
@@ -746,7 +966,7 @@ function AdminUsersContent() {
 
 export default function AdminUsersPage() {
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <RoleGuard allowedRoles={["admin", "co-admin"]}>
       <AdminUsersContent />
     </RoleGuard>
   );

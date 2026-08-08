@@ -781,7 +781,7 @@ function ReportsContent() {
 
 export default function ReportsPage() {
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <RoleGuard allowedRoles={["admin", "co-admin"]}>
       <ReportsContent />
     </RoleGuard>
   );

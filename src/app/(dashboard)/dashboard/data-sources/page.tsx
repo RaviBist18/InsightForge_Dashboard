@@ -962,7 +962,7 @@ function DataSourcesContent() {
 
 export default function DataSourcesPage() {
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <RoleGuard allowedRoles={["admin", "co-admin"]}>
       <DataSourcesContent />
     </RoleGuard>
   );

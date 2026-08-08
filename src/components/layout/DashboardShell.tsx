@@ -8,7 +8,15 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  children,
+  companyName,
+  hasCompany,
+}: {
+  children: React.ReactNode;
+  companyName?: string | null;
+  hasCompany?: boolean;
+}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -27,7 +35,35 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         />
 
         <main className="flex-1 flex flex-col h-screen overflow-hidden">
-          <Navbar onMenuClick={() => setIsMobileMenuOpen(true)} />
+          <Navbar
+            onMenuClick={() => setIsMobileMenuOpen(true)}
+            companyName={companyName}
+          />
+
+          {hasCompany === false && (
+            <div
+              className="flex items-center justify-between gap-4 px-6 py-3 border-b flex-wrap"
+              style={{
+                background: "var(--accent-subtle)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <p
+                className="text-[13px] font-medium"
+                style={{ color: "var(--accent)" }}
+              >
+                You're not part of a company yet — join one to see live data.
+              </p>
+
+              <a
+                href="/onboarding?view=join"
+                className="px-4 py-1.5 rounded-xl text-[12px] font-medium text-white transition-colors flex-shrink-0"
+                style={{ background: "var(--accent)" }}
+              >
+                Join a Company
+              </a>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
             <div className="max-w-[1600px] mx-auto p-4 md:p-8">
