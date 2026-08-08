@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Database,
@@ -21,8 +21,6 @@ import {
   Clock,
   ChevronDown,
   Snowflake,
-  DollarSign,
-  AlertTriangle,
 } from "lucide-react";
 import { RoleGuard } from "@/components/common/RoleGuard";
 
@@ -34,36 +32,21 @@ interface ActivityEvent {
   severity: "success" | "warning" | "critical";
 }
 
-interface ConflictReport {
-  sourceA: string;
-  sourceB: string;
-  delta: number;
-  detectedAt: string;
-}
-
-interface UsageTracker {
-  tokensUsed: number;
-  tokenLimit: number;
-  costUSD: number;
-  resetDate: string;
-}
-
 interface DataSourceConnector {
   id: string;
   name: string;
   type: "database" | "market" | "news" | "ai";
-  status: "connected" | "error" | "syncing" | "disconnected";
-  healthScore: number;
+  status: "connected" | "error" | "syncing";
+  configured: boolean;
+  healthScore: number; // derived from status+latency, not a native API metric
   latencyMs: number;
   lastSync: string;
   aiContextEnabled: boolean;
   apiKeyMasked: string;
-  recordCount: number;
+  recordCount: number | null;
   frozen: boolean;
   frozenAt: string | null;
   events: ActivityEvent[];
-  conflicted: boolean;
-  usage?: UsageTracker;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -74,153 +57,50 @@ const nowStr = () =>
     minute: "2-digit",
   });
 
-const DEFAULT_USAGE: Record<string, UsageTracker> = {
-  groq: {
-    tokensUsed: 2847,
-    tokenLimit: 10000,
-    costUSD: 0.0043,
-    resetDate: "2026-06-01",
+const SOURCE_META: Record<
+  string,
+  { name: string; type: DataSourceConnector["type"]; apiKeyMasked: string }
+> = {
+  supabase: {
+    name: "Supabase DB",
+    type: "database",
+    apiKeyMasked: "sbp_••••••••••••••••",
   },
+  groq: { name: "Groq AI", type: "ai", apiKeyMasked: "gsk_••••••••••••••••" },
   alphavantage: {
-    tokensUsed: 312,
-    tokenLimit: 500,
-    costUSD: 0.0,
-    resetDate: "2026-06-01",
+    name: "Alpha Vantage",
+    type: "market",
+    apiKeyMasked: "AV••••••••••••••••",
+  },
+  newsapi: {
+    name: "NewsAPI",
+    type: "news",
+    apiKeyMasked: "nap_••••••••••••••••",
   },
 };
 
-const INITIAL_SOURCES: DataSourceConnector[] = [
-  {
-    id: "supabase",
-    name: "Supabase DB",
-    type: "database",
-    status: "connected",
-    healthScore: 94,
-    latencyMs: 42,
-    lastSync: "12s ago",
-    aiContextEnabled: true,
-    apiKeyMasked: "sbp_••••••••••••••••••••••••••••••••",
-    recordCount: 1240,
-    frozen: false,
-    frozenAt: null,
-    conflicted: false,
-    events: [
-      {
-        timestamp: nowStr(),
-        message: "Sync completed — 1,240 records verified",
-        severity: "success",
-      },
-      {
-        timestamp: nowStr(),
-        message: "Latency spike detected: 210ms peak",
-        severity: "warning",
-      },
-      {
-        timestamp: nowStr(),
-        message: "AI context enabled for this source",
-        severity: "success",
-      },
-    ],
-  },
-  {
-    id: "alphavantage",
-    name: "Alpha Vantage",
-    type: "market",
-    status: "connected",
-    healthScore: 78,
-    latencyMs: 310,
-    lastSync: "4m ago",
-    aiContextEnabled: true,
-    apiKeyMasked: "AV••••••••••••••••",
-    recordCount: 0,
-    frozen: false,
-    frozenAt: null,
-    conflicted: false,
-    usage: DEFAULT_USAGE.alphavantage,
-    events: [
-      {
-        timestamp: nowStr(),
-        message: "Market quote fetched successfully",
-        severity: "success",
-      },
-      {
-        timestamp: nowStr(),
-        message: "Rate limit warning — 4/5 calls used",
-        severity: "warning",
-      },
-    ],
-  },
-  {
-    id: "newsapi",
-    name: "NewsAPI",
-    type: "news",
-    status: "connected",
-    healthScore: 85,
-    latencyMs: 190,
-    lastSync: "2m ago",
-    aiContextEnabled: false,
-    apiKeyMasked: "nap_••••••••••••••••••••••••••",
-    recordCount: 0,
-    frozen: false,
-    frozenAt: null,
-    conflicted: false,
-    events: [
-      {
-        timestamp: nowStr(),
-        message: "12 business headlines ingested",
-        severity: "success",
-      },
-      {
-        timestamp: nowStr(),
-        message: "AI context disabled for this source",
-        severity: "warning",
-      },
-    ],
-  },
-  {
-    id: "groq",
-    name: "Groq AI",
-    type: "ai",
-    status: "connected",
-    healthScore: 91,
-    latencyMs: 88,
-    lastSync: "31s ago",
-    aiContextEnabled: true,
-    apiKeyMasked: "gsk_••••••••••••••••••••••••••••••••••••",
-    recordCount: 0,
-    frozen: false,
-    frozenAt: null,
-    conflicted: false,
-    usage: DEFAULT_USAGE.groq,
-    events: [
-      {
-        timestamp: nowStr(),
-        message: "Chat response generated — 847 tokens used",
-        severity: "success",
-      },
-      {
-        timestamp: nowStr(),
-        message: "Llama 3.1-8b response time: 88ms",
-        severity: "success",
-      },
-      {
-        timestamp: nowStr(),
-        message: "Context window 72% utilized",
-        severity: "warning",
-      },
-    ],
-  },
-];
-
 const TYPE_META: Record<
   DataSourceConnector["type"],
-  { icon: React.ElementType; label: string }
+  { icon: ElementType; label: string }
 > = {
   database: { icon: Database, label: "Database" },
   market: { icon: TrendingUp, label: "Market Data" },
   news: { icon: Globe, label: "News" },
   ai: { icon: Brain, label: "AI Engine" },
 };
+
+// derived health score — real APIs don't return a 0-100 score, so this is
+// computed from status + latency, same "Est." pattern used elsewhere in the app
+function deriveHealthScore(
+  status: DataSourceConnector["status"],
+  latencyMs: number,
+): number {
+  if (status === "error") return 10;
+  if (status === "syncing") return 70;
+  if (latencyMs < 300) return 95;
+  if (latencyMs < 800) return 75;
+  return 55;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -242,42 +122,27 @@ function saveLS(key: string, val: unknown) {
 
 const statusColor = (v: number) =>
   v > 85 ? "var(--danger)" : v > 60 ? "var(--warning)" : "var(--success)";
-const statusLabel = (v: number) =>
-  v > 85 ? "Critical" : v > 60 ? "Warning" : "Healthy";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function HealthRing({
   score,
-  latencyMs,
   status,
 }: {
   score: number;
-  latencyMs: number;
   status: DataSourceConnector["status"];
 }) {
   const r = 22,
     circ = 2 * Math.PI * r,
     fill = (score / 100) * circ;
-
   const isError = status === "error";
-  const isHighLatency = latencyMs > 300;
   const isOptimal = score > 80;
-
   const color = isError
     ? "var(--danger)"
-    : isHighLatency
-      ? "var(--warning)"
-      : isOptimal
-        ? "var(--success)"
-        : "var(--warning)";
-  const label = isError
-    ? "Error"
-    : isHighLatency
-      ? "High Latency"
-      : isOptimal
-        ? "Healthy"
-        : "Warning";
+    : isOptimal
+      ? "var(--success)"
+      : "var(--warning)";
+  const label = isError ? "Error" : isOptimal ? "Healthy" : "Warning";
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -382,7 +247,13 @@ function PulseWaveform({
   );
 }
 
-function ApiKeyDisplay({ masked }: { masked: string }) {
+function ApiKeyDisplay({
+  masked,
+  configured,
+}: {
+  masked: string;
+  configured: boolean;
+}) {
   const [revealed, setRevealed] = useState(false);
   return (
     <div
@@ -397,20 +268,24 @@ function ApiKeyDisplay({ masked }: { masked: string }) {
         className="text-[12px] flex-1 truncate"
         style={{ color: "var(--text-secondary)" }}
       >
-        {revealed ? masked.replace(/•/g, "*") : masked}
+        {configured
+          ? revealed
+            ? masked.replace(/•/g, "*")
+            : masked
+          : "Not configured"}
       </span>
-      <button
-        onClick={() => setRevealed((p) => !p)}
-        style={{ color: "var(--text-muted)" }}
-        className="transition-colors"
-      >
-        {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
-      </button>
+      {configured && (
+        <button
+          onClick={() => setRevealed((p) => !p)}
+          style={{ color: "var(--text-muted)" }}
+          className="transition-colors"
+        >
+          {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
+        </button>
+      )}
     </div>
   );
 }
-
-// ── Activity Log ──────────────────────────────────────────────────────────────
 
 function ActivityLog({ events }: { events: ActivityEvent[] }) {
   const [open, setOpen] = useState(false);
@@ -483,76 +358,6 @@ function ActivityLog({ events }: { events: ActivityEvent[] }) {
   );
 }
 
-// ── Usage / Metric Bar (shared for API usage + operational metrics) ─────────
-
-function MetricBar({
-  icon,
-  label,
-  value,
-  pct,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  pct: number;
-}) {
-  return (
-    <div
-      className="mt-3 pt-3 border-t"
-      style={{ borderColor: "var(--border)" }}
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-1.5">
-          {icon}
-          <span
-            className="text-[11px] font-medium"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {label}
-          </span>
-        </div>
-        <span
-          className="text-[10px] font-medium px-1.5 py-0.5 rounded-xl"
-          style={{
-            color: statusColor(pct),
-            background:
-              pct > 85
-                ? "var(--danger-bg)"
-                : pct > 60
-                  ? "var(--warning-bg)"
-                  : "var(--success-bg)",
-          }}
-        >
-          {statusLabel(pct)}
-        </span>
-      </div>
-      <div
-        className="h-1.5 rounded-full overflow-hidden mb-1.5"
-        style={{ background: "var(--border)" }}
-      >
-        <motion.div
-          className="h-full rounded-full"
-          style={{ backgroundColor: statusColor(pct) }}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.4 }}
-        />
-      </div>
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[11px]"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {value}
-        </span>
-        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          {pct}% utilized
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // ─── Connector Card ───────────────────────────────────────────────────────────
 
 function ConnectorCard({
@@ -575,7 +380,7 @@ function ConnectorCard({
       className="relative rounded-xl p-5 h-full"
       style={{
         background: "var(--bg-surface)",
-        border: `1px solid ${source.conflicted ? "var(--danger)" : "var(--border)"}`,
+        border: "1px solid var(--border)",
       }}
     >
       <div className="flex items-start justify-between mb-4">
@@ -600,7 +405,7 @@ function ConnectorCard({
               >
                 {meta.label}
               </span>
-              {source.recordCount > 0 && (
+              {source.recordCount !== null && (
                 <span
                   className="text-[11px]"
                   style={{ color: "var(--text-muted)" }}
@@ -619,14 +424,9 @@ function ConnectorCard({
             </div>
           </div>
         </div>
-        <HealthRing
-          score={source.healthScore}
-          latencyMs={source.latencyMs}
-          status={source.status}
-        />
+        <HealthRing score={source.healthScore} status={source.status} />
       </div>
 
-      {/* Metrics */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         {[
           {
@@ -678,7 +478,6 @@ function ConnectorCard({
         ))}
       </div>
 
-      {/* API Key */}
       <div className="mb-4">
         <div className="flex items-center gap-1.5 mb-1.5">
           <Shield size={11} style={{ color: "var(--text-muted)" }} />
@@ -689,10 +488,12 @@ function ConnectorCard({
             API Key
           </span>
         </div>
-        <ApiKeyDisplay masked={source.apiKeyMasked} />
+        <ApiKeyDisplay
+          masked={source.apiKeyMasked}
+          configured={source.configured}
+        />
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={() => onToggleForge(source.id)}
@@ -749,73 +550,7 @@ function ConnectorCard({
         </div>
       </div>
 
-      {/* Usage */}
-      {source.usage && (
-        <MetricBar
-          icon={<DollarSign size={11} style={{ color: "var(--text-muted)" }} />}
-          label="API Usage"
-          value={`${source.usage.tokensUsed.toLocaleString()} / ${source.usage.tokenLimit.toLocaleString()} tokens · $${source.usage.costUSD.toFixed(4)}`}
-          pct={Math.min(
-            100,
-            (source.usage.tokensUsed / source.usage.tokenLimit) * 100,
-          )}
-        />
-      )}
-
-      {/* Operational metrics */}
-      {source.id === "supabase" && (
-        <MetricBar
-          icon={<Activity size={11} style={{ color: "var(--text-muted)" }} />}
-          label="Storage Usage"
-          value="1,240 / 10,000 Records"
-          pct={85}
-        />
-      )}
-      {source.id === "newsapi" && (
-        <MetricBar
-          icon={<Activity size={11} style={{ color: "var(--text-muted)" }} />}
-          label="Article Relevance"
-          value="14 / 40 Articles Filtered"
-          pct={65}
-        />
-      )}
-
       <ActivityLog events={source.events} />
-    </motion.div>
-  );
-}
-
-// ─── Conflict Banner ──────────────────────────────────────────────────────────
-
-function ConflictBanner({ report }: { report: ConflictReport }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-3 px-5 py-3 rounded-xl mb-2"
-      style={{
-        background: "var(--danger-bg)",
-        border: "1px solid var(--danger)",
-      }}
-    >
-      <AlertTriangle
-        size={14}
-        style={{ color: "var(--danger)" }}
-        className="shrink-0"
-      />
-      <span
-        className="text-[12px] font-medium"
-        style={{ color: "var(--danger)" }}
-      >
-        Data mismatch detected — {report.sourceA} vs {report.sourceB}: $
-        {report.delta.toFixed(2)} difference
-      </span>
-      <span
-        className="ml-auto text-[11px] shrink-0"
-        style={{ color: "var(--text-muted)" }}
-      >
-        {report.detectedAt}
-      </span>
     </motion.div>
   );
 }
@@ -825,12 +560,14 @@ function ConflictBanner({ report }: { report: ConflictReport }) {
 function SourcesSummary({ sources }: { sources: DataSourceConnector[] }) {
   const linked = sources.filter((s) => s.aiContextEnabled).length;
   const frozen = sources.filter((s) => s.frozen).length;
-  const avgHealth = Math.round(
-    sources.reduce((a, s) => a + s.healthScore, 0) / sources.length,
-  );
-  const avgLatency = Math.round(
-    sources.reduce((a, s) => a + s.latencyMs, 0) / sources.length,
-  );
+  const avgHealth = sources.length
+    ? Math.round(
+        sources.reduce((a, s) => a + s.healthScore, 0) / sources.length,
+      )
+    : 0;
+  const avgLatency = sources.length
+    ? Math.round(sources.reduce((a, s) => a + s.latencyMs, 0) / sources.length)
+    : 0;
   const allOk = sources.every((s) => s.status === "connected");
 
   const stats = [
@@ -900,116 +637,123 @@ function SourcesSummary({ sources }: { sources: DataSourceConnector[] }) {
   );
 }
 
+// ─── API response type ─────────────────────────────────────────────────────────
+
+interface PingResult {
+  id: string;
+  status: "connected" | "error";
+  latencyMs: number;
+  recordCount: number | null;
+  message: string;
+  checkedAt: string;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function DataSourcesContent() {
-  const [sources, setSources] =
-    useState<DataSourceConnector[]>(INITIAL_SOURCES);
-  const [conflicts, setConflicts] = useState<ConflictReport[]>([]);
-  const [lastPolled, setLastPolled] = useState<Date>(new Date());
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [sources, setSources] = useState<DataSourceConnector[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastPolled, setLastPolled] = useState<Date | null>(null);
 
-  useEffect(() => {
-    const aiLinks: Record<string, boolean> = loadLS(
-      "insightforge_forge_links",
-      {},
-    );
-    const frozenMap: Record<string, string | null> = loadLS(
-      "insightforge_frozen",
-      {},
-    );
-    const savedUsage: Record<string, UsageTracker> = loadLS(
-      "insightforge_costs",
-      {},
-    );
-    setSources((prev) =>
-      prev.map((s) => ({
-        ...s,
-        aiContextEnabled: aiLinks[s.id] ?? s.aiContextEnabled,
-        frozen: frozenMap[s.id] != null,
-        frozenAt: frozenMap[s.id] ?? null,
-        usage: savedUsage[s.id] ?? s.usage,
-      })),
-    );
-  }, []);
-
-  const poll = useCallback(() => {
-    setSources((prev) =>
-      prev.map((s) => {
-        if (s.frozen) return s;
-        const hd = Math.round((Math.random() - 0.4) * 4);
-        const newH = Math.min(100, Math.max(0, s.healthScore + hd));
-        const newL = Math.max(
-          20,
-          s.latencyMs + Math.round((Math.random() - 0.5) * 40),
+  const mergePings = useCallback(
+    (pings: PingResult[], syncingIds: Set<string> = new Set()) => {
+      setSources((prev) => {
+        const aiLinks: Record<string, boolean> = loadLS(
+          "insightforge_forge_links",
+          {},
         );
-        const ev: ActivityEvent = {
-          timestamp: nowStr(),
-          message:
-            hd < -2
-              ? "Health degradation detected"
-              : newL > 400
-                ? `Latency spike: ${newL}ms`
-                : "Sync completed — all signals normal",
-          severity: hd < -2 || newL > 400 ? "warning" : "success",
-        };
-        return {
-          ...s,
-          healthScore: newH,
-          latencyMs: newL,
-          lastSync: "just now",
-          events: [ev, ...s.events].slice(0, 5),
-        };
-      }),
-    );
-    setLastPolled(new Date());
-  }, []);
+        const frozenMap: Record<string, string | null> = loadLS(
+          "insightforge_frozen",
+          {},
+        );
 
-  useEffect(() => {
-    pollingRef.current = setInterval(poll, 30_000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+        return Object.keys(SOURCE_META).map((id) => {
+          const meta = SOURCE_META[id];
+          const prior = prev.find((s) => s.id === id);
+          const isFrozen = frozenMap[id] != null;
+
+          // frozen sources keep their last known values, skip the new ping
+          if (isFrozen && prior) {
+            return { ...prior, frozen: true, frozenAt: frozenMap[id] };
+          }
+
+          const ping = pings.find((p) => p.id === id);
+          if (!ping) return prior ?? buildEmptySource(id, meta);
+
+          const status: DataSourceConnector["status"] = syncingIds.has(id)
+            ? "syncing"
+            : ping.status;
+          const ev: ActivityEvent = {
+            timestamp: nowStr(),
+            message: ping.message,
+            severity: ping.status === "connected" ? "success" : "critical",
+          };
+
+          return {
+            id,
+            name: meta.name,
+            type: meta.type,
+            apiKeyMasked: meta.apiKeyMasked,
+            status,
+            configured:
+              ping.status !== "error" || !ping.message.includes("not set"),
+            healthScore: deriveHealthScore(ping.status, ping.latencyMs),
+            latencyMs: ping.latencyMs,
+            lastSync: "just now",
+            recordCount: ping.recordCount,
+            frozen: false,
+            frozenAt: null,
+            aiContextEnabled: aiLinks[id] ?? true,
+            events: [ev, ...(prior?.events ?? [])].slice(0, 5),
+          };
+        });
+      });
+    },
+    [],
+  );
+
+  function buildEmptySource(
+    id: string,
+    meta: (typeof SOURCE_META)[string],
+  ): DataSourceConnector {
+    return {
+      id,
+      name: meta.name,
+      type: meta.type,
+      apiKeyMasked: meta.apiKeyMasked,
+      status: "error",
+      configured: false,
+      healthScore: 0,
+      latencyMs: 0,
+      lastSync: "never",
+      recordCount: null,
+      frozen: false,
+      frozenAt: null,
+      aiContextEnabled: true,
+      events: [],
     };
-  }, [poll]);
+  }
 
-  // Conflict detection
+  const fetchHealth = useCallback(
+    async (force: boolean, syncingIds?: Set<string>) => {
+      const res = await fetch(
+        `/api/data-sources-health${force ? "?force=1" : ""}`,
+      );
+      const json = await res.json();
+      mergePings(json.sources as PingResult[], syncingIds);
+      setLastPolled(new Date());
+    },
+    [mergePings],
+  );
+
+  // initial load only — no auto-poll interval, see route.ts comment on quota limits
   useEffect(() => {
-    const byType: Record<string, DataSourceConnector[]> = {};
-    sources.forEach((s) => {
-      byType[s.type] = [...(byType[s.type] ?? []), s];
-    });
-    const newConflicts: ConflictReport[] = [];
-    Object.values(byType).forEach((group) => {
-      if (group.length < 2) return;
-      for (let i = 0; i < group.length - 1; i++) {
-        const delta = Math.abs(group[i].latencyMs - group[i + 1].latencyMs);
-        if (delta / Math.max(group[i].latencyMs, 1) > 0.005) {
-          newConflicts.push({
-            sourceA: group[i].name,
-            sourceB: group[i + 1].name,
-            delta: parseFloat((delta * 0.01).toFixed(2)),
-            detectedAt: nowStr(),
-          });
-        }
-      }
-    });
-    setSources((prev) =>
-      prev.map((s) => {
-        const inConflict = newConflicts.some(
-          (c) => c.sourceA === s.name || c.sourceB === s.name,
-        );
-        return {
-          ...s,
-          conflicted: inConflict,
-          healthScore: inConflict
-            ? Math.max(0, s.healthScore - 15)
-            : s.healthScore,
-        };
-      }),
-    );
-    setConflicts(newConflicts);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sources.length]);
+    (async () => {
+      setLoading(true);
+      await fetchHealth(false);
+      setLoading(false);
+    })();
+  }, [fetchHealth]);
 
   const handleToggleForge = (id: string) => {
     setSources((prev) => {
@@ -1023,55 +767,18 @@ function DataSourcesContent() {
             : "AI context disabled for this source",
           severity: linked ? "success" : "warning",
         };
-        const newUsage =
-          linked && s.usage
-            ? {
-                ...s.usage,
-                tokensUsed: s.usage.tokensUsed + 120,
-                costUSD: parseFloat((s.usage.costUSD + 0.0002).toFixed(4)),
-              }
-            : s.usage;
         return {
           ...s,
           aiContextEnabled: linked,
           events: [ev, ...s.events].slice(0, 5),
-          usage: newUsage,
         };
       });
       saveLS(
         "insightforge_forge_links",
         Object.fromEntries(updated.map((s) => [s.id, s.aiContextEnabled])),
       );
-      const usageToSave = Object.fromEntries(
-        updated.filter((s) => s.usage).map((s) => [s.id, s.usage]),
-      );
-      saveLS("insightforge_costs", usageToSave);
       return updated;
     });
-  };
-
-  const handleSync = async (id: string) => {
-    setSources((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: "syncing" } : s)),
-    );
-    await new Promise((r) => setTimeout(r, 1800));
-    setSources((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const ev: ActivityEvent = {
-          timestamp: nowStr(),
-          message: "Manual resync completed",
-          severity: "success",
-        };
-        return {
-          ...s,
-          status: "connected",
-          lastSync: "just now",
-          latencyMs: Math.round(50 + Math.random() * 200),
-          events: [ev, ...s.events].slice(0, 5),
-        };
-      }),
-    );
   };
 
   const handleToggleFreeze = (id: string) => {
@@ -1084,7 +791,7 @@ function DataSourcesContent() {
           timestamp: nowStr(),
           message: nowFrozen
             ? `Snapshot taken at ${frozenAt}`
-            : "Snapshot released — live data resumed",
+            : "Snapshot released — live data resumes on next sync",
           severity: nowFrozen ? "warning" : "success",
         };
         return {
@@ -1102,14 +809,25 @@ function DataSourcesContent() {
     });
   };
 
+  const handleSync = async (id: string) => {
+    setSources((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status: "syncing" } : s)),
+    );
+    await fetchHealth(true, new Set([id]));
+  };
+
   const handleSyncAll = async () => {
-    const ids = sources.filter((s) => !s.frozen).map((s) => s.id);
-    await Promise.all(ids.map((id) => handleSync(id)));
+    const activeIds = new Set(
+      sources.filter((s) => !s.frozen).map((s) => s.id),
+    );
+    setSources((prev) =>
+      prev.map((s) => (activeIds.has(s.id) ? { ...s, status: "syncing" } : s)),
+    );
+    await fetchHealth(true, activeIds);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <div
           className="flex items-center gap-2 text-[12px] mb-2"
@@ -1150,11 +868,13 @@ function DataSourcesContent() {
                 className="text-[11px]"
                 style={{ color: "var(--text-secondary)" }}
               >
-                Last polled {lastPolled.toLocaleTimeString()}
+                {lastPolled
+                  ? `Last polled ${lastPolled.toLocaleTimeString()}`
+                  : "Loading..."}
               </span>
             </div>
             <button
-              onClick={poll}
+              onClick={() => fetchHealth(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-medium transition-colors"
               style={{
                 background: "var(--bg-primary)",
@@ -1175,13 +895,7 @@ function DataSourcesContent() {
         </div>
       </div>
 
-      <SourcesSummary sources={sources} />
-
-      <AnimatePresence>
-        {conflicts.map((c, i) => (
-          <ConflictBanner key={i} report={c} />
-        ))}
-      </AnimatePresence>
+      {!loading && <SourcesSummary sources={sources} />}
 
       <div
         id="connector-grid"
@@ -1204,7 +918,6 @@ function DataSourcesContent() {
         ))}
       </div>
 
-      {/* Legend */}
       <div
         className="rounded-xl px-5 py-4 flex flex-wrap items-center gap-4"
         style={{

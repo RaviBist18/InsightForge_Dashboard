@@ -11,7 +11,7 @@ export const FiltersPanel: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const urlRange = searchParams.get("range") || "30d";
+  const urlRange = searchParams.get("range") || "monthly";
   const urlCategory = searchParams.get("category") || "";
 
   const [selectedRange, setSelectedRange] = useState(urlRange);
@@ -57,9 +57,9 @@ export const FiltersPanel: React.FC = () => {
   };
 
   const handleReset = () => {
-    setSelectedRange("30d");
+    setSelectedRange("monthly");
     setSelectedCategory("");
-    router.push("/");
+    router.push(pathname);
   };
 
   const handleExport = useCallback(async () => {
@@ -101,12 +101,27 @@ export const FiltersPanel: React.FC = () => {
     { value: "annually", label: "Annual" },
   ];
 
-  const categories = [
-    { value: "", label: "Subscription Tiers" },
-    { value: "starter", label: "Starter" },
-    { value: "pro", label: "Pro" },
-    { value: "enterprise", label: "Enterprise" },
-  ];
+  const [categories, setCategories] = useState<
+    { value: string; label: string }[]
+  >([{ value: "", label: "All Categories" }]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { supabase } = await import("@/lib/supabase");
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("category");
+      if (error || !data) return;
+      const unique: string[] = Array.from(
+        new Set(data.map((d: any) => d.category as string).filter(Boolean)),
+      );
+      setCategories([
+        { value: "", label: "All Categories" },
+        ...unique.map((c: string) => ({ value: c, label: c })),
+      ]);
+    };
+    fetchCategories();
+  }, []);
 
   return (
     <motion.div

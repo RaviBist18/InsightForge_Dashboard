@@ -139,12 +139,16 @@ interface KPISectionProps {
   allowedSlugs?: string[];
   onCardClick?: (slug: string) => void;
   revenueChangePct?: number;
+  metricsLoading?: boolean;
+  estimatedSlugs?: string[];
 }
 export const KPISection: React.FC<KPISectionProps> = ({
   stats,
   allowedSlugs,
   onCardClick,
   revenueChangePct,
+  metricsLoading = false,
+  estimatedSlugs,
 }) => {
   if (!stats)
     return (
@@ -161,7 +165,7 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.totalRevenue,
       displayValue: `$${stats.totalRevenue}`,
       icon: DollarSign,
-      ...(revenueChangePct !== undefined && revenueChangePct !== 0
+      ...(!metricsLoading && revenueChangePct !== undefined
         ? {
             change: revenueChangePct,
             trend: revenueChangePct >= 0 ? ("up" as const) : ("down" as const),
@@ -169,14 +173,18 @@ export const KPISection: React.FC<KPISectionProps> = ({
         : {}),
     },
     {
-      title: "Total Profit",
+      title: estimatedSlugs?.includes("total-profit")
+        ? "Total Profit (Est.)"
+        : "Total Profit",
       slug: "total-profit",
       rawValue: stats.totalProfit,
       displayValue: `$${stats.totalProfit}`,
       icon: Briefcase,
     },
     {
-      title: "Profit Margin",
+      title: estimatedSlugs?.includes("profit-margin")
+        ? "Profit Margin (Est.)"
+        : "Profit Margin",
       slug: "profit-margin",
       rawValue: stats.profitMargin,
       displayValue: `${stats.profitMargin}%`,
@@ -185,14 +193,18 @@ export const KPISection: React.FC<KPISectionProps> = ({
       icon: Percent,
     },
     {
-      title: "Total Orders",
+      title: estimatedSlugs?.includes("total-orders")
+        ? "Total Orders (Est.)"
+        : "Total Orders",
       slug: "total-orders",
       rawValue: stats.totalOrders,
       displayValue: `${stats.totalOrders}`,
       icon: ShoppingCart,
     },
     {
-      title: "Active Users",
+      title: estimatedSlugs?.includes("active-users")
+        ? "Active Users (Est.)"
+        : "Active Users",
       slug: "active-users",
       rawValue: stats.activeUsers,
       displayValue: `${stats.activeUsers}`,

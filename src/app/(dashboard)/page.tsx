@@ -18,9 +18,8 @@ import {
   getTransactions,
   getInsights,
   getDashboardStats,
-  getRevenueData,
+  getBucketedRevenue,
   getCategoryData,
-  getRegionData,
 } from "@/lib/data";
 
 // KPI slugs that trigger the detail panel
@@ -40,7 +39,6 @@ export default function Home({ searchParams }: { searchParams: any }) {
   const [stats, setStats] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>([]);
   const [categoryData, setCategoryData] = useState<any>([]);
-  const [regionData, setRegionData] = useState<any>([]);
   const [insights, setInsights] = useState<any>([]);
   const [loading, setLoading] = useState(true);
 
@@ -62,13 +60,12 @@ export default function Home({ searchParams }: { searchParams: any }) {
   useEffect(() => {
     async function initDashboard() {
       const range = "monthly";
-      const [tx, ins, st, rev, cat, reg] = await Promise.all([
-        getTransactions(range),
+      const [tx, ins, st, rev, cat] = await Promise.all([
+        getTransactions(),
         getInsights(range),
         getDashboardStats(range),
-        getRevenueData(range),
+        getBucketedRevenue(range),
         getCategoryData(range),
-        getRegionData(range),
       ]);
 
       const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
@@ -103,7 +100,6 @@ export default function Home({ searchParams }: { searchParams: any }) {
       setInsights(ins);
       setRevenueData(rev);
       setCategoryData(cat);
-      setRegionData(reg);
       setLoading(false);
     }
     initDashboard();
@@ -199,6 +195,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
         <KPISection
           stats={stats}
           onCardClick={(slug) => setLocalTab(slug)}
+          estimatedSlugs={["total-profit", "profit-margin"]}
           allowedSlugs={[
             "total-revenue",
             "total-profit",
@@ -240,8 +237,6 @@ export default function Home({ searchParams }: { searchParams: any }) {
               <ChartsSection
                 revenueData={revenueData}
                 categoryData={categoryData}
-                regionData={regionData}
-                category=""
                 range="monthly"
               />
               <InsightsPanel insights={insights} />

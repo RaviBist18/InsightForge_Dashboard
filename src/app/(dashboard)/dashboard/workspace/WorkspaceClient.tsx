@@ -284,6 +284,8 @@ export default function WorkspaceClient({
     { month: string; mrr: number }[]
   >([]);
   const [metricsLoading, setMetricsLoading] = useState(true);
+  const [currentMonthOrders, setCurrentMonthOrders] = useState(0);
+  const [currentMonthUsers, setCurrentMonthUsers] = useState(0);
 
   // ── WHY FEED ──
   const [whyFeed, setWhyFeed] = useState<WhyFeedItem[]>([]);
@@ -393,6 +395,18 @@ export default function WorkspaceClient({
           });
           const currentMrr = monthMap[currentMonthKey]?.total ?? 0;
           setMrr(Math.round(currentMrr));
+
+          const currentMonthRows = data.filter(
+            (t: any) =>
+              new Date(t.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                year: "numeric",
+              }) === currentMonthKey,
+          );
+          setCurrentMonthOrders(currentMonthRows.length);
+          setCurrentMonthUsers(
+            new Set(currentMonthRows.map((t: any) => t.customer)).size,
+          );
 
           if (sparkline.length >= 2) {
             const prev = sparkline[sparkline.length - 2].mrr;
@@ -769,9 +783,9 @@ export default function WorkspaceClient({
         totalRevenue: mrr,
         totalProfit: Math.round(mrr * 0.4),
         profitMargin: 40,
-        totalOrders: Math.round(mrr / 34),
-        activeUsers: Math.round(mrr / 48),
-        churnRate: 1.8,
+        totalOrders: currentMonthOrders,
+        activeUsers: currentMonthUsers,
+        churnRate: churn,
         efficiency: 78.5,
         latestNews: "Telemetry integrated.",
         mrrSparkline: mrrSparkline.map((d) => d.mrr),
@@ -954,6 +968,10 @@ export default function WorkspaceClient({
                 stats={liveStats}
                 onCardClick={(slug) => setActiveTab(slug as any)}
                 revenueChangePct={isAdmin ? mrrTrend : undefined}
+                metricsLoading={isAdmin ? metricsLoading : false}
+                estimatedSlugs={
+                  isAdmin ? ["total-profit", "profit-margin"] : undefined
+                }
                 allowedSlugs={
                   isAdmin
                     ? [

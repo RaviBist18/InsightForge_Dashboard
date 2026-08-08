@@ -1586,12 +1586,12 @@ function SummaryView({
         <ProfitComposedChart data={histData} accent={accent} />
       )}
       {slug === "profit-margin" && (
-        <MarginDonut margin={GLOBAL.margin} accent={accent} />
+        <MarginDonut margin={displayVal} accent={accent} />
       )}
       {slug === "total-orders" && <OrdersBarChart accent={accent} />}
       {slug === "active-users" && <UsersStepLine accent={accent} />}
       {slug === "churn-rate" && (
-        <ChurnGauge churnRate={GLOBAL.churnRate} accent={accent} />
+        <ChurnGauge churnRate={displayVal} accent={accent} />
       )}
 
       <ForensicNarrative
@@ -1893,6 +1893,16 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     if (role === "admin") {
       if (slug === "total-revenue" && stats?.totalRevenue !== undefined)
         return stats.totalRevenue;
+      if (slug === "total-profit" && stats?.totalProfit !== undefined)
+        return stats.totalProfit;
+      if (slug === "profit-margin" && stats?.profitMargin !== undefined)
+        return stats.profitMargin;
+      if (slug === "total-orders" && stats?.totalOrders !== undefined)
+        return stats.totalOrders;
+      if (slug === "active-users" && stats?.activeUsers !== undefined)
+        return stats.activeUsers;
+      if (slug === "churn-rate" && stats?.churnRate !== undefined)
+        return stats.churnRate;
       return cfg.adminValue;
     }
     if (slug === "total-revenue" && stats?.totalRevenue !== undefined)
@@ -2288,7 +2298,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
           >
             <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
               <SectionCard title="Margin Breakdown">
-                <MarginDonut margin={GLOBAL.margin} accent={accent} />
+                <MarginDonut margin={displayVal} accent={accent} />
                 <div className="flex justify-center gap-6 mt-3">
                   {[
                     { n: "Margin", c: accent },
@@ -2439,7 +2449,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
             <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SectionCard title="Churn Gauge">
-                  <ChurnGauge churnRate={GLOBAL.churnRate} accent={accent} />
+                  <ChurnGauge churnRate={displayVal} accent={accent} />
                 </SectionCard>
                 <SectionCard title="Churn Trend">
                   <ResponsiveContainer width="100%" height={200}>
