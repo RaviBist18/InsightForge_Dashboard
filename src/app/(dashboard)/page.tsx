@@ -14,6 +14,7 @@ import { CEOBriefing } from "@/components/CEOBriefing";
 import { AddNodeModal } from "@/components/dashboard/AddNodeModal";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { supabase } from "@/lib/supabase";
 import {
   getTransactions,
   getInsights,
@@ -43,6 +44,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
   const [insights, setInsights] = useState<any>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
 
   // Active KPI tab — null = main dashboard, slug string = detail panel
   const [localTab, setLocalTab] = useState<string | null>(null);
@@ -62,16 +64,17 @@ export default function Home({ searchParams }: { searchParams: any }) {
   useEffect(() => {
     async function initDashboard() {
       const range = "monthly";
-      const [tx, ins, st, rev, cat, cid] = await Promise.all([
+      const [tx, ins, st, rev, cat, cid, userResult] = await Promise.all([
         getTransactions(),
         getInsights(range),
         getDashboardStats(range),
         getBucketedRevenue(range),
         getCategoryData(range),
         getCurrentCompanyId(),
+        supabase.auth.getUser(),
       ]);
-
       setCompanyId(cid);
+      setUserId(userResult.data.user?.id);
 
       const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
         const stringId = String(tx.id || "");
@@ -149,7 +152,12 @@ export default function Home({ searchParams }: { searchParams: any }) {
             className="flex items-center gap-2 text-[12px] mb-2"
             style={{ color: "var(--text-muted)" }}
           >
-            <span>Dashboard</span>
+            <button
+              onClick={() => setLocalTab(null)}
+              className="hover:underline cursor-pointer"
+            >
+              Dashboard
+            </button>
             <span className="opacity-40">/</span>
             <span style={{ color: "var(--accent)" }}>Overview</span>
           </div>
@@ -200,7 +208,8 @@ export default function Home({ searchParams }: { searchParams: any }) {
         {/* FIX: no category/range props — KPISection only accepts { stats } */}
         <KPISection
           stats={stats}
-          onCardClick={(slug) => setLocalTab(slug)}
+          activeSlug={localTab}
+          onCardClick={(slug) => setLocalTab(localTab === slug ? null : slug)}
           estimatedSlugs={["total-profit", "profit-margin"]}
           allowedSlugs={[
             "total-revenue",
@@ -228,6 +237,7 @@ export default function Home({ searchParams }: { searchParams: any }) {
                 analytics={{}}
                 viewMode="summary"
                 onBack={() => setLocalTab(null)}
+                userId={userId}
               />
             </motion.div>
           ) : (

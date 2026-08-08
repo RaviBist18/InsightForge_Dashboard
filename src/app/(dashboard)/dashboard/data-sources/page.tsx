@@ -1,4 +1,5 @@
 "use client";
+import NextLink from "next/link";
 
 import { useState, useEffect, useCallback, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -833,7 +834,7 @@ function DataSourcesContent() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <span>Dashboard</span>
+          <NextLink href="/" className="hover:underline cursor-pointer">Dashboard</NextLink>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Data Sources</span>
         </div>

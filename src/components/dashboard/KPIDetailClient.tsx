@@ -48,6 +48,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { DashboardStats } from "@/lib/data";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,52 +225,9 @@ const SLUG_CONFIG: Record<
 
 // ─── Chart datasets (known fake-data debt — original 6 slugs, see roadmap) ────
 
-const REV_HIST = [
-  { name: "Oct", revenue: 1240, profit: 496, goal: 1500 },
-  { name: "Nov", revenue: 1380, profit: 552, goal: 1500 },
-  { name: "Dec", revenue: 1520, profit: 608, goal: 1600 },
-  { name: "Jan", revenue: 1610, profit: 644, goal: 1700 },
-  { name: "Feb", revenue: 1680, profit: 672, goal: 1700 },
-  { name: "Mar", revenue: 1740, profit: 696, goal: 1750 },
-  { name: "Apr", revenue: 1800, profit: 720, goal: 1750 },
-];
-
-const REV_HIST_USER = REV_HIST.map((d) => ({
-  name: d.name,
-  revenue: parseFloat((d.revenue * 0.02).toFixed(2)),
-  profit: parseFloat((d.profit * 0.02).toFixed(2)),
-  goal: parseFloat((d.goal * 0.02).toFixed(2)),
-}));
-
-const ORDERS_HIST = [
-  { name: "Mon", value: 6, goal: 8 },
-  { name: "Tue", value: 8, goal: 8 },
-  { name: "Wed", value: 7, goal: 8 },
-  { name: "Thu", value: 9, goal: 8 },
-  { name: "Fri", value: 11, goal: 8 },
-  { name: "Sat", value: 8, goal: 8 },
-  { name: "Sun", value: 4, goal: 8 },
-];
-
-const USERS_STEP = [
-  { name: "Oct", value: 24, goal: 30 },
-  { name: "Nov", value: 26, goal: 30 },
-  { name: "Dec", value: 28, goal: 30 },
-  { name: "Jan", value: 31, goal: 35 },
-  { name: "Feb", value: 33, goal: 35 },
-  { name: "Mar", value: 35, goal: 35 },
-  { name: "Apr", value: 37, goal: 40 },
-];
-
-const CHURN_HIST = [
-  { name: "Oct", value: 2.4, goal: 2.0 },
-  { name: "Nov", value: 2.1, goal: 2.0 },
-  { name: "Dec", value: 2.3, goal: 2.0 },
-  { name: "Jan", value: 2.0, goal: 1.8 },
-  { name: "Feb", value: 1.9, goal: 1.8 },
-  { name: "Mar", value: 1.8, goal: 1.8 },
-  { name: "Apr", value: 1.8, goal: 1.5 },
-];
+// ─── Chart datasets (known fake-data debt — original 6 slugs, see roadmap) ────
+type RevPoint = { name: string; revenue: number; profit: number };
+type NamedValuePoint = { name: string; value: number };
 
 const EXPENSE_BREAKDOWN = [
   { category: "Hosting (Vercel)", amount: 180, percentage: 17 },
@@ -1138,12 +1096,13 @@ function RevenueAreaChart({
   accent,
   prefix,
 }: {
-  data: typeof REV_HIST;
+  data: RevPoint[];
   accent: string;
   prefix: string;
 }) {
-  const avg = Math.round(data.reduce((a, d) => a + d.revenue, 0) / data.length);
-  const goalVal = data[data.length - 1].goal;
+  const avg = data.length
+    ? Math.round(data.reduce((a, d) => a + d.revenue, 0) / data.length)
+    : 0;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ left: -10, right: 8 }}>
@@ -1183,18 +1142,6 @@ function RevenueAreaChart({
             fontSize: 10,
           }}
         />
-        <ReferenceLine
-          y={goalVal}
-          stroke="#059669"
-          strokeDasharray="4 4"
-          strokeOpacity={0.5}
-          label={{
-            value: "Goal",
-            position: "insideTopLeft",
-            fill: "#059669",
-            fontSize: 10,
-          }}
-        />
         <Area
           type="monotone"
           dataKey="revenue"
@@ -1224,10 +1171,12 @@ function ProfitComposedChart({
   data,
   accent,
 }: {
-  data: typeof REV_HIST;
+  data: RevPoint[];
   accent: string;
 }) {
-  const avg = Math.round(data.reduce((a, d) => a + d.profit, 0) / data.length);
+  const avg = data.length
+    ? Math.round(data.reduce((a, d) => a + d.profit, 0) / data.length)
+    : 0;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <ComposedChart data={data} margin={{ left: -10, right: 8 }}>
@@ -1291,13 +1240,19 @@ function ProfitComposedChart({
   );
 }
 
-function OrdersBarChart({ accent }: { accent: string }) {
-  const avg = Math.round(
-    ORDERS_HIST.reduce((a, d) => a + d.value, 0) / ORDERS_HIST.length,
-  );
+function OrdersBarChart({
+  data,
+  accent,
+}: {
+  data: NamedValuePoint[];
+  accent: string;
+}) {
+  const avg = data.length
+    ? Math.round(data.reduce((a, d) => a + d.value, 0) / data.length)
+    : 0;
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={ORDERS_HIST} margin={{ left: -20, right: 8 }}>
+      <BarChart data={data} margin={{ left: -20, right: 8 }}>
         <CartesianGrid
           strokeDasharray="3 3"
           vertical={false}
@@ -1324,18 +1279,6 @@ function OrdersBarChart({ accent }: { accent: string }) {
             value: `Avg ${avg}`,
             position: "insideTopRight",
             fill: accent,
-            fontSize: 10,
-          }}
-        />
-        <ReferenceLine
-          y={8}
-          stroke="#059669"
-          strokeDasharray="4 4"
-          strokeOpacity={0.5}
-          label={{
-            value: "Goal 8",
-            position: "insideTopLeft",
-            fill: "#059669",
             fontSize: 10,
           }}
         />
@@ -1345,13 +1288,19 @@ function OrdersBarChart({ accent }: { accent: string }) {
   );
 }
 
-function UsersStepLine({ accent }: { accent: string }) {
-  const avg = Math.round(
-    USERS_STEP.reduce((a, d) => a + d.value, 0) / USERS_STEP.length,
-  );
+function UsersStepLine({
+  data,
+  accent,
+}: {
+  data: NamedValuePoint[];
+  accent: string;
+}) {
+  const avg = data.length
+    ? Math.round(data.reduce((a, d) => a + d.value, 0) / data.length)
+    : 0;
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={USERS_STEP} margin={{ left: -20, right: 8 }}>
+      <LineChart data={data} margin={{ left: -20, right: 8 }}>
         <CartesianGrid
           strokeDasharray="3 3"
           vertical={false}
@@ -1378,18 +1327,6 @@ function UsersStepLine({ accent }: { accent: string }) {
             value: `Avg ${avg}`,
             position: "insideTopRight",
             fill: accent,
-            fontSize: 10,
-          }}
-        />
-        <ReferenceLine
-          y={40}
-          stroke="#059669"
-          strokeDasharray="4 4"
-          strokeOpacity={0.5}
-          label={{
-            value: "Goal 40",
-            position: "insideTopLeft",
-            fill: "#059669",
             fontSize: 10,
           }}
         />
@@ -1405,7 +1342,7 @@ function UsersStepLine({ accent }: { accent: string }) {
                 key={key}
                 {...rest}
                 dataKey="value"
-                data={USERS_STEP}
+                data={data}
                 color={accent}
               />
             );
@@ -1531,6 +1468,8 @@ function SummaryView({
   suffix,
   accent,
   histData,
+  ordersHistData,
+  usersHistData,
   role,
   persona,
 }: {
@@ -1540,7 +1479,9 @@ function SummaryView({
   prefix: string;
   suffix: string;
   accent: string;
-  histData: typeof REV_HIST;
+  histData: RevPoint[];
+  ordersHistData: NamedValuePoint[];
+  usersHistData: NamedValuePoint[];
   role: UserRole;
   persona: AIPersona;
 }) {
@@ -1588,8 +1529,12 @@ function SummaryView({
       {slug === "profit-margin" && (
         <MarginDonut margin={displayVal} accent={accent} />
       )}
-      {slug === "total-orders" && <OrdersBarChart accent={accent} />}
-      {slug === "active-users" && <UsersStepLine accent={accent} />}
+      {slug === "total-orders" && (
+        <OrdersBarChart data={ordersHistData} accent={accent} />
+      )}
+      {slug === "active-users" && (
+        <UsersStepLine data={usersHistData} accent={accent} />
+      )}
       {slug === "churn-rate" && (
         <ChurnGauge churnRate={displayVal} accent={accent} />
       )}
@@ -1877,11 +1822,127 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
   onBack,
   entities = [],
   onDeleteNode,
+  userId,
 }) => {
   const cfg = SLUG_CONFIG[slug];
   if (!cfg) return null;
 
   const [persona, setPersona] = useState<AIPersona>(initPersona);
+  const [histData, setHistData] = useState<RevPoint[]>([]);
+  const [ordersHistData, setOrdersHistData] = useState<NamedValuePoint[]>([]);
+  const [usersHistData, setUsersHistData] = useState<NamedValuePoint[]>([]);
+  const [churnHistData, setChurnHistData] = useState<NamedValuePoint[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHistories = async () => {
+      if (!userId) return;
+      try {
+        const { data: membership } = await supabase
+          .from("memberships")
+          .select("company_id")
+          .eq("user_id", userId)
+          .single();
+        if (!membership?.company_id) return;
+
+        let query = supabase
+          .from("transactions")
+          .select("amount, customer, created_at")
+          .eq("company_id", membership.company_id);
+        if (role === "user") {
+          query = query.eq("user_id", userId);
+        }
+        const { data: txns, error } = await query;
+        if (error) throw error;
+        const rows = txns || [];
+
+        // ── Revenue / Profit (last 6 months) ──
+        const now = new Date();
+        const months: { key: string; name: string }[] = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          months.push({
+            key: `${d.getFullYear()}-${d.getMonth()}`,
+            name: d.toLocaleString("en-US", { month: "short" }),
+          });
+        }
+        const revSums: Record<string, number> = {};
+        const customersByMonth: Record<string, Set<string>> = {};
+        months.forEach((m) => {
+          revSums[m.key] = 0;
+          customersByMonth[m.key] = new Set();
+        });
+        rows.forEach((t: any) => {
+          const d = new Date(t.created_at);
+          const key = `${d.getFullYear()}-${d.getMonth()}`;
+          if (key in revSums) {
+            revSums[key] += Number(t.amount) || 0;
+            if (t.customer) customersByMonth[key].add(t.customer);
+          }
+        });
+        const revPoints: RevPoint[] = months.map((m) => ({
+          name: m.name,
+          revenue: Math.round(revSums[m.key]),
+          profit: Math.round(revSums[m.key] * 0.4),
+        }));
+
+        // ── Active users (distinct customers per month) ──
+        const usersPoints: NamedValuePoint[] = months.map((m) => ({
+          name: m.name,
+          value: customersByMonth[m.key].size,
+        }));
+
+        // ── Churn (customers present last month, absent this month) ──
+        const churnPoints: NamedValuePoint[] = months.map((m, i) => {
+          if (i === 0) return { name: m.name, value: 0 };
+          const prev = customersByMonth[months[i - 1].key];
+          const curr = customersByMonth[m.key];
+          if (prev.size === 0) return { name: m.name, value: 0 };
+          let lost = 0;
+          prev.forEach((c) => {
+            if (!curr.has(c)) lost += 1;
+          });
+          return {
+            name: m.name,
+            value: parseFloat(((lost / prev.size) * 100).toFixed(1)),
+          };
+        });
+
+        // ── Orders (transaction count, last 7 days) ──
+        const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const dayCounts: Record<string, number> = {};
+        const last7 = new Date();
+        last7.setDate(last7.getDate() - 6);
+        rows.forEach((t: any) => {
+          const d = new Date(t.created_at);
+          if (d >= last7) {
+            const label = dayLabels[d.getDay()];
+            dayCounts[label] = (dayCounts[label] || 0) + 1;
+          }
+        });
+        const orderedDays: NamedValuePoint[] = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const label = dayLabels[d.getDay()];
+          orderedDays.push({ name: label, value: dayCounts[label] || 0 });
+        }
+
+        if (!cancelled) {
+          setHistData(revPoints);
+          setUsersHistData(usersPoints);
+          setChurnHistData(churnPoints);
+          setOrdersHistData(orderedDays);
+        }
+      } catch (err) {
+        console.error("fetchHistories error:", err);
+      }
+    };
+    fetchHistories();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, role]);
   const isAdmin = role === "admin";
 
   const accent = cfg.accentColor;
@@ -1923,7 +1984,6 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
     return cfg.userValue;
   })();
 
-  const histData = role === "admin" ? REV_HIST : REV_HIST_USER;
   const microStats = (MICRO_STATS[slug] ?? (() => []))(role);
   const humanText = cfg.humanLabel(displayVal, role);
 
@@ -1948,6 +2008,8 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
         suffix={suffix}
         accent={accent}
         histData={histData}
+        ordersHistData={ordersHistData}
+        usersHistData={usersHistData}
         role={role}
         persona={persona}
       />
@@ -2360,7 +2422,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
           >
             <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
               <SectionCard title="Order Volume">
-                <OrdersBarChart accent={accent} />
+                <OrdersBarChart data={ordersHistData} accent={accent} />
               </SectionCard>
             </div>
             {isAdmin && <KeyDrivers slug={slug} role={role} />}
@@ -2404,7 +2466,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
           >
             <div className={isAdmin ? "lg:col-span-2" : "w-full"}>
               <SectionCard title="User Growth">
-                <UsersStepLine accent={accent} />
+                <UsersStepLine data={usersHistData} accent={accent} />
               </SectionCard>
             </div>
             {isAdmin && <KeyDrivers slug={slug} role={role} />}
@@ -2454,7 +2516,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                 <SectionCard title="Churn Trend">
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart
-                      data={CHURN_HIST}
+                      data={churnHistData}
                       margin={{ left: -20, right: 8 }}
                     >
                       <CartesianGrid
@@ -2475,18 +2537,6 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
                         tickFormatter={(v) => `${v}%`}
                       />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
-                      <ReferenceLine
-                        y={1.5}
-                        stroke="#059669"
-                        strokeDasharray="4 4"
-                        strokeOpacity={0.5}
-                        label={{
-                          value: "Goal",
-                          position: "insideTopLeft",
-                          fill: "#059669",
-                          fontSize: 10,
-                        }}
-                      />
                       <Line
                         type="monotone"
                         dataKey="value"

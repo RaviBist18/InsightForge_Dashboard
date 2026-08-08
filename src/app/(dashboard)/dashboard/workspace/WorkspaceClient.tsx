@@ -989,7 +989,12 @@ export default function WorkspaceClient({
             >
               <KPISection
                 stats={liveStats}
-                onCardClick={(slug) => setActiveTab(slug as any)}
+                activeSlug={activeTab as string}
+                onCardClick={(slug) =>
+                  setActiveTab(
+                    activeTab === slug ? ("pulse" as any) : (slug as any),
+                  )
+                }
                 revenueChangePct={isAdmin ? mrrTrend : undefined}
                 metricsLoading={isAdmin ? metricsLoading : false}
                 estimatedSlugs={
@@ -1330,8 +1335,9 @@ export default function WorkspaceClient({
                   persona={persona as any}
                   viewMode="full"
                   onBack={() => setActiveTab("pulse")}
-                  entities={entities} // ← add this
+                  entities={entities} // â† add this
                   onDeleteNode={deleteNode}
+                  userId={userId}
                 />
               </motion.div>
             )}

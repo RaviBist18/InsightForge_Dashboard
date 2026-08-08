@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1025,7 +1026,7 @@ export default function SettingsPage() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <span>Dashboard</span>
+          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Settings</span>
         </div>

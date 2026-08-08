@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -899,7 +900,7 @@ export default function SavedViewsPage() {
           className="flex items-center gap-2 text-xs font-medium mb-3"
           style={{ color: "var(--text-muted)" }}
         >
-          <span>Dashboard</span>
+          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Saved Views</span>
         </div>

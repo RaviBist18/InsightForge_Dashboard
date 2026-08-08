@@ -21,7 +21,10 @@ export async function generateStaticParams() {
   return VALID_SLUGS.map((slug) => ({ slug }));
 }
 
-async function getUserRole(): Promise<"admin" | "user"> {
+async function getUserRoleAndId(): Promise<{
+  role: "admin" | "user";
+  userId: string | null;
+}> {
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -37,15 +40,18 @@ async function getUserRole(): Promise<"admin" | "user"> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return "user";
+    if (!user) return { role: "user", userId: null };
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
-    return profile?.role === "admin" ? "admin" : "user";
+    return {
+      role: profile?.role === "admin" ? "admin" : "user",
+      userId: user.id,
+    };
   } catch {
-    return "user";
+    return { role: "user", userId: null };
   }
 }
 
@@ -53,9 +59,9 @@ export default async function KPIDetailPage({ params }: PageProps) {
   const { slug } = await params;
   if (!VALID_SLUGS.includes(slug)) notFound();
 
-  const [stats, role] = await Promise.all([
+  const [stats, { role, userId }] = await Promise.all([
     getDashboardStats("30d"),
-    getUserRole(),
+    getUserRoleAndId(),
   ]);
 
   return (
@@ -65,6 +71,7 @@ export default async function KPIDetailPage({ params }: PageProps) {
       stats={stats}
       role={role}
       persona="balanced"
+      userId={userId ?? undefined}
     />
   );
 }

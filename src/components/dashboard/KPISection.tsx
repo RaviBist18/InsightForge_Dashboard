@@ -51,6 +51,7 @@ interface KPICardProps {
   delay?: number;
   slug: string;
   onCardClick?: (slug: string) => void;
+  isActive?: boolean;
 }
 
 const KPICard: React.FC<KPICardProps> = ({
@@ -66,6 +67,7 @@ const KPICard: React.FC<KPICardProps> = ({
   delay = 0,
   slug,
   onCardClick,
+  isActive = false,
 }) => {
   const ref = useRef(null);
 
@@ -86,10 +88,12 @@ const KPICard: React.FC<KPICardProps> = ({
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.4, delay }}
       onClick={() => onCardClick?.(slug)}
-      className="relative rounded-xl p-5 h-full cursor-pointer transition-colors"
+      className="relative rounded-xl p-5 h-full cursor-pointer transition-all"
       style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
+        background: isActive ? "var(--accent-subtle)" : "var(--bg-surface)",
+        border: isActive
+          ? "1px solid var(--accent)"
+          : "1px solid var(--border)",
       }}
     >
       <div className="flex justify-between items-start mb-4">
@@ -141,6 +145,7 @@ interface KPISectionProps {
   revenueChangePct?: number;
   metricsLoading?: boolean;
   estimatedSlugs?: string[];
+  activeSlug?: string | null;
 }
 export const KPISection: React.FC<KPISectionProps> = ({
   stats,
@@ -149,6 +154,7 @@ export const KPISection: React.FC<KPISectionProps> = ({
   revenueChangePct,
   metricsLoading = false,
   estimatedSlugs,
+  activeSlug = null,
 }) => {
   if (!stats)
     return (
@@ -256,6 +262,7 @@ export const KPISection: React.FC<KPISectionProps> = ({
           {...m}
           delay={i * 0.05}
           onCardClick={onCardClick}
+          isActive={m.slug === activeSlug}
         />
       ))}
     </div>
