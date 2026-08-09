@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
+import { inviteSchema, parseOrError } from "@/lib/validations";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -31,14 +32,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { email, role, companyId, companyName } = await req.json();
-
-    if (!email || !role || !companyId) {
+    const body = await req.json();
+    const { data, error: validationError } = parseOrError(inviteSchema, body);
+    if (validationError) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Invalid input", details: validationError },
         { status: 400 },
       );
     }
+    const { email, role, companyId, companyName } = data;
 
     // verify caller is actually admin/co-admin of THIS company
     const { data: membership, error: memErr } = await supabaseAdmin

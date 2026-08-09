@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { findCompanySchema, parseOrError } from "@/lib/validations";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,10 +23,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { email } = await req.json();
-    if (!email) {
-      return NextResponse.json({ error: "Email required" }, { status: 400 });
+    const body = await req.json();
+    const { data, error: validationError } = parseOrError(
+      findCompanySchema,
+      body,
+    );
+    if (validationError) {
+      return NextResponse.json(
+        { error: "Valid email required", details: validationError },
+        { status: 400 },
+      );
     }
+    const { email } = data;
 
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("profiles")

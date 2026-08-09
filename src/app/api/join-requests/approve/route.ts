@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { joinRequestApproveSchema, parseOrError } from "@/lib/validations";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,10 +23,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { requestId, action } = await req.json(); // action: "approve" | "reject"
-    if (!requestId || !["approve", "reject"].includes(action)) {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    const body = await req.json();
+    const { data, error: validationError } = parseOrError(
+      joinRequestApproveSchema,
+      body,
+    );
+    if (validationError) {
+      return NextResponse.json(
+        { error: "Invalid request", details: validationError },
+        { status: 400 },
+      );
     }
+    const { requestId, action } = data;
 
     const { data: joinReq, error: reqErr } = await supabaseAdmin
       .from("join_requests")
