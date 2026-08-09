@@ -51,3 +51,5 @@ QODER.md
 
 # code-review-graph
 .code-review-graph/
+backend/venv/
+backend/__pycache__/

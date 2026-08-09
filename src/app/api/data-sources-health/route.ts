@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,7 @@ interface SourceHealth {
   checkedAt: string;
 }
 
-async function timed<T>(
-  fn: () => Promise<T>,
-): Promise<{
+async function timed<T>(fn: () => Promise<T>): Promise<{
   ms: number;
   ok: boolean;
   result: T | null;
@@ -25,6 +24,7 @@ async function timed<T>(
     const result = await fn();
     return { ms: Date.now() - start, ok: true, result, error: null };
   } catch (e: any) {
+    logger.warn("data source health check failed", { error: e.message });
     return {
       ms: Date.now() - start,
       ok: false,

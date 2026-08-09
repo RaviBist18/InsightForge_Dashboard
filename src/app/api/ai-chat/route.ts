@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiChatSchema, parseOrError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,6 +76,10 @@ DASHBOARD OVERVIEW:
 
     return NextResponse.json({ reply });
   } catch (err: any) {
+    logger.error("ai-chat route failed", {
+      error: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
       { reply: "The Forge is offline. Check API connectivity." },
       { status: 500 },

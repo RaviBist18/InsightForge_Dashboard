@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { joinRequestApproveSchema, parseOrError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -109,6 +110,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, status: "approved" });
   } catch (err: any) {
+    logger.error("join-requests approve route failed", {
+      error: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
       { error: err.message || "Server error" },
       { status: 500 },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { findCompanySchema, parseOrError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,6 +73,10 @@ export async function POST(req: Request) {
     const co = membership.companies as any;
     return NextResponse.json({ id: co.id, name: co.name });
   } catch (err: any) {
+    logger.error("find-company route failed", {
+      error: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
       { error: err.message || "Server error" },
       { status: 500 },

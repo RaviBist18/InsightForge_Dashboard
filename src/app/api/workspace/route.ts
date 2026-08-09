@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { logger } from "@/lib/logger";
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY!;
@@ -206,7 +207,10 @@ Persona: ${persona}`;
 
     return NextResponse.json({ snapshot: data });
   } catch (err: any) {
-    console.error("SNAPSHOT_ERROR:", err);
+    logger.error("workspace snapshot failed", {
+      error: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
       { error: err.message ?? "Unknown error" },
       { status: 500 },

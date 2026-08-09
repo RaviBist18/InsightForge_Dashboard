@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { inviteSchema, parseOrError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -105,6 +106,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, link });
   } catch (err: any) {
+    logger.error("invite route failed", {
+      error: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
       { error: err.message || "Server error" },
       { status: 500 },
