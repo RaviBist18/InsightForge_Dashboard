@@ -15,6 +15,10 @@ next-env.d.ts
 # testing / coverage
 coverage/
 
+# lint output (debug files, don't commit)
+lint-errors.json
+lint-errors.txt
+
 # env
 .env*
 !.env.example
