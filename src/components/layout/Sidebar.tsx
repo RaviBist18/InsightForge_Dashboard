@@ -12,6 +12,7 @@ import {
   Bookmark,
   Settings,
   UserCog,
+  UploadCloud,
   ChevronLeft,
   ChevronRight,
   X,
@@ -45,6 +46,7 @@ const getInitials = (nameOrEmail: string) => {
 
 const ADMIN_NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: Database, label: "Data Sources", href: "/dashboard/data-sources" },
   { icon: FileText, label: "Reports", href: "/dashboard/reports" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
@@ -55,6 +57,7 @@ const ADMIN_NAV_ITEMS = [
 
 const USER_NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
