@@ -53,3 +53,5 @@ QODER.md
 .code-review-graph/
 backend/venv/
 backend/__pycache__/
+
+insightforge-backend/
