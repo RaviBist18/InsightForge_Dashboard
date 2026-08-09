@@ -83,7 +83,7 @@ export function AIChat({ nodes, stats }: AIChatProps) {
     if (!text.trim() || loading) return;
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       role: "user",
       content: text.trim(),
       timestamp: new Date(),
@@ -110,7 +110,7 @@ export function AIChat({ nodes, stats }: AIChatProps) {
       const data = await response.json();
 
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: crypto.randomUUID(),
         role: "assistant",
         content: data.reply || "Sorry, I could not process that.",
         timestamp: new Date(),

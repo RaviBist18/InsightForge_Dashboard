@@ -159,8 +159,8 @@ function ShareModule({
   view: SavedView;
   onClose: () => void;
 }) {
-  const token = useRef(crypto.randomUUID());
-  const shareUrl = `https://insight-forge-dashboard.vercel.app/snapshot/${token.current}`;
+  const [token] = useState(() => crypto.randomUUID());
+  const shareUrl = `https://insight-forge-dashboard.vercel.app/snapshot/${token}`;
   const [copied, setCopied] = useState(false);
   const [expiry] = useState(() => {
     const d = new Date();
@@ -900,7 +900,9 @@ export default function SavedViewsPage() {
           className="flex items-center gap-2 text-xs font-medium mb-3"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
+          <Link href="/" className="hover:underline cursor-pointer">
+            Dashboard
+          </Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Saved Views</span>
         </div>

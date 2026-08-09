@@ -1485,6 +1485,8 @@ function SummaryView({
   role: UserRole;
   persona: AIPersona;
 }) {
+  if (!cfg) return null;
+
   const Icon = cfg.icon;
   const humanText = cfg.humanLabel(displayVal, role);
 
@@ -1825,15 +1827,13 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
   userId,
 }) => {
   const cfg = SLUG_CONFIG[slug];
-  if (!cfg) return null;
-
   const [persona, setPersona] = useState<AIPersona>(initPersona);
   const [histData, setHistData] = useState<RevPoint[]>([]);
   const [ordersHistData, setOrdersHistData] = useState<NamedValuePoint[]>([]);
   const [usersHistData, setUsersHistData] = useState<NamedValuePoint[]>([]);
   const [churnHistData, setChurnHistData] = useState<NamedValuePoint[]>([]);
-
   useEffect(() => {
+    if (!cfg) return;
     let cancelled = false;
     const fetchHistories = async () => {
       if (!userId) return;

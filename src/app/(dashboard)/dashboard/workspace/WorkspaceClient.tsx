@@ -249,6 +249,15 @@ function generateNodeVaultData(entities: BusinessEntity[], baseMrr: number) {
   });
 }
 
+function generateMockSparkline(baseMrr: number) {
+  return Array.from({ length: 12 }, (_, i) => ({
+    month: `M${i + 1}`,
+    mrr: Math.round(
+      baseMrr * (0.7 + (i / 12) * 0.35) + (Math.random() - 0.5) * baseMrr * 0.1,
+    ),
+  }));
+}
+
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────────
 export default function WorkspaceClient({
   userId,
@@ -437,16 +446,6 @@ export default function WorkspaceClient({
     }
     fetchMetrics();
   }, [initialMrr, setMrrTrend, isAdmin, companyId]);
-
-  function generateMockSparkline(baseMrr: number) {
-    return Array.from({ length: 12 }, (_, i) => ({
-      month: `M${i + 1}`,
-      mrr: Math.round(
-        baseMrr * (0.7 + (i / 12) * 0.35) +
-          (Math.random() - 0.5) * baseMrr * 0.1,
-      ),
-    }));
-  }
 
   // ── FETCH TICKERS ─────────────────────────────────────────────────────────
   const fetchTickers = useCallback(async () => {
@@ -1085,7 +1084,7 @@ export default function WorkspaceClient({
                                 delay: i * 0.1,
                               }}
                               style={{
-                                height: `${30 + Math.random() * 60}%`,
+                                height: `${30 + ((i * 37) % 60)}%`,
                                 background: `${accent}30`,
                               }}
                             />

@@ -103,6 +103,28 @@ function deriveHealthScore(
   return 55;
 }
 
+function buildEmptySource(
+  id: string,
+  meta: (typeof SOURCE_META)[string],
+): DataSourceConnector {
+  return {
+    id,
+    name: meta.name,
+    type: meta.type,
+    apiKeyMasked: meta.apiKeyMasked,
+    status: "error",
+    configured: false,
+    healthScore: 0,
+    latencyMs: 0,
+    lastSync: "never",
+    recordCount: null,
+    frozen: false,
+    frozenAt: null,
+    aiContextEnabled: true,
+    events: [],
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function loadLS<T>(key: string, fallback: T): T {
@@ -713,28 +735,6 @@ function DataSourcesContent() {
     [],
   );
 
-  function buildEmptySource(
-    id: string,
-    meta: (typeof SOURCE_META)[string],
-  ): DataSourceConnector {
-    return {
-      id,
-      name: meta.name,
-      type: meta.type,
-      apiKeyMasked: meta.apiKeyMasked,
-      status: "error",
-      configured: false,
-      healthScore: 0,
-      latencyMs: 0,
-      lastSync: "never",
-      recordCount: null,
-      frozen: false,
-      frozenAt: null,
-      aiContextEnabled: true,
-      events: [],
-    };
-  }
-
   const fetchHealth = useCallback(
     async (force: boolean, syncingIds?: Set<string>) => {
       const res = await fetch(
@@ -834,7 +834,9 @@ function DataSourcesContent() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <NextLink href="/" className="hover:underline cursor-pointer">Dashboard</NextLink>
+          <NextLink href="/" className="hover:underline cursor-pointer">
+            Dashboard
+          </NextLink>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Data Sources</span>
         </div>
