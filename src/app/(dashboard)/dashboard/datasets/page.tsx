@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { UploadCloud, Loader2, AlertCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { UploadCloud, Loader2, AlertCircle, FileText } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-const BACKEND_URL = "https://insightforge-dashboard.onrender.com";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
 interface ColumnInfo {
   name: string;
@@ -12,10 +14,30 @@ interface ColumnInfo {
 }
 
 interface UploadResult {
+  id: string;
   filename: string;
   row_count: number | string;
   columns: ColumnInfo[];
   preview: Record<string, unknown>[];
+}
+
+interface DatasetSummary {
+  id: string;
+  filename: string;
+  row_count: number;
+  column_schema: ColumnInfo[];
+  created_at: string;
+}
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Not signed in — please log in again.");
+  }
+  return { Authorization: `Bearer ${session.access_token}` };
 }
 
 export default function DatasetsPage() {
@@ -24,6 +46,29 @@ export default function DatasetsPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
 
+  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+  const [datasetsLoading, setDatasetsLoading] = useState(true);
+
+  const loadDatasets = useCallback(async () => {
+    setDatasetsLoading(true);
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets`, { headers });
+      if (!res.ok) throw new Error("Failed to load datasets");
+      const data: DatasetSummary[] = await res.json();
+      setDatasets(data);
+    } catch {
+      // silent — list is secondary to upload flow, don't block the page on this
+      setDatasets([]);
+    } finally {
+      setDatasetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDatasets();
+  }, [loadDatasets]);
+
   const handleUpload = async () => {
     if (!file) return;
     setLoading(true);
@@ -31,11 +76,13 @@ export default function DatasetsPage() {
     setResult(null);
 
     try {
+      const headers = await getAuthHeader();
       const formData = new FormData();
       formData.append("file", file);
 
       const res = await fetch(`${BACKEND_URL}/upload`, {
         method: "POST",
+        headers, // don't set Content-Type manually — browser sets multipart boundary automatically
         body: formData,
       });
 
@@ -46,6 +93,7 @@ export default function DatasetsPage() {
 
       const data: UploadResult = await res.json();
       setResult(data);
+      loadDatasets(); // refresh saved list now that a new one exists
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {
@@ -116,6 +164,50 @@ export default function DatasetsPage() {
           {error}
         </div>
       )}
+
+      {/* Saved datasets list */}
+      <div className="mb-8">
+        <p
+          className="text-[10px] font-semibold uppercase tracking-wider mb-2"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Saved Datasets
+        </p>
+        {datasetsLoading ? (
+          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Loading...
+          </p>
+        ) : datasets.length === 0 ? (
+          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+            No datasets saved yet — upload one above.
+          </p>
+        ) : (
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            {datasets.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-3 px-3 py-2.5 text-[13px]"
+                style={{ borderTop: "1px solid var(--border)" }}
+              >
+                <FileText size={14} style={{ color: "var(--text-muted)" }} />
+                <span style={{ color: "var(--text-primary)" }}>
+                  {d.filename}
+                </span>
+                <span
+                  className="ml-auto text-[12px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {d.row_count} rows ·{" "}
+                  {new Date(d.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {result && (
         <div>

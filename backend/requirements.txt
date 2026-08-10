@@ -2,3 +2,6 @@
 uvicorn[standard]
 python-multipart
 pandas
+openpyxl
+supabase
+pyjwt
