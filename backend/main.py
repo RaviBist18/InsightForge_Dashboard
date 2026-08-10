@@ -107,6 +107,125 @@ def detect_column_role(col_name: str, dtype: str) -> dict:
     return {"role": "unknown", "confidence": "none"}
 
 
+def analyze_dataframe(df: pd.DataFrame) -> dict:
+    """Shared analysis pipeline — column detection, duplicates, outliers, preview.
+    Used by both /upload and /clean so results stay identical after cleaning."""
+    columns = [
+        {
+            "name": col,
+            "dtype": str(df[col].dtype),
+            "null_count": int(df[col].isnull().sum()),
+            **detect_column_role(col, str(df[col].dtype)),
+        }
+        for col in df.columns
+    ]
+
+    duplicate_mask = df.duplicated(keep=False)
+    duplicate_count = int(df.duplicated(keep="first").sum())
+    duplicate_rows_preview = [
+        {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        for row in df[duplicate_mask].head(10).to_dict(orient="records")
+    ]
+
+    outliers_by_column = {}
+    for col in df.select_dtypes(include=["float64", "int64"]).columns:
+        series = df[col].dropna()
+        if len(series) < 4:
+            continue
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        if iqr == 0:
+            continue
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
+        outlier_count = int(outlier_mask.sum())
+        if outlier_count > 0:
+            outlier_rows = [
+                {k: (None if pd.isna(v) else v) for k, v in row.items()}
+                for row in df[outlier_mask].head(10).to_dict(orient="records")
+            ]
+            outliers_by_column[col] = {
+                "count": outlier_count,
+                "lower_bound": round(float(lower_bound), 2),
+                "upper_bound": round(float(upper_bound), 2),
+                "rows": outlier_rows,
+            }
+
+    preview_df = df.head(10)
+    preview = [
+        {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        for row in preview_df.to_dict(orient="records")
+    ]
+
+    return {
+        "columns": columns,
+        "preview": preview,
+        "duplicate_count": duplicate_count,
+        "duplicate_rows_preview": duplicate_rows_preview,
+        "outliers_by_column": outliers_by_column,
+    }
+
+
+def engineer_features(df: pd.DataFrame, columns: list[dict]) -> dict:
+    """Derive common business features based on detected column roles.
+    Returns summary only (not full df) — keeps payload small."""
+    features_added = []
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+
+    if date_col:
+        try:
+            parsed = pd.to_datetime(df[date_col], errors="coerce")
+            if parsed.notna().sum() > 0:
+                df["_day"] = parsed.dt.day
+                df["_month"] = parsed.dt.month
+                df["_weekday"] = parsed.dt.day_name()
+                features_added.append(
+                    {
+                        "name": "day / month / weekday",
+                        "source_column": date_col,
+                        "type": "date_parts",
+                    }
+                )
+        except Exception:
+            pass
+
+    if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        df["_rolling_avg_7"] = (
+            df[revenue_col].rolling(window=7, min_periods=1).mean().round(2)
+        )
+        features_added.append(
+            {
+                "name": "rolling_avg_7",
+                "source_column": revenue_col,
+                "type": "rolling_average",
+            }
+        )
+
+    if customer_col:
+        order_counts = df[customer_col].value_counts()
+        top_customers = [
+            {"customer_id": str(k), "order_count": int(v)}
+            for k, v in order_counts.head(5).items()
+        ]
+        features_added.append(
+            {
+                "name": "order_count",
+                "source_column": customer_col,
+                "type": "aggregate",
+                "top_5": top_customers,
+            }
+        )
+
+    return {"features_added": features_added}
+
+
 @app.post("/upload")
 async def upload(
     file: UploadFile = File(...),
@@ -133,60 +252,15 @@ async def upload(
 
     row_count = len(df)  # fixed — was reporting truncated preview count before
 
-    columns = [
-        {
-            "name": col,
-            "dtype": str(df[col].dtype),
-            "null_count": int(df[col].isnull().sum()),
-            **detect_column_role(col, str(df[col].dtype)),
-        }
-        for col in df.columns
-    ]
-
-    # Duplicate detection — exact full-row duplicates only for v1
-    duplicate_mask = df.duplicated(
-        keep=False
-    )  # marks ALL occurrences of a dupe, not just the 2nd+
-    duplicate_count = int(
-        df.duplicated(keep="first").sum()
-    )  # count of extra rows beyond the first occurrence
-    duplicate_rows_preview = [
-        {k: (None if pd.isna(v) else v) for k, v in row.items()}
-        for row in df[duplicate_mask].head(10).to_dict(orient="records")
-    ]
-
-    # Outlier detection — IQR method, numeric columns only
-    outliers_by_column = {}
-    for col in df.select_dtypes(include=["float64", "int64"]).columns:
-        series = df[col].dropna()
-        if len(series) < 4:  # not enough data to compute quartiles meaningfully
-            continue
-        q1 = series.quantile(0.25)
-        q3 = series.quantile(0.75)
-        iqr = q3 - q1
-        if iqr == 0:  # no spread — every value identical, skip
-            continue
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
-        outlier_count = int(outlier_mask.sum())
-        if outlier_count > 0:
-            outlier_rows = [
-                {k: (None if pd.isna(v) else v) for k, v in row.items()}
-                for row in df[outlier_mask].head(10).to_dict(orient="records")
-            ]
-            outliers_by_column[col] = {
-                "count": outlier_count,
-                "lower_bound": round(float(lower_bound), 2),
-                "upper_bound": round(float(upper_bound), 2),
-                "rows": outlier_rows,
-            }
-
-    preview_df = df.head(10)
-    preview = [
-        {k: (None if pd.isna(v) else v) for k, v in row.items()}
-        for row in preview_df.to_dict(orient="records")
-    ]
+    analysis_result = analyze_dataframe(df)
+    analysis_result["engineered_features"] = engineer_features(
+        df, analysis_result["columns"]
+    )["features_added"]
+    columns = analysis_result["columns"]
+    duplicate_count = analysis_result["duplicate_count"]
+    duplicate_rows_preview = analysis_result["duplicate_rows_preview"]
+    outliers_by_column = analysis_result["outliers_by_column"]
+    preview = analysis_result["preview"]
 
     # Upload raw file to Supabase Storage, scoped under company_id
     dataset_id = str(uuid.uuid4())
@@ -207,6 +281,7 @@ async def upload(
         "duplicate_count": duplicate_count,
         "duplicate_rows_preview": duplicate_rows_preview,
         "outliers_by_column": outliers_by_column,
+        "engineered_features": analysis_result["engineered_features"],
     }
 
     insert_result = (
@@ -239,6 +314,77 @@ async def upload(
         "duplicate_count": duplicate_count,
         "duplicate_rows_preview": duplicate_rows_preview,
         "outliers_by_column": outliers_by_column,
+        "engineered_features": analysis_result["engineered_features"],
+    }
+
+
+@app.post("/datasets/{dataset_id}/clean")
+async def clean_dataset(
+    dataset_id: str,
+    actions: list[str],
+    authorization: str = Header(None),
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    if "remove_duplicates" in actions:
+        df = df.drop_duplicates(keep="first")
+
+    if "fill_nulls" in actions:
+        for col in df.columns:
+            if df[col].dtype in ("float64", "int64"):
+                df[col] = df[col].fillna(df[col].median())
+            else:
+                df[col] = df[col].fillna("Unknown")
+
+    row_count = len(df)
+    analysis = analyze_dataframe(df)
+    analysis["engineered_features"] = engineer_features(df, analysis["columns"])[
+        "features_added"
+    ]
+
+    # overwrite storage with cleaned file — CSV only for v1 simplicity
+    cleaned_bytes = df.to_csv(index=False).encode("utf-8")
+    supabase.storage.from_("datasets").remove([storage_path])
+    supabase.storage.from_("datasets").upload(
+        storage_path, cleaned_bytes, {"content-type": "text/csv"}
+    )
+
+    supabase.table("datasets").update(
+        {
+            "row_count": row_count,
+            "column_schema": analysis["columns"],
+            "analysis": analysis,
+        }
+    ).eq("id", dataset_id).eq("company_id", company_id).execute()
+
+    del df, file_bytes, cleaned_bytes
+
+    return {
+        "id": dataset_id,
+        "filename": filename,
+        "row_count": row_count,
+        **analysis,
     }
 
 

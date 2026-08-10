@@ -20,6 +20,12 @@ interface ColumnInfo {
   role: string;
   confidence: string;
 }
+interface EngineeredFeature {
+  name: string;
+  source_column: string;
+  type: string;
+  top_5?: { customer_id: string; order_count: number }[];
+}
 interface UploadResult {
   id: string;
   filename: string;
@@ -37,6 +43,7 @@ interface UploadResult {
       rows: Record<string, unknown>[];
     }
   >;
+  engineered_features: EngineeredFeature[];
 }
 
 interface DatasetSummary {
@@ -74,6 +81,7 @@ export default function DatasetsPage() {
   >(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [cleaning, setCleaning] = useState(false);
 
   const loadDatasets = useCallback(async () => {
     setDatasetsLoading(true);
@@ -117,6 +125,7 @@ export default function DatasetsPage() {
         duplicate_count: data.analysis.duplicate_count,
         duplicate_rows_preview: data.analysis.duplicate_rows_preview,
         outliers_by_column: data.analysis.outliers_by_column,
+        engineered_features: data.analysis.engineered_features || [],
       });
     } catch (e: any) {
       setError(e.message || "Failed to load dataset");
@@ -156,6 +165,28 @@ export default function DatasetsPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const handleClean = async (actions: string[]) => {
+    if (!result) return;
+    setCleaning(true);
+    setError(null);
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${result.id}/clean`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(actions),
+      });
+      if (!res.ok) throw new Error("Failed to clean dataset");
+      const data: UploadResult = await res.json();
+      setResult(data);
+      loadDatasets();
+    } catch (e: any) {
+      setError(e.message || "Failed to clean dataset");
+    } finally {
+      setCleaning(false);
+    }
   };
 
   const confirmBulkDelete = async () => {
@@ -462,14 +493,69 @@ export default function DatasetsPage() {
             </table>
           </div>
 
-          {result.duplicate_count > 0 && (
+          {result.engineered_features?.length > 0 && (
             <div className="mb-6">
               <p
                 className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-                style={{ color: "var(--danger, #dc2626)" }}
+                style={{ color: "var(--text-muted)" }}
               >
-                Duplicates Found: {result.duplicate_count}
+                Engineered Features
               </p>
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                {result.engineered_features.map((f, i) => (
+                  <div
+                    key={i}
+                    className="px-3 py-2.5 text-[13px]"
+                    style={{
+                      borderTop: i > 0 ? "1px solid var(--border)" : "none",
+                    }}
+                  >
+                    <span
+                      className="font-medium"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {f.name}
+                    </span>
+                    <span
+                      className="ml-2 text-[12px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      derived from {f.source_column}
+                    </span>
+                    {f.top_5 && (
+                      <div className="mt-1 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                        Top customers by order count:{" "}
+                        {f.top_5.map((t) => `${t.customer_id} (${t.order_count})`).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+
+          {result.duplicate_count > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <p
+                  className="text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--danger, #dc2626)" }}
+                >
+                  Duplicates Found: {result.duplicate_count}
+                </p>
+                <button
+                  onClick={() => handleClean(["remove_duplicates"])}
+                  disabled={cleaning}
+                  className="text-[12px] font-medium transition-colors disabled:opacity-50"
+                  style={{ color: "var(--accent)" }}
+                >
+                  {cleaning ? "Cleaning..." : "Remove Duplicates"}
+                </button>
+              </div>
               <div
                 className="rounded-xl overflow-hidden"
                 style={{ border: "1px solid var(--border)" }}
@@ -714,3 +800,5 @@ export default function DatasetsPage() {
     </div>
   );
 }
+
+
