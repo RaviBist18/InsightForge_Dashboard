@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { UploadCloud, Loader2, AlertCircle, FileText } from "lucide-react";
+import {
+  UploadCloud,
+  Loader2,
+  AlertCircle,
+  FileText,
+  Trash2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const BACKEND_URL =
@@ -11,14 +17,26 @@ interface ColumnInfo {
   name: string;
   dtype: string;
   null_count: number;
+  role: string;
+  confidence: string;
 }
-
 interface UploadResult {
   id: string;
   filename: string;
   row_count: number | string;
   columns: ColumnInfo[];
   preview: Record<string, unknown>[];
+  duplicate_count: number;
+  duplicate_rows_preview: Record<string, unknown>[];
+  outliers_by_column: Record<
+    string,
+    {
+      count: number;
+      lower_bound: number;
+      upper_bound: number;
+      rows: Record<string, unknown>[];
+    }
+  >;
 }
 
 interface DatasetSummary {
@@ -48,6 +66,14 @@ export default function DatasetsPage() {
 
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetsLoading, setDatasetsLoading] = useState(true);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const [deleteConfirmBulk, setDeleteConfirmBulk] = useState<
+    "selected" | "all" | null
+  >(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const loadDatasets = useCallback(async () => {
     setDatasetsLoading(true);
@@ -68,6 +94,97 @@ export default function DatasetsPage() {
   useEffect(() => {
     loadDatasets();
   }, [loadDatasets]);
+
+  const handleViewDataset = async (id: string) => {
+    setViewingId(id);
+    setError(null);
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${id}`, { headers });
+      if (!res.ok) throw new Error("Failed to load dataset");
+      const data = await res.json();
+      if (!data.analysis) {
+        throw new Error(
+          "This dataset was uploaded before analysis-saving was added — delete it and re-upload to view details.",
+        );
+      }
+      setResult({
+        id: data.id,
+        filename: data.filename,
+        row_count: data.row_count,
+        columns: data.analysis.columns,
+        preview: data.analysis.preview,
+        duplicate_count: data.analysis.duplicate_count,
+        duplicate_rows_preview: data.analysis.duplicate_rows_preview,
+        outliers_by_column: data.analysis.outliers_by_column,
+      });
+    } catch (e: any) {
+      setError(e.message || "Failed to load dataset");
+      setViewingId(null);
+    }
+  };
+
+  const handleDeleteDataset = async (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirmId;
+    if (!id) return;
+    setDeleteConfirmId(null);
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to delete dataset");
+      if (viewingId === id) {
+        setResult(null);
+        setViewingId(null);
+      }
+      loadDatasets();
+    } catch (e: any) {
+      setError(e.message || "Failed to delete dataset");
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    const idsToDelete =
+      deleteConfirmBulk === "all"
+        ? datasets.map((d) => d.id)
+        : Array.from(selectedIds);
+    setDeleteConfirmBulk(null);
+
+    try {
+      const headers = await getAuthHeader();
+      await Promise.all(
+        idsToDelete.map((id) =>
+          fetch(`${BACKEND_URL}/datasets/${id}`, {
+            method: "DELETE",
+            headers,
+          }),
+        ),
+      );
+      if (viewingId && idsToDelete.includes(viewingId)) {
+        setResult(null);
+        setViewingId(null);
+      }
+      setSelectedIds(new Set());
+      loadDatasets();
+    } catch (e: any) {
+      setError(e.message || "Failed to delete datasets");
+    }
+  };
 
   const handleUpload = async () => {
     if (!file) return;
@@ -93,6 +210,7 @@ export default function DatasetsPage() {
 
       const data: UploadResult = await res.json();
       setResult(data);
+      setViewingId(null); // fresh upload, not viewing a saved one
       loadDatasets(); // refresh saved list now that a new one exists
     } catch (e: any) {
       setError(e.message || "Something went wrong");
@@ -167,12 +285,34 @@ export default function DatasetsPage() {
 
       {/* Saved datasets list */}
       <div className="mb-8">
-        <p
-          className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-          style={{ color: "var(--text-muted)" }}
-        >
-          Saved Datasets
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p
+            className="text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: "var(--text-muted)" }}
+          >
+            Saved Datasets
+          </p>
+          {datasets.length > 0 && (
+            <div className="flex items-center gap-3">
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setDeleteConfirmBulk("selected")}
+                  className="text-[12px] font-medium transition-colors"
+                  style={{ color: "var(--danger, #dc2626)" }}
+                >
+                  Delete Selected ({selectedIds.size})
+                </button>
+              )}
+              <button
+                onClick={() => setDeleteConfirmBulk("all")}
+                className="text-[12px] font-medium transition-colors"
+                style={{ color: "var(--danger, #dc2626)" }}
+              >
+                Delete All
+              </button>
+            </div>
+          )}
+        </div>
         {datasetsLoading ? (
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             Loading...
@@ -189,9 +329,21 @@ export default function DatasetsPage() {
             {datasets.map((d) => (
               <div
                 key={d.id}
-                className="flex items-center gap-3 px-3 py-2.5 text-[13px]"
-                style={{ borderTop: "1px solid var(--border)" }}
+                onClick={() => handleViewDataset(d.id)}
+                className="flex items-center gap-3 px-3 py-2.5 text-[13px] cursor-pointer transition-colors hover:brightness-95"
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  background:
+                    viewingId === d.id ? "var(--bg-primary)" : "transparent",
+                }}
               >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(d.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleSelect(d.id)}
+                  className="cursor-pointer"
+                />
                 <FileText size={14} style={{ color: "var(--text-muted)" }} />
                 <span style={{ color: "var(--text-primary)" }}>
                   {d.filename}
@@ -203,6 +355,17 @@ export default function DatasetsPage() {
                   {d.row_count} rows ·{" "}
                   {new Date(d.created_at).toLocaleDateString()}
                 </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteDataset(d.id);
+                  }}
+                  className="ml-2 p-1.5 rounded-lg transition-colors hover:bg-red-50"
+                  style={{ color: "var(--danger, #dc2626)" }}
+                  title="Delete dataset"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
           </div>
@@ -255,6 +418,12 @@ export default function DatasetsPage() {
                   >
                     Missing
                   </th>
+                  <th
+                    className="text-left px-3 py-2 font-medium"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Detected Role
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -281,11 +450,120 @@ export default function DatasetsPage() {
                     >
                       {col.null_count}
                     </td>
+                    <td
+                      className="px-3 py-2"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      {col.role === "unknown" ? "—" : col.role}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {result.duplicate_count > 0 && (
+            <div className="mb-6">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider mb-2"
+                style={{ color: "var(--danger, #dc2626)" }}
+              >
+                Duplicates Found: {result.duplicate_count}
+              </p>
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr style={{ background: "var(--bg-primary)" }}>
+                      {result.columns.map((col) => (
+                        <th
+                          key={col.name}
+                          className="text-left px-3 py-2 font-medium whitespace-nowrap"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          {col.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.duplicate_rows_preview.map((row, i) => (
+                      <tr
+                        key={i}
+                        style={{ borderTop: "1px solid var(--border)" }}
+                      >
+                        {result.columns.map((col) => (
+                          <td
+                            key={col.name}
+                            className="px-3 py-2 whitespace-nowrap"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {row[col.name] === null
+                              ? "—"
+                              : String(row[col.name])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {Object.entries(result.outliers_by_column).map(([colName, info]) => (
+            <div key={colName} className="mb-6">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider mb-2"
+                style={{ color: "var(--warning, #d97706)" }}
+              >
+                Outliers in "{colName}": {info.count} (expected range:{" "}
+                {info.lower_bound} – {info.upper_bound})
+              </p>
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr style={{ background: "var(--bg-primary)" }}>
+                      {result.columns.map((col) => (
+                        <th
+                          key={col.name}
+                          className="text-left px-3 py-2 font-medium whitespace-nowrap"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          {col.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {info.rows.map((row, i) => (
+                      <tr
+                        key={i}
+                        style={{ borderTop: "1px solid var(--border)" }}
+                      >
+                        {result.columns.map((col) => (
+                          <td
+                            key={col.name}
+                            className="px-3 py-2 whitespace-nowrap"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {row[col.name] === null
+                              ? "—"
+                              : String(row[col.name])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
 
           <p
             className="text-[10px] font-semibold uppercase tracking-wider mb-2"
@@ -327,6 +605,109 @@ export default function DatasetsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {deleteConfirmBulk && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setDeleteConfirmBulk(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm mx-4 p-5 rounded-2xl"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <h3
+              className="text-[15px] font-semibold mb-2"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {deleteConfirmBulk === "all"
+                ? `Delete all ${datasets.length} datasets?`
+                : `Delete ${selectedIds.size} selected dataset${selectedIds.size > 1 ? "s" : ""}?`}
+            </h3>
+            <p
+              className="text-[13px] mb-5"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              This can't be undone. Files and their analysis will be permanently
+              removed.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmBulk(null)}
+                className="px-4 py-2 rounded-xl text-[13px] font-medium transition-colors"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                className="px-4 py-2 rounded-xl text-[13px] font-medium text-white transition-colors"
+                style={{ background: "var(--danger, #dc2626)" }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmId && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setDeleteConfirmId(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm mx-4 p-5 rounded-2xl"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <h3
+              className="text-[15px] font-semibold mb-2"
+              style={{ color: "var(--text-primary)" }}
+            >
+              Delete dataset?
+            </h3>
+            <p
+              className="text-[13px] mb-5"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              This can't be undone. The file and its analysis will be
+              permanently removed.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 rounded-xl text-[13px] font-medium transition-colors"
+                style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 rounded-xl text-[13px] font-medium text-white transition-colors"
+                style={{ background: "var(--danger, #dc2626)" }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
