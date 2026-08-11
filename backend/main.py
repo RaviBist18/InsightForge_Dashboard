@@ -9,6 +9,8 @@ from datetime import datetime
 
 import jwt
 import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
 from fastapi import FastAPI, UploadFile, File, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
@@ -481,6 +483,865 @@ async def get_dataset_kpis(dataset_id: str, authorization: str = Header(None)):
     del df, file_bytes
 
     return {"kpis": kpis, "revenue_series": revenue_series}
+
+
+@app.get("/datasets/{dataset_id}/revenue-forecast")
+async def get_revenue_forecast(
+    dataset_id: str,
+    authorization: str = Header(None),
+    days_ahead: int = 7,
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+
+    if not date_col or not revenue_col:
+        return {
+            "available": False,
+            "reason": "Needs both a date column and a revenue column",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    if not pd.api.types.is_numeric_dtype(df[revenue_col]):
+        return {"available": False, "reason": "Revenue column is not numeric"}
+
+    temp = df[[date_col, revenue_col]].copy()
+    temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+    temp = temp.dropna(subset=[date_col])
+    daily = temp.groupby(temp[date_col].dt.date)[revenue_col].sum().reset_index()
+    daily.columns = ["date", "revenue"]
+    daily = daily.sort_values("date")
+
+    if len(daily) < 3:
+        return {
+            "available": False,
+            "reason": "Not enough historical data points to forecast (need at least 3 days)",
+        }
+
+    daily["day_index"] = range(len(daily))
+    X = daily[["day_index"]].values
+    y = daily["revenue"].values
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    r_squared = round(float(model.score(X, y)), 3)
+    confidence = "high" if r_squared > 0.7 else "medium" if r_squared > 0.4 else "low"
+
+    last_index = daily["day_index"].max()
+    last_date = daily["date"].max()
+
+    future_indices = np.array([[last_index + i] for i in range(1, days_ahead + 1)])
+    predictions = model.predict(future_indices)
+    predictions = np.maximum(predictions, 0)  # revenue can't go negative
+
+    forecast = []
+    for i, pred in enumerate(predictions, start=1):
+        future_date = pd.Timestamp(last_date) + pd.Timedelta(days=i)
+        forecast.append(
+            {
+                "date": future_date.strftime("%Y-%m-%d"),
+                "predicted_revenue": round(float(pred), 2),
+            }
+        )
+
+    historical = [
+        {"date": str(d), "revenue": round(float(r), 2)}
+        for d, r in zip(daily["date"], daily["revenue"])
+    ]
+
+    trend = (
+        "growing"
+        if model.coef_[0] > 0
+        else "declining" if model.coef_[0] < 0 else "flat"
+    )
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "historical": historical,
+        "forecast": forecast,
+        "confidence": confidence,
+        "r_squared": r_squared,
+        "trend": trend,
+        "daily_change_rate": round(float(model.coef_[0]), 2),
+    }
+
+
+@app.get("/datasets/{dataset_id}/sales-forecast")
+async def get_sales_forecast(
+    dataset_id: str,
+    authorization: str = Header(None),
+    days_ahead: int = 7,
+    region: str = None,
+    product: str = None,
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    metric_col_name = sales_col or quantity_col
+
+    if not date_col or not metric_col_name:
+        return {
+            "available": False,
+            "reason": "Needs both a date column and a sales/quantity column",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
+
+    if not pd.api.types.is_numeric_dtype(df[metric_col_name]):
+        return {"available": False, "reason": "Sales/quantity column is not numeric"}
+
+    temp = df[[date_col, metric_col_name]].copy()
+    temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+    temp = temp.dropna(subset=[date_col])
+    daily = temp.groupby(temp[date_col].dt.date)[metric_col_name].sum().reset_index()
+    daily.columns = ["date", "sales"]
+    daily = daily.sort_values("date")
+
+    if len(daily) < 3:
+        return {
+            "available": False,
+            "reason": "Not enough historical data points to forecast (need at least 3 days)",
+        }
+
+    daily["day_index"] = range(len(daily))
+    X = daily[["day_index"]].values
+    y = daily["sales"].values
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    r_squared = round(float(model.score(X, y)), 3)
+    confidence = "high" if r_squared > 0.7 else "medium" if r_squared > 0.4 else "low"
+
+    last_index = daily["day_index"].max()
+    last_date = daily["date"].max()
+
+    future_indices = np.array([[last_index + i] for i in range(1, days_ahead + 1)])
+    predictions = model.predict(future_indices)
+    predictions = np.maximum(predictions, 0)
+
+    forecast = []
+    for i, pred in enumerate(predictions, start=1):
+        future_date = pd.Timestamp(last_date) + pd.Timedelta(days=i)
+        forecast.append(
+            {
+                "date": future_date.strftime("%Y-%m-%d"),
+                "predicted_sales": round(float(pred), 2),
+            }
+        )
+
+    historical = [
+        {"date": str(d), "sales": round(float(s), 2)}
+        for d, s in zip(daily["date"], daily["sales"])
+    ]
+
+    trend = (
+        "growing"
+        if model.coef_[0] > 0
+        else "declining" if model.coef_[0] < 0 else "flat"
+    )
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "metric_used": metric_col_name,
+        "historical": historical,
+        "forecast": forecast,
+        "confidence": confidence,
+        "r_squared": r_squared,
+        "trend": trend,
+        "daily_change_rate": round(float(model.coef_[0]), 2),
+    }
+
+
+@app.get("/datasets/{dataset_id}/churn-prediction")
+async def get_churn_prediction(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+
+    if not customer_col or not date_col:
+        return {
+            "available": False,
+            "reason": "Needs both a customer_id column and a date column",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+
+    if len(df) == 0:
+        return {"available": False, "reason": "No valid dates found"}
+
+    dataset_end = df[date_col].max()
+
+    grouped = df.groupby(customer_col).agg(
+        last_order=(date_col, "max"),
+        order_count=(date_col, "count"),
+    )
+    grouped["recency_days"] = (dataset_end - grouped["last_order"]).dt.days
+
+    if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        rev = df.groupby(customer_col)[revenue_col].sum()
+        grouped["total_revenue"] = rev
+
+    max_recency = max(grouped["recency_days"].max(), 1)
+
+    def risk_bucket(days):
+        pct = days / max_recency
+        if pct > 0.66:
+            return "high"
+        elif pct > 0.33:
+            return "medium"
+        return "low"
+
+    grouped["churn_risk"] = grouped["recency_days"].apply(risk_bucket)
+
+    customers = []
+    for cust, row in grouped.sort_values("recency_days", ascending=False).iterrows():
+        entry = {
+            "customer_id": str(cust),
+            "days_since_last_order": int(row["recency_days"]),
+            "order_count": int(row["order_count"]),
+            "churn_risk": row["churn_risk"],
+        }
+        if "total_revenue" in grouped.columns:
+            entry["total_revenue"] = round(float(row["total_revenue"]), 2)
+        customers.append(entry)
+
+    risk_counts = grouped["churn_risk"].value_counts().to_dict()
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "total_customers": len(customers),
+        "risk_summary": {
+            "high": int(risk_counts.get("high", 0)),
+            "medium": int(risk_counts.get("medium", 0)),
+            "low": int(risk_counts.get("low", 0)),
+        },
+        "customers": customers[:20],
+    }
+
+
+@app.get("/datasets/{dataset_id}/customer-lifetime-value")
+async def get_customer_lifetime_value(
+    dataset_id: str, authorization: str = Header(None)
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+
+    if not customer_col or not revenue_col:
+        return {
+            "available": False,
+            "reason": "Needs both a customer_id column and a revenue column",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    if not pd.api.types.is_numeric_dtype(df[revenue_col]):
+        return {"available": False, "reason": "Revenue column is not numeric"}
+
+    ESTIMATED_LIFESPAN_YEARS = 2  # assumption, disclosed to user in response
+
+    observation_days = 365  # default fallback
+    if date_col:
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        valid_dates = df[date_col].dropna()
+        if len(valid_dates) > 1:
+            span = (valid_dates.max() - valid_dates.min()).days
+            observation_days = max(span, 1)
+
+    grouped = df.groupby(customer_col).agg(
+        total_revenue=(revenue_col, "sum"),
+        order_count=(revenue_col, "count"),
+    )
+    grouped["avg_order_value"] = grouped["total_revenue"] / grouped["order_count"]
+    grouped["purchase_frequency_annual"] = (
+        grouped["order_count"] / observation_days
+    ) * 365
+    grouped["clv"] = (
+        grouped["avg_order_value"]
+        * grouped["purchase_frequency_annual"]
+        * ESTIMATED_LIFESPAN_YEARS
+    )
+
+    clv_values = grouped["clv"]
+    high_cutoff = clv_values.quantile(0.66)
+    low_cutoff = clv_values.quantile(0.33)
+
+    def segment(clv):
+        if clv >= high_cutoff:
+            return "Gold"
+        elif clv >= low_cutoff:
+            return "Silver"
+        return "Bronze"
+
+    grouped["segment"] = grouped["clv"].apply(segment)
+
+    customers = []
+    for cust, row in grouped.sort_values("clv", ascending=False).iterrows():
+        customers.append(
+            {
+                "customer_id": str(cust),
+                "clv": round(float(row["clv"]), 2),
+                "avg_order_value": round(float(row["avg_order_value"]), 2),
+                "order_count": int(row["order_count"]),
+                "segment": row["segment"],
+            }
+        )
+
+    segment_counts = grouped["segment"].value_counts().to_dict()
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "assumptions": {
+            "estimated_lifespan_years": ESTIMATED_LIFESPAN_YEARS,
+            "observation_period_days": observation_days,
+        },
+        "segment_summary": {
+            "gold": int(segment_counts.get("Gold", 0)),
+            "silver": int(segment_counts.get("Silver", 0)),
+            "bronze": int(segment_counts.get("Bronze", 0)),
+        },
+        "customers": customers[:20],
+    }
+
+
+@app.get("/datasets/{dataset_id}/inventory-forecast")
+async def get_inventory_forecast(
+    dataset_id: str,
+    authorization: str = Header(None),
+    days_ahead: int = 7,
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    inventory_col = next((c["name"] for c in columns if c["role"] == "inventory"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+
+    if not date_col or not inventory_col or not product_col:
+        return {
+            "available": False,
+            "reason": "Needs date, inventory, and product columns",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    if not pd.api.types.is_numeric_dtype(df[inventory_col]):
+        return {"available": False, "reason": "Inventory column is not numeric"}
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+
+    LOW_STOCK_THRESHOLD = 10
+    products_forecast = []
+
+    for product, group in df.groupby(product_col):
+        group = group.sort_values(date_col)
+        if len(group) < 3:
+            continue
+
+        group = group.reset_index(drop=True)
+        group["day_index"] = range(len(group))
+        X = group[["day_index"]].values
+        y = group[inventory_col].values
+
+        model = LinearRegression()
+        model.fit(X, y)
+
+        last_index = group["day_index"].max()
+        last_date = group[date_col].max()
+        last_level = float(group[inventory_col].iloc[-1])
+
+        future_indices = np.array([[last_index + i] for i in range(1, days_ahead + 1)])
+        predictions = model.predict(future_indices)
+        predictions = np.maximum(predictions, 0)
+
+        forecast_points = []
+        stockout_date = None
+        for i, pred in enumerate(predictions, start=1):
+            future_date = pd.Timestamp(last_date) + pd.Timedelta(days=i)
+            level = round(float(pred), 2)
+            forecast_points.append(
+                {"date": future_date.strftime("%Y-%m-%d"), "predicted_inventory": level}
+            )
+            if level < LOW_STOCK_THRESHOLD and stockout_date is None:
+                stockout_date = future_date.strftime("%Y-%m-%d")
+
+        products_forecast.append(
+            {
+                "product": str(product),
+                "current_inventory": round(last_level, 2),
+                "daily_change_rate": round(float(model.coef_[0]), 2),
+                "forecast": forecast_points,
+                "will_run_low": stockout_date is not None,
+                "predicted_low_stock_date": stockout_date,
+            }
+        )
+
+    products_forecast.sort(
+        key=lambda p: (not p["will_run_low"], p["current_inventory"])
+    )
+
+    del df, file_bytes
+
+    if not products_forecast:
+        return {
+            "available": False,
+            "reason": "Not enough data points per product to forecast (need at least 3)",
+        }
+
+    return {
+        "available": True,
+        "low_stock_threshold": LOW_STOCK_THRESHOLD,
+        "products": products_forecast,
+    }
+
+
+@app.get("/datasets/{dataset_id}/marketing-roi-prediction")
+async def get_marketing_roi_prediction(
+    dataset_id: str,
+    authorization: str = Header(None),
+    hypothetical_spend: float = None,
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    spend_col = next(
+        (c["name"] for c in columns if c["role"] == "marketing_spend"), None
+    )
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+
+    if not spend_col or not revenue_col:
+        return {
+            "available": False,
+            "reason": "Needs both a marketing_spend column and a revenue column",
+        }
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    if not pd.api.types.is_numeric_dtype(
+        df[spend_col]
+    ) or not pd.api.types.is_numeric_dtype(df[revenue_col]):
+        return {"available": False, "reason": "Spend or revenue column is not numeric"}
+
+    clean = df[[spend_col, revenue_col]].dropna()
+    if len(clean) < 3:
+        return {
+            "available": False,
+            "reason": "Not enough data points to model spend-to-revenue relationship (need at least 3)",
+        }
+
+    X = clean[[spend_col]].values
+    y = clean[revenue_col].values
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    r_squared = round(float(model.score(X, y)), 3)
+    confidence = "high" if r_squared > 0.7 else "medium" if r_squared > 0.4 else "low"
+
+    current_avg_spend = float(clean[spend_col].mean())
+    current_avg_revenue = float(clean[revenue_col].mean())
+
+    if hypothetical_spend is None:
+        hypothetical_spend = (
+            current_avg_spend * 1.2
+        )  # default: model a 20% spend increase
+
+    predicted_revenue = float(model.predict([[hypothetical_spend]])[0])
+    predicted_revenue = max(predicted_revenue, 0)
+    predicted_roi = (
+        round(predicted_revenue / hypothetical_spend, 2) if hypothetical_spend else None
+    )
+
+    spend_range = np.linspace(
+        max(clean[spend_col].min() * 0.5, 0), clean[spend_col].max() * 1.5, 12
+    )
+    curve = []
+    for s in spend_range:
+        pred = max(float(model.predict([[s]])[0]), 0)
+        curve.append({"spend": round(float(s), 2), "predicted_revenue": round(pred, 2)})
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "confidence": confidence,
+        "r_squared": r_squared,
+        "revenue_per_spend_dollar": round(float(model.coef_[0]), 2),
+        "current_avg_spend": round(current_avg_spend, 2),
+        "current_avg_revenue": round(current_avg_revenue, 2),
+        "hypothetical_spend": round(float(hypothetical_spend), 2),
+        "predicted_revenue": round(predicted_revenue, 2),
+        "predicted_roi": predicted_roi,
+        "curve": curve,
+    }
+
+
+@app.get("/datasets/{dataset_id}/risk-prediction")
+async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    inventory_col = next((c["name"] for c in columns if c["role"] == "inventory"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    risks = []
+
+    # Revenue trend risk
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[revenue_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values,
+                daily[revenue_col.__class__ and daily.columns[1]].values,
+            )
+            slope = float(model.coef_[0])
+            if slope < 0:
+                risks.append(
+                    {
+                        "category": "Revenue",
+                        "severity": "high" if slope < -50 else "medium",
+                        "message": f"Revenue is trending downward (~{round(slope,2)}/day). Investigate cause before it compounds.",
+                    }
+                )
+
+    # Sales trend risk
+    metric_col = sales_col or quantity_col
+    if date_col and metric_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        temp = df[[date_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[metric_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope < 0:
+                risks.append(
+                    {
+                        "category": "Sales",
+                        "severity": "high" if slope < -20 else "medium",
+                        "message": f"Sales volume is declining (~{round(slope,2)}/day trend).",
+                    }
+                )
+
+    # Inventory risk
+    if (
+        inventory_col
+        and product_col
+        and pd.api.types.is_numeric_dtype(df[inventory_col])
+    ):
+        LOW_STOCK_THRESHOLD = 10
+        latest = df.sort_values(date_col) if date_col else df
+        latest = latest.groupby(product_col).last()
+        low_products = latest[latest[inventory_col] < LOW_STOCK_THRESHOLD]
+        for prod, row in low_products.iterrows():
+            risks.append(
+                {
+                    "category": "Inventory",
+                    "severity": "high" if row[inventory_col] < 5 else "medium",
+                    "message": f"{prod} is low on stock ({int(row[inventory_col])} units remaining).",
+                }
+            )
+
+    # Customer churn risk
+    if customer_col and date_col:
+        temp = df[[customer_col, date_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        if len(temp) > 0:
+            end_date = temp[date_col].max()
+            last_order = temp.groupby(customer_col)[date_col].max()
+            recency = (end_date - last_order).dt.days
+            max_r = max(recency.max(), 1)
+            high_risk_count = int((recency / max_r > 0.66).sum())
+            if high_risk_count > 0:
+                risks.append(
+                    {
+                        "category": "Customer",
+                        "severity": "medium",
+                        "message": f"{high_risk_count} customer(s) at high risk of churn based on order recency.",
+                    }
+                )
+
+    del df, file_bytes
+
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    risks.sort(key=lambda r: severity_order.get(r["severity"], 3))
+
+    high_count = sum(1 for r in risks if r["severity"] == "high")
+    medium_count = sum(1 for r in risks if r["severity"] == "medium")
+
+    return {
+        "available": True,
+        "overall_risk_level": (
+            "high" if high_count > 0 else "medium" if medium_count > 0 else "low"
+        ),
+        "risk_count": {"high": high_count, "medium": medium_count},
+        "risks": risks,
+    }
+
+
+@app.get("/datasets/{dataset_id}/trend-detection")
+async def get_trend_detection(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    spend_col = next(
+        (c["name"] for c in columns if c["role"] == "marketing_spend"), None
+    )
+
+    if not date_col:
+        return {"available": False, "reason": "Needs a date column"}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+
+    def trend_for(col, label, unit=""):
+        if not col or not pd.api.types.is_numeric_dtype(df[col]):
+            return None
+        temp = df[[date_col, col]].copy()
+        daily = temp.groupby(temp[date_col].dt.date)[col].sum().reset_index()
+        if len(daily) < 3:
+            return None
+        daily["idx"] = range(len(daily))
+        model = LinearRegression().fit(
+            daily[["idx"]].values, daily[daily.columns[1]].values
+        )
+        slope = float(model.coef_[0])
+        r2 = round(
+            float(model.score(daily[["idx"]].values, daily[daily.columns[1]].values)), 2
+        )
+        direction = (
+            "growing" if slope > 0.5 else "declining" if slope < -0.5 else "flat"
+        )
+        pct_word = (
+            "increasing" if slope > 0 else "decreasing" if slope < 0 else "staying flat"
+        )
+        summary = f"{label} is {pct_word} by approximately {abs(round(slope, 2))}{unit} per day (trend confidence: {'strong' if r2 > 0.5 else 'weak'})."
+        return {
+            "metric": label,
+            "direction": direction,
+            "daily_change": round(slope, 2),
+            "confidence": r2,
+            "summary": summary,
+        }
+
+    trends = []
+    for col, label, unit in [
+        (revenue_col, "Revenue", ""),
+        (sales_col or quantity_col, "Sales", " units"),
+        (spend_col, "Marketing Spend", ""),
+    ]:
+        t = trend_for(col, label, unit)
+        if t:
+            trends.append(t)
+
+    del df, file_bytes
+
+    if not trends:
+        return {
+            "available": False,
+            "reason": "No trackable numeric metrics with a date column found",
+        }
+
+    return {"available": True, "trends": trends}
 
 
 @app.get("/datasets/{dataset_id}/filter-options")

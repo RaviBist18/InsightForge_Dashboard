@@ -104,6 +104,107 @@ interface MarketingAnalytics {
   summary?: { total_spend?: number; total_revenue?: number; roi?: number };
   spend_series?: { date: string; spend: number }[];
 }
+
+interface RevenueForecast {
+  available: boolean;
+  reason?: string;
+  historical?: { date: string; revenue: number }[];
+  forecast?: { date: string; predicted_revenue: number }[];
+  confidence?: "high" | "medium" | "low";
+  r_squared?: number;
+  trend?: "growing" | "declining" | "flat";
+  daily_change_rate?: number;
+}
+
+interface SalesForecast {
+  available: boolean;
+  reason?: string;
+  metric_used?: string;
+  historical?: { date: string; sales: number }[];
+  forecast?: { date: string; predicted_sales: number }[];
+  confidence?: "high" | "medium" | "low";
+  r_squared?: number;
+  trend?: "growing" | "declining" | "flat";
+  daily_change_rate?: number;
+}
+
+interface ChurnPrediction {
+  available: boolean;
+  reason?: string;
+  total_customers?: number;
+  risk_summary?: { high: number; medium: number; low: number };
+  customers?: {
+    customer_id: string;
+    days_since_last_order: number;
+    order_count: number;
+    churn_risk: "high" | "medium" | "low";
+    total_revenue?: number;
+  }[];
+}
+
+interface CustomerLifetimeValue {
+  available: boolean;
+  reason?: string;
+  assumptions?: {
+    estimated_lifespan_years: number;
+    observation_period_days: number;
+  };
+  segment_summary?: { gold: number; silver: number; bronze: number };
+  customers?: {
+    customer_id: string;
+    clv: number;
+    avg_order_value: number;
+    order_count: number;
+    segment: "Gold" | "Silver" | "Bronze";
+  }[];
+}
+
+interface InventoryForecast {
+  available: boolean;
+  reason?: string;
+  low_stock_threshold?: number;
+  products?: {
+    product: string;
+    current_inventory: number;
+    daily_change_rate: number;
+    forecast: { date: string; predicted_inventory: number }[];
+    will_run_low: boolean;
+    predicted_low_stock_date: string | null;
+  }[];
+}
+
+interface MarketingRoiPrediction {
+  available: boolean;
+  reason?: string;
+  confidence?: "high" | "medium" | "low";
+  r_squared?: number;
+  revenue_per_spend_dollar?: number;
+  current_avg_spend?: number;
+  current_avg_revenue?: number;
+  hypothetical_spend?: number;
+  predicted_revenue?: number;
+  predicted_roi?: number;
+  curve?: { spend: number; predicted_revenue: number }[];
+}
+
+interface RiskPrediction {
+  available: boolean;
+  overall_risk_level?: "high" | "medium" | "low";
+  risk_count?: { high: number; medium: number };
+  risks?: { category: string; severity: "high" | "medium"; message: string }[];
+}
+interface TrendDetection {
+  available: boolean;
+  reason?: string;
+  trends?: {
+    metric: string;
+    direction: "growing" | "declining" | "flat";
+    daily_change: number;
+    confidence: number;
+    summary: string;
+  }[];
+}
+
 interface InventoryAnalytics {
   available: boolean;
   reason?: string;
@@ -176,6 +277,24 @@ export default function DatasetsPage() {
     useState<MarketingAnalytics | null>(null);
   const [inventoryAnalytics, setInventoryAnalytics] =
     useState<InventoryAnalytics | null>(null);
+  const [revenueForecast, setRevenueForecast] =
+    useState<RevenueForecast | null>(null);
+  const [salesForecast, setSalesForecast] = useState<SalesForecast | null>(
+    null,
+  );
+  const [churnPrediction, setChurnPrediction] =
+    useState<ChurnPrediction | null>(null);
+  const [clvData, setClvData] = useState<CustomerLifetimeValue | null>(null);
+  const [inventoryForecast, setInventoryForecast] =
+    useState<InventoryForecast | null>(null);
+  const [marketingRoi, setMarketingRoi] =
+    useState<MarketingRoiPrediction | null>(null);
+  const [riskPrediction, setRiskPrediction] = useState<RiskPrediction | null>(
+    null,
+  );
+  const [trendDetection, setTrendDetection] = useState<TrendDetection | null>(
+    null,
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,7 +312,16 @@ export default function DatasetsPage() {
     sales: true,
     marketing: true,
     inventory: true,
+    forecast: true,
+    salesForecast: true,
+    churn: true,
+    clv: true,
+    inventoryForecast: true,
+    marketingRoi: true,
+    risk: true,
+    trends: true,
   });
+
   const [showCustomize, setShowCustomize] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -217,7 +345,7 @@ export default function DatasetsPage() {
     const saved = localStorage.getItem("insightforge_visible_sections");
     if (saved) {
       try {
-        setVisibleSections(JSON.parse(saved));
+        setVisibleSections((prev) => ({ ...prev, ...JSON.parse(saved) }));
       } catch {}
     }
   }, [loadDatasets]);
@@ -239,6 +367,7 @@ export default function DatasetsPage() {
       loadSalesAnalytics(viewingId);
       loadMarketingAnalytics(viewingId);
       loadInventoryAnalytics(viewingId);
+      loadSalesForecast(viewingId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterRegion, filterProduct]);
@@ -280,6 +409,14 @@ export default function DatasetsPage() {
       loadSalesAnalytics(id);
       loadMarketingAnalytics(id);
       loadInventoryAnalytics(id);
+      loadRevenueForecast(id);
+      loadSalesForecast(id);
+      loadChurnPrediction(id);
+      loadClvData(id);
+      loadInventoryForecast(id);
+      loadMarketingRoi(id);
+      loadRiskPrediction(id);
+      loadTrendDetection(id);
     } catch (e: any) {
       setError(e.message || "Failed to load dataset");
       setViewingId(null);
@@ -303,6 +440,122 @@ export default function DatasetsPage() {
       setFilterOptions(await res.json());
     } catch {
       setFilterOptions({ regions: [], products: [] });
+    }
+  }, []);
+
+  const loadRevenueForecast = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/revenue-forecast`,
+        { headers },
+      );
+      if (!res.ok) throw new Error("Failed to load revenue forecast");
+      setRevenueForecast(await res.json());
+    } catch {
+      setRevenueForecast(null);
+    }
+  }, []);
+
+  const loadSalesForecast = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/sales-forecast${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load sales forecast");
+        setSalesForecast(await res.json());
+      } catch {
+        setSalesForecast(null);
+      }
+    },
+    [buildFilterParams],
+  );
+
+  const loadChurnPrediction = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/churn-prediction`,
+        {
+          headers,
+        },
+      );
+      if (!res.ok) throw new Error("Failed to load churn prediction");
+      setChurnPrediction(await res.json());
+    } catch {
+      setChurnPrediction(null);
+    }
+  }, []);
+
+  const loadClvData = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/customer-lifetime-value`,
+        { headers },
+      );
+      if (!res.ok) throw new Error("Failed to load CLV");
+      setClvData(await res.json());
+    } catch {
+      setClvData(null);
+    }
+  }, []);
+
+  const loadInventoryForecast = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/inventory-forecast`,
+        { headers },
+      );
+      if (!res.ok) throw new Error("Failed to load inventory forecast");
+      setInventoryForecast(await res.json());
+    } catch {
+      setInventoryForecast(null);
+    }
+  }, []);
+
+  const loadMarketingRoi = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/marketing-roi-prediction`,
+        { headers },
+      );
+      if (!res.ok) throw new Error("Failed to load marketing ROI prediction");
+      setMarketingRoi(await res.json());
+    } catch {
+      setMarketingRoi(null);
+    }
+  }, []);
+
+  const loadRiskPrediction = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${id}/risk-prediction`, {
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to load risk prediction");
+      setRiskPrediction(await res.json());
+    } catch {
+      setRiskPrediction(null);
+    }
+  }, []);
+
+  const loadTrendDetection = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${id}/trend-detection`, {
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to load trend detection");
+      setTrendDetection(await res.json());
+    } catch {
+      setTrendDetection(null);
     }
   }, []);
 
@@ -552,6 +805,14 @@ export default function DatasetsPage() {
       loadSalesAnalytics(data.id);
       loadMarketingAnalytics(data.id);
       loadInventoryAnalytics(data.id);
+      loadRevenueForecast(data.id);
+      loadSalesForecast(data.id);
+      loadChurnPrediction(data.id);
+      loadClvData(data.id);
+      loadInventoryForecast(data.id);
+      loadMarketingRoi(data.id);
+      loadRiskPrediction(data.id);
+      loadTrendDetection(data.id);
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {
@@ -885,6 +1146,81 @@ export default function DatasetsPage() {
             </div>
           </div>
 
+          {visibleSections.risk &&
+            riskPrediction?.available &&
+            riskPrediction.risks &&
+            riskPrediction.risks.length > 0 && (
+              <div className="mb-6">
+                <SectionHeader
+                  label={`Risk Overview · ${riskPrediction.overall_risk_level} overall risk`}
+                  icon={<AlertCircle size={12} />}
+                  color={
+                    riskPrediction.overall_risk_level === "high"
+                      ? "#dc2626"
+                      : riskPrediction.overall_risk_level === "medium"
+                        ? "#d97706"
+                        : "#16a34a"
+                  }
+                />
+                <div className="space-y-2">
+                  {riskPrediction.risks.map((r, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 px-4 py-3 rounded-xl text-[13px]"
+                      style={{
+                        background:
+                          r.severity === "high" ? "#fef2f2" : "#fffbeb",
+                        color: r.severity === "high" ? "#dc2626" : "#d97706",
+                        border: `1px solid ${r.severity === "high" ? "#dc2626" : "#d97706"}`,
+                      }}
+                    >
+                      <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-semibold">{r.category}: </span>
+                        {r.message}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {visibleSections.trends &&
+            trendDetection?.available &&
+            trendDetection.trends &&
+            trendDetection.trends.length > 0 && (
+              <div className="mb-6">
+                <SectionHeader
+                  label="Trend Detection"
+                  icon={<TrendingUp size={12} />}
+                  color="#0891b2"
+                />
+                <div className="space-y-2">
+                  {trendDetection.trends.map((t, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl text-[13px]"
+                      style={{
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border)",
+                        borderLeft: `3px solid ${
+                          t.direction === "growing"
+                            ? "#16a34a"
+                            : t.direction === "declining"
+                              ? "#dc2626"
+                              : "#94a3b8"
+                        }`,
+                      }}
+                    >
+                      <span style={{ color: "var(--text-primary)" }}>
+                        {t.summary}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           {(filterOptions.regions.length > 0 ||
             filterOptions.products.length > 0) && (
             <div
@@ -984,6 +1320,14 @@ export default function DatasetsPage() {
             >
               {[
                 { key: "revenue", label: "Revenue" },
+                { key: "forecast", label: "Revenue Forecast" },
+                { key: "salesForecast", label: "Sales Forecast" },
+                { key: "churn", label: "Churn Prediction" },
+                { key: "clv", label: "Customer Lifetime Value" },
+                { key: "inventoryForecast", label: "Inventory Forecast" },
+                { key: "marketingRoi", label: "Marketing ROI Prediction" },
+                { key: "risk", label: "Risk Prediction" },
+                { key: "trends", label: "Trend Detection" },
                 { key: "customer", label: "Customer Analytics" },
                 { key: "sales", label: "Sales Analytics" },
                 { key: "marketing", label: "Marketing Analytics" },
@@ -1201,6 +1545,102 @@ export default function DatasetsPage() {
             </>
           ) : null}
 
+          {/* Revenue Forecast */}
+          {visibleSections.forecast && revenueForecast?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label={`Revenue Forecast · ${revenueForecast.trend} trend`}
+                icon={<TrendingUp size={12} />}
+                color="#7c3aed"
+              />
+              <div className="flex items-center gap-2 mb-3">
+                <span
+                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                  style={{
+                    background:
+                      revenueForecast.confidence === "high"
+                        ? "#f0fdf4"
+                        : revenueForecast.confidence === "medium"
+                          ? "#fffbeb"
+                          : "#fef2f2",
+                    color:
+                      revenueForecast.confidence === "high"
+                        ? "#16a34a"
+                        : revenueForecast.confidence === "medium"
+                          ? "#d97706"
+                          : "#dc2626",
+                  }}
+                >
+                  {revenueForecast.confidence} confidence
+                </span>
+                <span
+                  className="text-[12px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  R² = {revenueForecast.r_squared}
+                </span>
+              </div>
+              <div
+                className="rounded-2xl p-4"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart
+                    data={[
+                      ...(revenueForecast.historical || []).map((h) => ({
+                        date: h.date,
+                        actual: h.revenue,
+                        predicted: null,
+                      })),
+                      ...(revenueForecast.forecast || []).map((f) => ({
+                        date: f.date,
+                        actual: null,
+                        predicted: f.predicted_revenue,
+                      })),
+                    ]}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--border)"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
+                      stroke="#94a3b8"
+                    />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{
+                        fontSize: 12,
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="actual"
+                      stroke="#16a34a"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls={false}
+                      name="Actual"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="predicted"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={{ r: 3 }}
+                      connectNulls={false}
+                      name="Forecast"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           {/* Customer Analytics */}
           {visibleSections.customer && customerAnalytics?.available && (
             <div className="mb-6">
@@ -1285,6 +1725,275 @@ export default function DatasetsPage() {
                     </table>
                   </div>
                 )}
+            </div>
+          )}
+
+          {/* Churn Prediction */}
+          {visibleSections.churn && churnPrediction?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Churn Prediction"
+                icon={<AlertCircle size={12} />}
+                color="#dc2626"
+              />
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#fef2f2",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#dc2626" }}
+                  >
+                    High Risk
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {churnPrediction.risk_summary?.high}
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#fffbeb",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#d97706" }}
+                  >
+                    Medium Risk
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {churnPrediction.risk_summary?.medium}
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#f0fdf4",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#16a34a" }}
+                  >
+                    Low Risk
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {churnPrediction.risk_summary?.low}
+                  </div>
+                </div>
+              </div>
+              {churnPrediction.customers &&
+                churnPrediction.customers.length > 0 && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderLeft: "3px solid #dc2626",
+                    }}
+                  >
+                    <table className="w-full text-[13px]">
+                      <thead>
+                        <tr style={{ background: "var(--bg-primary)" }}>
+                          <Th>Customer</Th>
+                          <Th>Days Since Last Order</Th>
+                          <Th>Orders</Th>
+                          <Th>Risk</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {churnPrediction.customers.map((c, i) => (
+                          <tr
+                            key={c.customer_id}
+                            style={{
+                              borderTop:
+                                i > 0 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <Td>{c.customer_id}</Td>
+                            <Td>{c.days_since_last_order}</Td>
+                            <Td>{c.order_count}</Td>
+                            <td className="px-3 py-2.5">
+                              <span
+                                className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                                style={{
+                                  background:
+                                    c.churn_risk === "high"
+                                      ? "#fef2f2"
+                                      : c.churn_risk === "medium"
+                                        ? "#fffbeb"
+                                        : "#f0fdf4",
+                                  color:
+                                    c.churn_risk === "high"
+                                      ? "#dc2626"
+                                      : c.churn_risk === "medium"
+                                        ? "#d97706"
+                                        : "#16a34a",
+                                }}
+                              >
+                                {c.churn_risk}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Customer Lifetime Value */}
+          {visibleSections.clv && clvData?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Customer Lifetime Value"
+                icon={<DollarSign size={12} />}
+                color="#ca8a04"
+              />
+              <p
+                className="text-[11px] mb-3"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Estimated over {clvData.assumptions?.estimated_lifespan_years}{" "}
+                years, based on {clvData.assumptions?.observation_period_days}{" "}
+                days of order history
+              </p>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#fefce8",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#ca8a04" }}
+                  >
+                    Gold
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {clvData.segment_summary?.gold}
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#f8fafc",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#64748b" }}
+                  >
+                    Silver
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {clvData.segment_summary?.silver}
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "#fff7ed",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#ea580c" }}
+                  >
+                    Bronze
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {clvData.segment_summary?.bronze}
+                  </div>
+                </div>
+              </div>
+              {clvData.customers && clvData.customers.length > 0 && (
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderLeft: "3px solid #ca8a04",
+                  }}
+                >
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr style={{ background: "var(--bg-primary)" }}>
+                        <Th>Customer</Th>
+                        <Th>Estimated CLV</Th>
+                        <Th>Avg Order Value</Th>
+                        <Th>Orders</Th>
+                        <Th>Segment</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clvData.customers.map((c, i) => (
+                        <tr
+                          key={c.customer_id}
+                          style={{
+                            borderTop:
+                              i > 0 ? "1px solid var(--border)" : "none",
+                          }}
+                        >
+                          <Td>{c.customer_id}</Td>
+                          <Td>{c.clv.toLocaleString()}</Td>
+                          <Td>{c.avg_order_value.toLocaleString()}</Td>
+                          <Td>{c.order_count}</Td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                              style={{
+                                background:
+                                  c.segment === "Gold"
+                                    ? "#fefce8"
+                                    : c.segment === "Silver"
+                                      ? "#f8fafc"
+                                      : "#fff7ed",
+                                color:
+                                  c.segment === "Gold"
+                                    ? "#ca8a04"
+                                    : c.segment === "Silver"
+                                      ? "#64748b"
+                                      : "#ea580c",
+                              }}
+                            >
+                              {c.segment}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1427,6 +2136,102 @@ export default function DatasetsPage() {
             </div>
           )}
 
+          {/* Sales Forecast */}
+          {visibleSections.salesForecast && salesForecast?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label={`Sales Forecast · ${salesForecast.trend} trend`}
+                icon={<TrendingUp size={12} />}
+                color="#7c3aed"
+              />
+              <div className="flex items-center gap-2 mb-3">
+                <span
+                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                  style={{
+                    background:
+                      salesForecast.confidence === "high"
+                        ? "#f0fdf4"
+                        : salesForecast.confidence === "medium"
+                          ? "#fffbeb"
+                          : "#fef2f2",
+                    color:
+                      salesForecast.confidence === "high"
+                        ? "#16a34a"
+                        : salesForecast.confidence === "medium"
+                          ? "#d97706"
+                          : "#dc2626",
+                  }}
+                >
+                  {salesForecast.confidence} confidence
+                </span>
+                <span
+                  className="text-[12px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  R² = {salesForecast.r_squared}
+                </span>
+              </div>
+              <div
+                className="rounded-2xl p-4"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart
+                    data={[
+                      ...(salesForecast.historical || []).map((h) => ({
+                        date: h.date,
+                        actual: h.sales,
+                        predicted: null,
+                      })),
+                      ...(salesForecast.forecast || []).map((f) => ({
+                        date: f.date,
+                        actual: null,
+                        predicted: f.predicted_sales,
+                      })),
+                    ]}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--border)"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
+                      stroke="#94a3b8"
+                    />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{
+                        fontSize: 12,
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="actual"
+                      stroke="#059669"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls={false}
+                      name="Actual"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="predicted"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={{ r: 3 }}
+                      connectNulls={false}
+                      name="Forecast"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           {/* Marketing Analytics */}
           {visibleSections.marketing && marketingAnalytics?.available && (
             <div className="mb-6">
@@ -1496,6 +2301,141 @@ export default function DatasetsPage() {
                     </ResponsiveContainer>
                   </div>
                 )}
+            </div>
+          )}
+
+          {/* Marketing ROI Prediction */}
+          {visibleSections.marketingRoi && marketingRoi?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Marketing ROI Prediction"
+                icon={<TrendingUp size={12} />}
+                color="#2563eb"
+              />
+              <div className="flex items-center gap-2 mb-3">
+                <span
+                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                  style={{
+                    background:
+                      marketingRoi.confidence === "high"
+                        ? "#f0fdf4"
+                        : marketingRoi.confidence === "medium"
+                          ? "#fffbeb"
+                          : "#fef2f2",
+                    color:
+                      marketingRoi.confidence === "high"
+                        ? "#16a34a"
+                        : marketingRoi.confidence === "medium"
+                          ? "#d97706"
+                          : "#dc2626",
+                  }}
+                >
+                  {marketingRoi.confidence} confidence
+                </span>
+                <span
+                  className="text-[12px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  R² = {marketingRoi.r_squared}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-surface)",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#2563eb" }}
+                  >
+                    If spend ={" "}
+                    {marketingRoi.hypothetical_spend?.toLocaleString()}
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    ~{marketingRoi.predicted_revenue?.toLocaleString()} revenue
+                  </div>
+                  <div
+                    className="text-[12px] mt-1"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Predicted ROI: {marketingRoi.predicted_roi}x
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-surface)",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#64748b" }}
+                  >
+                    Current Average
+                  </div>
+                  <div
+                    className="text-[13px]"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    Spend: {marketingRoi.current_avg_spend?.toLocaleString()}
+                  </div>
+                  <div
+                    className="text-[13px]"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    Revenue:{" "}
+                    {marketingRoi.current_avg_revenue?.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              {marketingRoi.curve && marketingRoi.curve.length > 0 && (
+                <div
+                  className="rounded-2xl p-4"
+                  style={{ border: "1px solid var(--border)" }}
+                >
+                  <p
+                    className="text-[11px] mb-2"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Predicted revenue at different spend levels
+                  </p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={marketingRoi.curve}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                      />
+                      <XAxis
+                        dataKey="spend"
+                        tick={{ fontSize: 10 }}
+                        stroke="#94a3b8"
+                      />
+                      <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                      <Tooltip
+                        contentStyle={{
+                          fontSize: 12,
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="predicted_revenue"
+                        stroke="#2563eb"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           )}
 
@@ -1604,6 +2544,91 @@ export default function DatasetsPage() {
                 )}
             </div>
           )}
+
+          {/* Inventory Forecast */}
+          {visibleSections.inventoryForecast &&
+            inventoryForecast?.available && (
+              <div className="mb-6">
+                <SectionHeader
+                  label="Inventory Forecast"
+                  icon={<TrendingUp size={12} />}
+                  color="#475569"
+                />
+                {inventoryForecast.products
+                  ?.filter((p) => p.will_run_low)
+                  .map((p) => (
+                    <div
+                      key={p.product}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl mb-2 text-[13px]"
+                      style={{
+                        background: "#fffbeb",
+                        color: "#d97706",
+                        border: "1px solid #d97706",
+                      }}
+                    >
+                      <TriangleAlert size={14} />
+                      {p.product} predicted to drop below{" "}
+                      {inventoryForecast.low_stock_threshold} units by{" "}
+                      {p.predicted_low_stock_date}
+                    </div>
+                  ))}
+                <div
+                  className="grid gap-3 mt-3"
+                  style={{
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  }}
+                >
+                  {inventoryForecast.products?.map((p) => (
+                    <div
+                      key={p.product}
+                      className="rounded-2xl p-4"
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderLeft: p.will_run_low
+                          ? "3px solid #d97706"
+                          : "3px solid #475569",
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span
+                          className="text-[13px] font-semibold"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {p.product}
+                        </span>
+                        <span
+                          className="text-[12px]"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          current: {p.current_inventory}
+                        </span>
+                      </div>
+                      <ResponsiveContainer width="100%" height={100}>
+                        <LineChart data={p.forecast}>
+                          <XAxis dataKey="date" hide />
+                          <YAxis hide />
+                          <Tooltip
+                            contentStyle={{
+                              fontSize: 11,
+                              borderRadius: 8,
+                              border: "1px solid var(--border)",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="predicted_inventory"
+                            stroke={p.will_run_low ? "#d97706" : "#475569"}
+                            strokeWidth={2}
+                            strokeDasharray="4 4"
+                            dot={{ r: 2 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
           {/* Columns */}
           <SectionHeader label="Columns" color="#64748b" />
