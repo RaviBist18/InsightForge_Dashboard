@@ -78,14 +78,17 @@ def health():
 
 COLUMN_PATTERNS = {
     "date": r"date|dt$|_dt$|timestamp|created_at|order_date",
-    "revenue": r"revenue|sales|amount|amt|price|total|income",
+    "revenue": r"revenue|amount|amt|price|total|income",
+    "sales": r"sales|units.?sold|revenue.?sales",
     "customer_id": r"customer.?id|cust.?id|client.?id|user.?id",
     "email": r"email|e.?mail",
-    "product": r"product|item|sku",
-    "quantity": r"quantity|qty|units|count",
+    "product": r"product|item|sku|product.?name",
+    "quantity": r"quantity|qty|units|stock.?count",
     "region": r"region|state|country|location|geo",
     "category": r"category|type|segment|class",
     "status": r"status|state$",
+    "marketing_spend": r"marketing.?spend|ad.?spend|campaign.?cost|advertising.?spend",
+    "inventory": r"inventory|stock.?level|warehouse.?stock|on.?hand",
 }
 
 
@@ -105,6 +108,28 @@ def detect_column_role(col_name: str, dtype: str) -> dict:
             return {"role": role, "confidence": confidence}
 
     return {"role": "unknown", "confidence": "none"}
+
+
+def apply_dynamic_filters(
+    df, columns, region=None, product=None, date_from=None, date_to=None
+):
+    region_col = next((c["name"] for c in columns if c["role"] == "region"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+
+    if region and region_col and region_col in df.columns:
+        df = df[df[region_col] == region]
+    if product and product_col and product_col in df.columns:
+        df = df[df[product_col] == product]
+    if date_col and (date_from or date_to) and date_col in df.columns:
+        parsed = pd.to_datetime(df[date_col], errors="coerce")
+        mask = pd.Series(True, index=df.index)
+        if date_from:
+            mask &= parsed >= pd.to_datetime(date_from)
+        if date_to:
+            mask &= parsed <= pd.to_datetime(date_to)
+        df = df[mask]
+    return df
 
 
 def analyze_dataframe(df: pd.DataFrame) -> dict:
@@ -385,6 +410,414 @@ async def clean_dataset(
         "filename": filename,
         "row_count": row_count,
         **analysis,
+    }
+
+
+@app.get("/datasets/{dataset_id}/kpis")
+async def get_dataset_kpis(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+
+    kpis = {"row_count": len(df)}
+
+    if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        kpis["total_revenue"] = round(float(df[revenue_col].sum()), 2)
+        kpis["avg_order_value"] = round(float(df[revenue_col].mean()), 2)
+        kpis["max_order_value"] = round(float(df[revenue_col].max()), 2)
+
+    if date_col:
+        parsed = pd.to_datetime(df[date_col], errors="coerce").dropna()
+        if len(parsed) > 0:
+            kpis["date_range_start"] = parsed.min().strftime("%Y-%m-%d")
+            kpis["date_range_end"] = parsed.max().strftime("%Y-%m-%d")
+
+    if customer_col:
+        kpis["unique_customers"] = int(df[customer_col].nunique())
+        top = df[customer_col].value_counts().head(1)
+        if len(top) > 0:
+            kpis["top_customer"] = {
+                "customer_id": str(top.index[0]),
+                "order_count": int(top.iloc[0]),
+            }
+
+    revenue_series = []
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        grouped = temp.groupby(temp[date_col].dt.strftime("%Y-%m-%d"))[
+            revenue_col
+        ].sum()
+        revenue_series = [
+            {"date": d, "revenue": round(float(v), 2)} for d, v in grouped.items()
+        ]
+
+    del df, file_bytes
+
+    return {"kpis": kpis, "revenue_series": revenue_series}
+
+
+@app.get("/datasets/{dataset_id}/filter-options")
+async def get_filter_options(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    region_col = next((c["name"] for c in columns if c["role"] == "region"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+
+    if not region_col and not product_col:
+        return {"regions": [], "products": []}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    regions = (
+        sorted(df[region_col].dropna().astype(str).unique().tolist())
+        if region_col
+        else []
+    )
+    products = (
+        sorted(df[product_col].dropna().astype(str).unique().tolist())
+        if product_col
+        else []
+    )
+
+    del df, file_bytes
+    return {"regions": regions, "products": products}
+
+
+@app.get("/datasets/{dataset_id}/customer-analytics")
+async def get_customer_analytics(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+
+    if not customer_col:
+        return {"available": False, "reason": "No customer_id column detected"}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    order_counts = df[customer_col].value_counts()
+
+    top_by_orders = [
+        {"customer_id": str(k), "order_count": int(v)}
+        for k, v in order_counts.head(10).items()
+    ]
+
+    top_by_revenue = []
+    if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        rev_by_customer = (
+            df.groupby(customer_col)[revenue_col].sum().sort_values(ascending=False)
+        )
+        top_by_revenue = [
+            {"customer_id": str(k), "total_revenue": round(float(v), 2)}
+            for k, v in rev_by_customer.head(10).items()
+        ]
+
+    # simple segmentation: one-time vs repeat customers
+    repeat_customers = int((order_counts > 1).sum())
+    one_time_customers = int((order_counts == 1).sum())
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "unique_customers": int(order_counts.shape[0]),
+        "repeat_customers": repeat_customers,
+        "one_time_customers": one_time_customers,
+        "top_by_orders": top_by_orders,
+        "top_by_revenue": top_by_revenue,
+    }
+
+
+@app.get("/datasets/{dataset_id}/sales-analytics")
+async def get_sales_analytics(
+    dataset_id: str,
+    authorization: str = Header(None),
+    region: str = None,
+    product: str = None,
+    date_from: str = None,
+    date_to: str = None,
+):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    region_col = next((c["name"] for c in columns if c["role"] == "region"), None)
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+
+    if not sales_col and not quantity_col:
+        return {"available": False, "reason": "No sales or quantity column detected"}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df = apply_dynamic_filters(df, columns, region, product, date_from, date_to)
+    metric_col = sales_col or quantity_col
+
+    summary = {}
+    if pd.api.types.is_numeric_dtype(df[metric_col]):
+        summary["total_sales"] = round(float(df[metric_col].sum()), 2)
+        summary["avg_sale"] = round(float(df[metric_col].mean()), 2)
+
+    by_product = []
+    if product_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        grouped = df.groupby(product_col)[metric_col].sum().sort_values(ascending=False)
+        by_product = [
+            {"product": str(k), "total": round(float(v), 2)}
+            for k, v in grouped.head(10).items()
+        ]
+
+    by_region = []
+    if region_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        grouped = df.groupby(region_col)[metric_col].sum().sort_values(ascending=False)
+        by_region = [
+            {"region": str(k), "total": round(float(v), 2)} for k, v in grouped.items()
+        ]
+
+    sales_series = []
+    if date_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        temp = df[[date_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        grouped = temp.groupby(temp[date_col].dt.strftime("%Y-%m-%d"))[metric_col].sum()
+        sales_series = [
+            {"date": d, "sales": round(float(v), 2)} for d, v in grouped.items()
+        ]
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "metric_used": metric_col,
+        "summary": summary,
+        "by_product": by_product,
+        "by_region": by_region,
+        "sales_series": sales_series,
+    }
+
+
+@app.get("/datasets/{dataset_id}/marketing-analytics")
+async def get_marketing_analytics(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    spend_col = next(
+        (c["name"] for c in columns if c["role"] == "marketing_spend"), None
+    )
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+
+    if not spend_col:
+        return {"available": False, "reason": "No marketing_spend column detected"}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    summary = {}
+    if pd.api.types.is_numeric_dtype(df[spend_col]):
+        summary["total_spend"] = round(float(df[spend_col].sum()), 2)
+
+    if (
+        revenue_col
+        and pd.api.types.is_numeric_dtype(df[revenue_col])
+        and pd.api.types.is_numeric_dtype(df[spend_col])
+    ):
+        total_revenue = float(df[revenue_col].sum())
+        total_spend = float(df[spend_col].sum())
+        summary["total_revenue"] = round(total_revenue, 2)
+        summary["roi"] = round(total_revenue / total_spend, 2) if total_spend else None
+
+    spend_series = []
+    if date_col and pd.api.types.is_numeric_dtype(df[spend_col]):
+        temp = df[[date_col, spend_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        grouped = temp.groupby(temp[date_col].dt.strftime("%Y-%m-%d"))[spend_col].sum()
+        spend_series = [
+            {"date": d, "spend": round(float(v), 2)} for d, v in grouped.items()
+        ]
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "summary": summary,
+        "spend_series": spend_series,
+    }
+
+
+@app.get("/datasets/{dataset_id}/inventory-analytics")
+async def get_inventory_analytics(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    inventory_col = next((c["name"] for c in columns if c["role"] == "inventory"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+
+    if not inventory_col:
+        return {"available": False, "reason": "No inventory column detected"}
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    LOW_STOCK_THRESHOLD = 10
+
+    latest_by_product = []
+    if product_col and pd.api.types.is_numeric_dtype(df[inventory_col]):
+        sort_col = date_col if date_col else None
+        temp = df.copy()
+        if sort_col:
+            temp[sort_col] = pd.to_datetime(temp[sort_col], errors="coerce")
+            temp = temp.sort_values(sort_col)
+        latest = temp.groupby(product_col).last()
+        min_levels = temp.groupby(product_col)[inventory_col].min()
+        for prod, row in latest.iterrows():
+            level = float(row[inventory_col])
+            min_level = float(min_levels[prod])
+            latest_by_product.append(
+                {
+                    "product": str(prod),
+                    "inventory": round(level, 2),
+                    "low_stock": level < LOW_STOCK_THRESHOLD,
+                    "min_inventory": round(min_level, 2),
+                    "had_low_stock_event": min_level < LOW_STOCK_THRESHOLD,
+                }
+            )
+        latest_by_product.sort(key=lambda x: x["inventory"])
+
+    low_stock_alerts = [p for p in latest_by_product if p["low_stock"]]
+    historical_dip_alerts = [
+        p for p in latest_by_product if p["had_low_stock_event"] and not p["low_stock"]
+    ]
+
+    del df, file_bytes
+
+    return {
+        "available": True,
+        "low_stock_threshold": LOW_STOCK_THRESHOLD,
+        "latest_by_product": latest_by_product,
+        "low_stock_alerts": low_stock_alerts,
+        "historical_dip_alerts": historical_dip_alerts,
     }
 
 

@@ -1,0 +1,11 @@
+date,product_name,quantity,sales,region
+2026-01-01,Widget A,10,1200,North
+2026-01-02,Widget B,5,800,South
+2026-01-03,Widget A,15,1800,North
+2026-01-04,Widget C,20,2400,East
+2026-01-05,Widget B,8,1280,South
+2026-01-06,Widget A,12,1440,West
+2026-01-07,Widget C,25,3000,East
+2026-01-08,Widget B,6,960,South
+2026-01-09,Widget A,18,2160,North
+2026-01-10,Widget C,10,1200,East

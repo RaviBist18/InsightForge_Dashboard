@@ -7,8 +7,28 @@ import {
   AlertCircle,
   FileText,
   Trash2,
+  Sparkles,
+  Copy,
+  TriangleAlert,
+  DollarSign,
+  Users,
+  Calendar,
+  TrendingUp,
+  ArrowLeft,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -44,6 +64,67 @@ interface UploadResult {
     }
   >;
   engineered_features: EngineeredFeature[];
+}
+
+interface KPIData {
+  row_count: number;
+  total_revenue?: number;
+  avg_order_value?: number;
+  max_order_value?: number;
+  date_range_start?: string;
+  date_range_end?: string;
+  unique_customers?: number;
+  top_customer?: { customer_id: string; order_count: number };
+}
+interface RevenuePoint {
+  date: string;
+  revenue: number;
+}
+interface CustomerAnalytics {
+  available: boolean;
+  unique_customers?: number;
+  repeat_customers?: number;
+  one_time_customers?: number;
+  top_by_orders?: { customer_id: string; order_count: number }[];
+  top_by_revenue?: { customer_id: string; total_revenue: number }[];
+}
+
+interface SalesAnalytics {
+  available: boolean;
+  reason?: string;
+  metric_used?: string;
+  summary?: { total_sales?: number; avg_sale?: number };
+  by_product?: { product: string; total: number }[];
+  by_region?: { region: string; total: number }[];
+  sales_series?: { date: string; sales: number }[];
+}
+interface MarketingAnalytics {
+  available: boolean;
+  reason?: string;
+  summary?: { total_spend?: number; total_revenue?: number; roi?: number };
+  spend_series?: { date: string; spend: number }[];
+}
+interface InventoryAnalytics {
+  available: boolean;
+  reason?: string;
+  low_stock_threshold?: number;
+  latest_by_product?: {
+    product: string;
+    inventory: number;
+    low_stock: boolean;
+    min_inventory: number;
+    had_low_stock_event: boolean;
+  }[];
+  low_stock_alerts?: {
+    product: string;
+    inventory: number;
+    low_stock: boolean;
+  }[];
+  historical_dip_alerts?: {
+    product: string;
+    inventory: number;
+    min_inventory: number;
+  }[];
 }
 
 interface DatasetSummary {
@@ -82,7 +163,40 @@ export default function DatasetsPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [cleaning, setCleaning] = useState(false);
-
+  const [kpis, setKpis] = useState<KPIData | null>(null);
+  const [revenueSeries, setRevenueSeries] = useState<RevenuePoint[]>([]);
+  const [kpisLoading, setKpisLoading] = useState(false);
+  const [chartType, setChartType] = useState<"line" | "bar">("line");
+  const [customerAnalytics, setCustomerAnalytics] =
+    useState<CustomerAnalytics | null>(null);
+  const [salesAnalytics, setSalesAnalytics] = useState<SalesAnalytics | null>(
+    null,
+  );
+  const [marketingAnalytics, setMarketingAnalytics] =
+    useState<MarketingAnalytics | null>(null);
+  const [inventoryAnalytics, setInventoryAnalytics] =
+    useState<InventoryAnalytics | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRegion, setFilterRegion] = useState("");
+  const [filterProduct, setFilterProduct] = useState("");
+  const [filterOptions, setFilterOptions] = useState<{
+    regions: string[];
+    products: string[];
+  }>({ regions: [], products: [] });
+  const [visibleSections, setVisibleSections] = useState<
+    Record<string, boolean>
+  >({
+    revenue: true,
+    customer: true,
+    sales: true,
+    marketing: true,
+    inventory: true,
+  });
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const loadDatasets = useCallback(async () => {
     setDatasetsLoading(true);
     try {
@@ -92,7 +206,6 @@ export default function DatasetsPage() {
       const data: DatasetSummary[] = await res.json();
       setDatasets(data);
     } catch {
-      // silent — list is secondary to upload flow, don't block the page on this
       setDatasets([]);
     } finally {
       setDatasetsLoading(false);
@@ -101,11 +214,46 @@ export default function DatasetsPage() {
 
   useEffect(() => {
     loadDatasets();
+    const saved = localStorage.getItem("insightforge_visible_sections");
+    if (saved) {
+      try {
+        setVisibleSections(JSON.parse(saved));
+      } catch {}
+    }
   }, [loadDatasets]);
 
+  const toggleSection = (key: string) => {
+    setVisibleSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(
+        "insightforge_visible_sections",
+        JSON.stringify(next),
+      );
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (viewingId) {
+      loadKpis(viewingId);
+      loadSalesAnalytics(viewingId);
+      loadMarketingAnalytics(viewingId);
+      loadInventoryAnalytics(viewingId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterRegion, filterProduct]);
   const handleViewDataset = async (id: string) => {
     setViewingId(id);
     setError(null);
+    setFilterRegion("");
+    setFilterProduct("");
+    loadFilterOptions(id);
+    setTimeout(() => {
+      document.getElementById("dataset-details")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
     try {
       const headers = await getAuthHeader();
       const res = await fetch(`${BACKEND_URL}/datasets/${id}`, { headers });
@@ -127,11 +275,129 @@ export default function DatasetsPage() {
         outliers_by_column: data.analysis.outliers_by_column,
         engineered_features: data.analysis.engineered_features || [],
       });
+      loadKpis(id);
+      loadCustomerAnalytics(id);
+      loadSalesAnalytics(id);
+      loadMarketingAnalytics(id);
+      loadInventoryAnalytics(id);
     } catch (e: any) {
       setError(e.message || "Failed to load dataset");
       setViewingId(null);
     }
   };
+
+  const buildFilterParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (filterRegion) params.set("region", filterRegion);
+    if (filterProduct) params.set("product", filterProduct);
+    return params.toString();
+  }, [filterRegion, filterProduct]);
+
+  const loadFilterOptions = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${BACKEND_URL}/datasets/${id}/filter-options`, {
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to load filter options");
+      setFilterOptions(await res.json());
+    } catch {
+      setFilterOptions({ regions: [], products: [] });
+    }
+  }, []);
+
+  const loadKpis = useCallback(
+    async (id: string) => {
+      setKpisLoading(true);
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/kpis${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load KPIs");
+        const data = await res.json();
+        setKpis(data.kpis);
+        setRevenueSeries(data.revenue_series || []);
+      } catch {
+        setKpis(null);
+        setRevenueSeries([]);
+      } finally {
+        setKpisLoading(false);
+      }
+    },
+    [buildFilterParams],
+  );
+
+  const loadCustomerAnalytics = useCallback(async (id: string) => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${id}/customer-analytics`,
+        { headers },
+      );
+      if (!res.ok) throw new Error("Failed to load customer analytics");
+      const data = await res.json();
+      setCustomerAnalytics(data);
+    } catch {
+      setCustomerAnalytics(null);
+    }
+  }, []);
+
+  const loadSalesAnalytics = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/sales-analytics${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load sales analytics");
+        setSalesAnalytics(await res.json());
+      } catch {
+        setSalesAnalytics(null);
+      }
+    },
+    [buildFilterParams],
+  );
+
+  const loadMarketingAnalytics = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/marketing-analytics${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load marketing analytics");
+        setMarketingAnalytics(await res.json());
+      } catch {
+        setMarketingAnalytics(null);
+      }
+    },
+    [buildFilterParams],
+  );
+
+  const loadInventoryAnalytics = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/inventory-analytics${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load inventory analytics");
+        setInventoryAnalytics(await res.json());
+      } catch {
+        setInventoryAnalytics(null);
+      }
+    },
+    [buildFilterParams],
+  );
 
   const handleDeleteDataset = async (id: string) => {
     setDeleteConfirmId(id);
@@ -217,6 +483,44 @@ export default function DatasetsPage() {
     }
   };
 
+  const filteredDatasets = datasets.filter((d) =>
+    d.filename.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredDatasets.length / PAGE_SIZE),
+  );
+  const paginatedDatasets = filteredDatasets.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+
+  const filteredRevenueSeries = revenueSeries.filter((p) => {
+    if (dateFrom && p.date < dateFrom) return false;
+    if (dateTo && p.date > dateTo) return false;
+    return true;
+  });
+
+  const handleExportCsv = () => {
+    if (!result) return;
+    const headers = result.columns.map((c) => c.name);
+    const rows = result.preview.map((row) =>
+      headers
+        .map((h) =>
+          row[h] === null || row[h] === undefined ? "" : String(row[h]),
+        )
+        .join(","),
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${result.filename.replace(/\.[^.]+$/, "")}_preview.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleUpload = async () => {
     if (!file) return;
     setLoading(true);
@@ -230,7 +534,7 @@ export default function DatasetsPage() {
 
       const res = await fetch(`${BACKEND_URL}/upload`, {
         method: "POST",
-        headers, // don't set Content-Type manually — browser sets multipart boundary automatically
+        headers,
         body: formData,
       });
 
@@ -241,8 +545,13 @@ export default function DatasetsPage() {
 
       const data: UploadResult = await res.json();
       setResult(data);
-      setViewingId(null); // fresh upload, not viewing a saved one
-      loadDatasets(); // refresh saved list now that a new one exists
+      setViewingId(null);
+      loadDatasets();
+      loadKpis(data.id);
+      loadCustomerAnalytics(data.id);
+      loadSalesAnalytics(data.id);
+      loadMarketingAnalytics(data.id);
+      loadInventoryAnalytics(data.id);
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {
@@ -253,7 +562,7 @@ export default function DatasetsPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h1
-        className="text-xl font-semibold mb-1"
+        className="text-xl font-semibold mb-1 tracking-tight"
         style={{ color: "var(--text-primary)" }}
       >
         Datasets
@@ -265,15 +574,16 @@ export default function DatasetsPage() {
         Upload a CSV or Excel file to preview and analyze your data.
       </p>
 
+      {/* Upload bar */}
       <div
-        className="flex items-center gap-3 mb-6 p-4 rounded-xl"
+        className="flex items-center gap-3 mb-8 p-4 rounded-2xl"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
         }}
       >
         <label
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium cursor-pointer transition-colors"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium cursor-pointer transition-all"
           style={{
             background: "var(--bg-primary)",
             border: "1px solid var(--border)",
@@ -290,9 +600,11 @@ export default function DatasetsPage() {
           />
         </label>
         <button
-          onClick={handleUpload}
-          disabled={!file || loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white transition-colors disabled:opacity-50"
+          onClick={() => {
+            if (!file || loading) return;
+            handleUpload();
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-all shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0"
           style={{ background: "var(--accent)" }}
         >
           {loading && <Loader2 size={14} className="animate-spin" />}
@@ -315,146 +627,997 @@ export default function DatasetsPage() {
       )}
 
       {/* Saved datasets list */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <p
-            className="text-[10px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Saved Datasets
-          </p>
-          {datasets.length > 0 && (
-            <div className="flex items-center gap-3">
-              {selectedIds.size > 0 && (
+      {!viewingId && (
+        <div className="mb-10">
+          {datasets.length > 5 && (
+            <div className="relative mb-3">
+              <input
+                type="text"
+                placeholder="Search datasets..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 pr-9 rounded-xl text-[13px]"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                }}
+              />
+              {searchQuery && (
                 <button
-                  onClick={() => setDeleteConfirmBulk("selected")}
-                  className="text-[12px] font-medium transition-colors"
-                  style={{ color: "var(--danger, #dc2626)" }}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setPage(1);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors hover:bg-gray-100"
+                  style={{ color: "var(--text-muted)" }}
+                  title="Clear search"
                 >
-                  Delete Selected ({selectedIds.size})
+                  <X size={14} />
                 </button>
               )}
-              <button
-                onClick={() => setDeleteConfirmBulk("all")}
-                className="text-[12px] font-medium transition-colors"
-                style={{ color: "var(--danger, #dc2626)" }}
-              >
-                Delete All
-              </button>
+            </div>
+          )}
+          <div className="flex items-center justify-between mb-3">
+            <p
+              className="text-[11px] font-semibold uppercase tracking-widest"
+              style={{ color: "#64748b" }}
+            >
+              Saved Datasets
+              {datasets.length > 0 && (
+                <span
+                  className="ml-2 font-normal normal-case tracking-normal"
+                  style={{ color: "#64748b" }}
+                >
+                  ({datasets.length})
+                </span>
+              )}
+            </p>
+            {datasets.length > 0 && (
+              <div className="flex items-center gap-2">
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={() => setDeleteConfirmBulk("selected")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                    style={{
+                      color: "var(--danger, #dc2626)",
+                      background: "var(--danger-bg, rgba(220,38,38,0.08))",
+                    }}
+                  >
+                    <Trash2 size={12} />
+                    Delete Selected ({selectedIds.size})
+                  </button>
+                )}
+                <button
+                  onClick={() => setDeleteConfirmBulk("all")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors hover:brightness-95"
+                  style={{
+                    color: "var(--danger, #dc2626)",
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <Trash2 size={12} />
+                  Delete All
+                </button>
+              </div>
+            )}
+          </div>
+
+          {datasetsLoading ? (
+            <div
+              className="flex items-center gap-2 px-4 py-6 rounded-2xl text-[13px]"
+              style={{
+                color: "var(--text-muted)",
+                border: "1px dashed var(--border)",
+              }}
+            >
+              <Loader2 size={14} className="animate-spin" />
+              Loading datasets...
+            </div>
+          ) : datasets.length === 0 ? (
+            <div
+              className="px-4 py-6 rounded-2xl text-[13px] text-center"
+              style={{
+                color: "var(--text-muted)",
+                border: "1px dashed var(--border)",
+              }}
+            >
+              No datasets saved yet — upload one above to get started.
+            </div>
+          ) : (
+            <div
+              className="rounded-2xl overflow-y-auto"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--bg-surface)",
+                maxHeight: "420px",
+              }}
+            >
+              {paginatedDatasets.map((d, i) => (
+                <div
+                  key={d.id}
+                  onClick={() => handleViewDataset(d.id)}
+                  className="group flex items-center gap-3 px-4 py-3 text-[13px] cursor-pointer transition-all duration-150 hover:shadow-sm relative z-0 hover:z-10"
+                  style={{
+                    borderTop: i > 0 ? "1px solid var(--border)" : "none",
+                    background:
+                      viewingId === d.id ? "var(--bg-primary)" : "transparent",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(d.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSelect(d.id)}
+                    className="cursor-pointer"
+                  />
+                  <div
+                    className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0 transition-colors group-hover:bg-blue-50"
+                    style={{
+                      background: "var(--bg-primary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <FileText size={14} style={{ color: "#2563eb" }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div
+                      className="font-medium truncate"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {d.filename}
+                    </div>
+                    <div
+                      className="text-[12px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      {d.row_count.toLocaleString()} rows &middot;{" "}
+                      {new Date(d.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDataset(d.id);
+                    }}
+                    className="ml-auto p-2 rounded-lg transition-colors hover:bg-red-50 shrink-0"
+                    style={{ color: "var(--danger, #dc2626)" }}
+                    title="Delete dataset"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {filteredDatasets.length > PAGE_SIZE && (
+            <div
+              className="flex items-center justify-between mt-3 text-[12px]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <span>
+                Page {page} of {totalPages} · {filteredDatasets.length} datasets
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1 rounded-lg disabled:opacity-40"
+                  style={{ border: "1px solid var(--border)" }}
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1 rounded-lg disabled:opacity-40"
+                  style={{ border: "1px solid var(--border)" }}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
-        {datasetsLoading ? (
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Loading...
-          </p>
-        ) : datasets.length === 0 ? (
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            No datasets saved yet — upload one above.
-          </p>
-        ) : (
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ border: "1px solid var(--border)" }}
-          >
-            {datasets.map((d) => (
-              <div
-                key={d.id}
-                onClick={() => handleViewDataset(d.id)}
-                className="flex items-center gap-3 px-3 py-2.5 text-[13px] cursor-pointer transition-colors hover:brightness-95"
-                style={{
-                  borderTop: "1px solid var(--border)",
-                  background:
-                    viewingId === d.id ? "var(--bg-primary)" : "transparent",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(d.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={() => toggleSelect(d.id)}
-                  className="cursor-pointer"
-                />
-                <FileText size={14} style={{ color: "var(--text-muted)" }} />
-                <span style={{ color: "var(--text-primary)" }}>
-                  {d.filename}
-                </span>
-                <span
-                  className="ml-auto text-[12px]"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {d.row_count} rows ·{" "}
-                  {new Date(d.created_at).toLocaleDateString()}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteDataset(d.id);
-                  }}
-                  className="ml-2 p-1.5 rounded-lg transition-colors hover:bg-red-50"
-                  style={{ color: "var(--danger, #dc2626)" }}
-                  title="Delete dataset"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {result && (
-        <div>
-          <h2
-            className="text-[15px] font-medium mb-1"
-            style={{ color: "var(--text-primary)" }}
+        <div id="dataset-details">
+          <button
+            onClick={() => {
+              setResult(null);
+              setViewingId(null);
+            }}
+            className="group flex items-center gap-1.5 mb-4 pl-2 pr-3 py-1.5 -ml-2 rounded-full text-[12px] font-medium transition-all duration-150"
+            style={{
+              color: "var(--text-secondary)",
+              border: "1px solid transparent",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--bg-surface)";
+              e.currentTarget.style.borderColor = "var(--border)";
+              e.currentTarget.style.color = "var(--text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "transparent";
+              e.currentTarget.style.color = "var(--text-secondary)";
+            }}
           >
-            {result.filename}
-          </h2>
-          <p
-            className="text-[12px] mb-4"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Rows: {result.row_count}
-          </p>
+            <ArrowLeft
+              size={14}
+              className="transition-transform group-hover:-translate-x-0.5"
+            />
+            All datasets
+          </button>
 
-          <p
-            className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Columns
-          </p>
           <div
-            className="rounded-xl overflow-hidden mb-6"
+            className="flex items-center gap-3 pb-5 mb-6"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <div
+              className="flex items-center justify-center w-11 h-11 rounded-xl shrink-0"
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <FileText size={18} style={{ color: "#2563eb" }} />
+            </div>
+            <div className="min-w-0">
+              <h2
+                className="text-[19px] font-semibold tracking-tight truncate"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {result.filename}
+              </h2>
+              <p
+                className="text-[12px] mt-0.5"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {Number(result.row_count).toLocaleString()} rows analyzed
+              </p>
+            </div>
+          </div>
+
+          {(filterOptions.regions.length > 0 ||
+            filterOptions.products.length > 0) && (
+            <div
+              className="flex flex-wrap items-center gap-2 mb-6 px-4 py-3 rounded-2xl"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--bg-surface)",
+              }}
+            >
+              <span
+                className="text-[11px] font-semibold uppercase tracking-widest mr-1"
+                style={{ color: "#64748b" }}
+              >
+                Filters
+              </span>
+              {filterOptions.regions.length > 0 && (
+                <select
+                  value={filterRegion}
+                  onChange={(e) => setFilterRegion(e.target.value)}
+                  className="text-[13px] px-3 py-1.5 rounded-lg"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-primary)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  <option value="">All Regions</option>
+                  {filterOptions.regions.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {filterOptions.products.length > 0 && (
+                <select
+                  value={filterProduct}
+                  onChange={(e) => setFilterProduct(e.target.value)}
+                  className="text-[13px] px-3 py-1.5 rounded-lg"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-primary)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  <option value="">All Products</option>
+                  {filterOptions.products.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {(filterRegion || filterProduct) && (
+                <button
+                  onClick={() => {
+                    setFilterRegion("");
+                    setFilterProduct("");
+                  }}
+                  className="flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <X size={12} />
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={() => setShowCustomize((s) => !s)}
+              className="text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+              style={{
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                color: "#2563eb",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#dbeafe";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#eff6ff";
+              }}
+            >
+              {showCustomize ? "Done" : "Customize Dashboard"}
+            </button>
+          </div>
+
+          {showCustomize && (
+            <div
+              className="flex flex-wrap gap-2 mb-6 px-4 py-3 rounded-2xl"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--bg-surface)",
+              }}
+            >
+              {[
+                { key: "revenue", label: "Revenue" },
+                { key: "customer", label: "Customer Analytics" },
+                { key: "sales", label: "Sales Analytics" },
+                { key: "marketing", label: "Marketing Analytics" },
+                { key: "inventory", label: "Inventory Analytics" },
+              ].map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => toggleSection(s.key)}
+                  className="text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  style={{
+                    background: visibleSections[s.key]
+                      ? "#eff6ff"
+                      : "var(--bg-primary)",
+                    border: `1px solid ${visibleSections[s.key] ? "#bfdbfe" : "var(--border)"}`,
+                    color: visibleSections[s.key]
+                      ? "#2563eb"
+                      : "var(--text-muted)",
+                  }}
+                >
+                  {visibleSections[s.key] ? "✓ " : ""}
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* KPI Cards */}
+          {kpisLoading ? (
+            <div
+              className="flex items-center gap-2 text-[13px] mb-6"
+              style={{ color: "#64748b" }}
+            >
+              <Loader2 size={14} className="animate-spin" />
+              Loading KPIs...
+            </div>
+          ) : kpis ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {kpis.total_revenue !== undefined && (
+                  <KpiCard
+                    icon={<DollarSign size={14} />}
+                    label="Total Revenue"
+                    value={kpis.total_revenue.toLocaleString(undefined, {
+                      maximumFractionDigits: 0,
+                    })}
+                    color="#16a34a"
+                  />
+                )}
+                {kpis.avg_order_value !== undefined && (
+                  <KpiCard
+                    icon={<TrendingUp size={14} />}
+                    label="Avg Order Value"
+                    value={kpis.avg_order_value.toLocaleString(undefined, {
+                      maximumFractionDigits: 0,
+                    })}
+                    color="#2563eb"
+                  />
+                )}
+                {kpis.unique_customers !== undefined && (
+                  <KpiCard
+                    icon={<Users size={14} />}
+                    label="Unique Customers"
+                    value={kpis.unique_customers.toString()}
+                    color="#9333ea"
+                  />
+                )}
+                {kpis.date_range_start && kpis.date_range_end && (
+                  <KpiCard
+                    icon={<Calendar size={14} />}
+                    label="Date Range"
+                    value={`${kpis.date_range_start} → ${kpis.date_range_end}`}
+                    color="#0891b2"
+                    small
+                  />
+                )}
+              </div>
+
+              {visibleSections.revenue && revenueSeries.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <SectionHeader
+                      label="Revenue Over Time"
+                      icon={<TrendingUp size={12} />}
+                      color="#16a34a"
+                      noMargin
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="text-[12px] px-2 py-1 rounded-lg"
+                        style={{
+                          border: "1px solid var(--border)",
+                          color: "var(--text-secondary)",
+                        }}
+                      />
+                      <span
+                        className="text-[12px]"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        to
+                      </span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="text-[12px] px-2 py-1 rounded-lg"
+                        style={{
+                          border: "1px solid var(--border)",
+                          color: "var(--text-secondary)",
+                        }}
+                      />
+                      <div
+                        className="flex rounded-lg overflow-hidden"
+                        style={{ border: "1px solid var(--border)" }}
+                      >
+                        <button
+                          onClick={() => setChartType("line")}
+                          className="px-2.5 py-1 text-[12px] font-medium transition-colors"
+                          style={{
+                            background:
+                              chartType === "line"
+                                ? "#16a34a"
+                                : "var(--bg-surface)",
+                            color:
+                              chartType === "line"
+                                ? "white"
+                                : "var(--text-secondary)",
+                          }}
+                        >
+                          Line
+                        </button>
+                        <button
+                          onClick={() => setChartType("bar")}
+                          className="px-2.5 py-1 text-[12px] font-medium transition-colors"
+                          style={{
+                            background:
+                              chartType === "bar"
+                                ? "#16a34a"
+                                : "var(--bg-surface)",
+                            color:
+                              chartType === "bar"
+                                ? "white"
+                                : "var(--text-secondary)",
+                          }}
+                        >
+                          Bar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className="rounded-2xl p-4"
+                    style={{ border: "1px solid var(--border)" }}
+                  >
+                    <ResponsiveContainer width="100%" height={220}>
+                      {chartType === "line" ? (
+                        <LineChart data={filteredRevenueSeries}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="var(--border)"
+                          />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 11 }}
+                            stroke="#94a3b8"
+                          />
+                          <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                          <Tooltip
+                            contentStyle={{
+                              fontSize: 12,
+                              borderRadius: 8,
+                              border: "1px solid var(--border)",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="revenue"
+                            stroke="#16a34a"
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        </LineChart>
+                      ) : (
+                        <BarChart data={filteredRevenueSeries}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="var(--border)"
+                          />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 11 }}
+                            stroke="#94a3b8"
+                          />
+                          <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                          <Tooltip
+                            contentStyle={{
+                              fontSize: 12,
+                              borderRadius: 8,
+                              border: "1px solid var(--border)",
+                            }}
+                          />
+                          <Bar
+                            dataKey="revenue"
+                            fill="#16a34a"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {/* Customer Analytics */}
+          {visibleSections.customer && customerAnalytics?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Customer Analytics"
+                icon={<Users size={12} />}
+                color="#9333ea"
+              />
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-surface)",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#9333ea" }}
+                  >
+                    Repeat Customers
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {customerAnalytics.repeat_customers} /{" "}
+                    {customerAnalytics.unique_customers}
+                  </div>
+                </div>
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-surface)",
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+                    style={{ color: "#9333ea" }}
+                  >
+                    One-Time Customers
+                  </div>
+                  <div
+                    className="text-xl font-semibold tabular-nums"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {customerAnalytics.one_time_customers}
+                  </div>
+                </div>
+              </div>
+              {customerAnalytics.top_by_revenue &&
+                customerAnalytics.top_by_revenue.length > 0 && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderLeft: "3px solid #9333ea",
+                    }}
+                  >
+                    <table className="w-full text-[13px]">
+                      <thead>
+                        <tr style={{ background: "var(--bg-primary)" }}>
+                          <Th>Customer</Th>
+                          <Th>Total Revenue</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customerAnalytics.top_by_revenue.map((c, i) => (
+                          <tr
+                            key={c.customer_id}
+                            style={{
+                              borderTop:
+                                i > 0 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <Td>{c.customer_id}</Td>
+                            <Td>{c.total_revenue.toLocaleString()}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Sales Analytics */}
+          {visibleSections.sales && salesAnalytics?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Sales Analytics"
+                icon={<TrendingUp size={12} />}
+                color="#059669"
+              />
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {salesAnalytics.summary?.total_sales !== undefined && (
+                  <KpiCard
+                    icon={<TrendingUp size={14} />}
+                    label={`Total ${salesAnalytics.metric_used || "Sales"}`}
+                    value={salesAnalytics.summary.total_sales.toLocaleString()}
+                    color="#059669"
+                  />
+                )}
+                {salesAnalytics.summary?.avg_sale !== undefined && (
+                  <KpiCard
+                    icon={<TrendingUp size={14} />}
+                    label="Avg Sale"
+                    value={salesAnalytics.summary.avg_sale.toLocaleString()}
+                    color="#059669"
+                  />
+                )}
+              </div>
+              {salesAnalytics.by_product &&
+                salesAnalytics.by_product.length > 0 && (
+                  <div
+                    className="rounded-2xl overflow-hidden mb-3"
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderLeft: "3px solid #059669",
+                    }}
+                  >
+                    <table
+                      className="w-full text-[13px]"
+                      style={{ tableLayout: "fixed" }}
+                    >
+                      <thead>
+                        <tr style={{ background: "var(--bg-primary)" }}>
+                          <Th>Product</Th>
+                          <Th>Total</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesAnalytics.by_product.map((p, i) => (
+                          <tr
+                            key={p.product}
+                            style={{
+                              borderTop:
+                                i > 0 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <Td>{p.product}</Td>
+                            <Td>{p.total.toLocaleString()}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+              {salesAnalytics.by_region &&
+                salesAnalytics.by_region.length > 0 && (
+                  <div
+                    className="rounded-2xl overflow-hidden mb-3"
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderLeft: "3px solid #059669",
+                    }}
+                  >
+                    <table
+                      className="w-full text-[13px]"
+                      style={{ tableLayout: "fixed" }}
+                    >
+                      <thead>
+                        <tr style={{ background: "var(--bg-primary)" }}>
+                          <Th>Region</Th>
+                          <Th>Total</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesAnalytics.by_region.map((r, i) => (
+                          <tr
+                            key={r.region}
+                            style={{
+                              borderTop:
+                                i > 0 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <Td>{r.region}</Td>
+                            <Td>{r.total.toLocaleString()}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+              {salesAnalytics.sales_series &&
+                salesAnalytics.sales_series.length > 0 && (
+                  <div
+                    className="rounded-2xl p-4"
+                    style={{ border: "1px solid var(--border)" }}
+                  >
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={salesAnalytics.sales_series}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="var(--border)"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 11 }}
+                          stroke="#94a3b8"
+                        />
+                        <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                        <Tooltip
+                          contentStyle={{
+                            fontSize: 12,
+                            borderRadius: 8,
+                            border: "1px solid var(--border)",
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="#059669"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Marketing Analytics */}
+          {visibleSections.marketing && marketingAnalytics?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Marketing Analytics"
+                icon={<TrendingUp size={12} />}
+                color="#e11d48"
+              />
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                {marketingAnalytics.summary?.total_spend !== undefined && (
+                  <KpiCard
+                    icon={<DollarSign size={14} />}
+                    label="Total Spend"
+                    value={marketingAnalytics.summary.total_spend.toLocaleString()}
+                    color="#e11d48"
+                  />
+                )}
+                {marketingAnalytics.summary?.total_revenue !== undefined && (
+                  <KpiCard
+                    icon={<DollarSign size={14} />}
+                    label="Total Revenue"
+                    value={marketingAnalytics.summary.total_revenue.toLocaleString()}
+                    color="#16a34a"
+                  />
+                )}
+                {marketingAnalytics.summary?.roi !== undefined &&
+                  marketingAnalytics.summary.roi !== null && (
+                    <KpiCard
+                      icon={<TrendingUp size={14} />}
+                      label="ROI"
+                      value={`${marketingAnalytics.summary.roi}x`}
+                      color="#2563eb"
+                    />
+                  )}
+              </div>
+              {marketingAnalytics.spend_series &&
+                marketingAnalytics.spend_series.length > 0 && (
+                  <div
+                    className="rounded-2xl p-4"
+                    style={{ border: "1px solid var(--border)" }}
+                  >
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={marketingAnalytics.spend_series}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="var(--border)"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 11 }}
+                          stroke="#94a3b8"
+                        />
+                        <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                        <Tooltip
+                          contentStyle={{
+                            fontSize: 12,
+                            borderRadius: 8,
+                            border: "1px solid var(--border)",
+                          }}
+                        />
+                        <Bar
+                          dataKey="spend"
+                          fill="#e11d48"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Inventory Analytics */}
+          {visibleSections.inventory && inventoryAnalytics?.available && (
+            <div className="mb-6">
+              <SectionHeader
+                label="Inventory Analytics"
+                icon={<TriangleAlert size={12} />}
+                color="#475569"
+              />
+              {inventoryAnalytics.low_stock_alerts &&
+                inventoryAnalytics.low_stock_alerts.length > 0 && (
+                  <div
+                    className="flex items-center gap-2 px-4 py-3 rounded-xl mb-3 text-[13px]"
+                    style={{
+                      background: "var(--warning-bg, #fffbeb)",
+                      color: "var(--warning, #d97706)",
+                      border: "1px solid var(--warning, #d97706)",
+                    }}
+                  >
+                    <TriangleAlert size={14} />
+                    Low stock:{" "}
+                    {inventoryAnalytics.low_stock_alerts
+                      .map((a) => a.product)
+                      .join(", ")}{" "}
+                    (below {inventoryAnalytics.low_stock_threshold} units)
+                  </div>
+                )}
+
+              {inventoryAnalytics.historical_dip_alerts &&
+                inventoryAnalytics.historical_dip_alerts.length > 0 && (
+                  <div
+                    className="flex items-center gap-2 px-4 py-3 rounded-xl mb-3 text-[13px]"
+                    style={{
+                      background: "#f8fafc",
+                      color: "#475569",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <TriangleAlert size={14} />
+                    Previously dipped low:{" "}
+                    {inventoryAnalytics.historical_dip_alerts
+                      .map((a) => `${a.product} (min ${a.min_inventory})`)
+                      .join(", ")}{" "}
+                    — currently recovered
+                  </div>
+                )}
+
+              {inventoryAnalytics.latest_by_product &&
+                inventoryAnalytics.latest_by_product.length > 0 && (
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderLeft: "3px solid #475569",
+                    }}
+                  >
+                    <table className="w-full text-[13px]">
+                      <thead>
+                        <tr style={{ background: "var(--bg-primary)" }}>
+                          <Th>Product</Th>
+                          <Th>Current Inventory</Th>
+                          <Th>Status</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryAnalytics.latest_by_product.map((p, i) => (
+                          <tr
+                            key={p.product}
+                            style={{
+                              borderTop:
+                                i > 0 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <Td>{p.product}</Td>
+                            <Td>{p.inventory.toLocaleString()}</Td>
+                            <td className="px-3 py-2.5">
+                              {p.low_stock ? (
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                                  style={{
+                                    background: "#fef2f2",
+                                    color: "#dc2626",
+                                  }}
+                                >
+                                  Low Stock
+                                </span>
+                              ) : (
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                                  style={{
+                                    background: "#f0fdf4",
+                                    color: "#16a34a",
+                                  }}
+                                >
+                                  OK
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Columns */}
+          <SectionHeader label="Columns" color="#64748b" />
+          <div
+            className="rounded-2xl overflow-hidden mb-6"
             style={{ border: "1px solid var(--border)" }}
           >
             <table className="w-full text-[13px]">
               <thead>
                 <tr style={{ background: "var(--bg-primary)" }}>
-                  <th
-                    className="text-left px-3 py-2 font-medium"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Name
-                  </th>
-                  <th
-                    className="text-left px-3 py-2 font-medium"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Type
-                  </th>
-                  <th
-                    className="text-left px-3 py-2 font-medium"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Missing
-                  </th>
-                  <th
-                    className="text-left px-3 py-2 font-medium"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Detected Role
-                  </th>
+                  <Th>Name</Th>
+                  <Th>Type</Th>
+                  <Th>Missing</Th>
+                  <Th>Detected Role</Th>
                 </tr>
               </thead>
               <tbody>
@@ -464,28 +1627,39 @@ export default function DatasetsPage() {
                     style={{ borderTop: "1px solid var(--border)" }}
                   >
                     <td
-                      className="px-3 py-2"
+                      className="px-3 py-2.5 font-medium"
                       style={{ color: "var(--text-primary)" }}
                     >
                       {col.name}
                     </td>
                     <td
-                      className="px-3 py-2"
+                      className="px-3 py-2.5 font-mono text-[12px]"
                       style={{ color: "var(--text-secondary)" }}
                     >
                       {col.dtype}
                     </td>
                     <td
-                      className="px-3 py-2"
-                      style={{ color: "var(--text-secondary)" }}
+                      className="px-3 py-2.5"
+                      style={{
+                        color:
+                          col.null_count > 0
+                            ? "var(--warning, #d97706)"
+                            : "var(--text-secondary)",
+                      }}
                     >
                       {col.null_count}
                     </td>
-                    <td
-                      className="px-3 py-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      {col.role === "unknown" ? "—" : col.role}
+                    <td className="px-3 py-2.5">
+                      {col.role === "unknown" ? (
+                        <span style={{ color: "#94a3b8" }}>—</span>
+                      ) : (
+                        <span
+                          className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                          style={roleBadgeStyle(col.role)}
+                        >
+                          {col.role}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -493,42 +1667,61 @@ export default function DatasetsPage() {
             </table>
           </div>
 
+          {/* Engineered Features */}
           {result.engineered_features?.length > 0 && (
             <div className="mb-6">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Engineered Features
-              </p>
+              <SectionHeader
+                label="Engineered Features"
+                icon={<Sparkles size={12} />}
+                color="#2563eb"
+              />
               <div
-                className="rounded-xl overflow-hidden"
-                style={{ border: "1px solid var(--border)" }}
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  border: "1px solid var(--border)",
+                  borderLeft: "3px solid #2563eb",
+                }}
               >
                 {result.engineered_features.map((f, i) => (
                   <div
                     key={i}
-                    className="px-3 py-2.5 text-[13px]"
+                    className="px-4 py-3 text-[13px]"
                     style={{
                       borderTop: i > 0 ? "1px solid var(--border)" : "none",
                     }}
                   >
-                    <span
-                      className="font-medium"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      {f.name}
-                    </span>
-                    <span
-                      className="ml-2 text-[12px]"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      derived from {f.source_column}
-                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span
+                        className="font-semibold"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {f.name}
+                      </span>
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        derived from <code>{f.source_column}</code>
+                      </span>
+                    </div>
                     {f.top_5 && (
-                      <div className="mt-1 text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                        Top customers by order count:{" "}
-                        {f.top_5.map((t) => `${t.customer_id} (${t.order_count})`).join(", ")}
+                      <div
+                        className="mt-1.5 text-[12px]"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        Top customers:{" "}
+                        {f.top_5.map((t, j) => (
+                          <span
+                            key={t.customer_id}
+                            className="px-1.5 py-0.5 rounded text-[11px] font-medium mr-1"
+                            style={{
+                              background: "var(--bg-primary)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            {t.customer_id} · {t.order_count}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -537,40 +1730,41 @@ export default function DatasetsPage() {
             </div>
           )}
 
-
+          {/* Duplicates */}
           {result.duplicate_count > 0 && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <p
-                  className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--danger, #dc2626)" }}
-                >
-                  Duplicates Found: {result.duplicate_count}
-                </p>
+                <SectionHeader
+                  label={`Duplicates Found · ${result.duplicate_count}`}
+                  icon={<Copy size={12} />}
+                  color="var(--danger, #dc2626)"
+                  noMargin
+                />
                 <button
                   onClick={() => handleClean(["remove_duplicates"])}
                   disabled={cleaning}
-                  className="text-[12px] font-medium transition-colors disabled:opacity-50"
-                  style={{ color: "var(--accent)" }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    color: "white",
+                    background: "var(--accent)",
+                  }}
                 >
+                  {cleaning && <Loader2 size={12} className="animate-spin" />}
                   {cleaning ? "Cleaning..." : "Remove Duplicates"}
                 </button>
               </div>
               <div
-                className="rounded-xl overflow-hidden"
-                style={{ border: "1px solid var(--border)" }}
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  border: "1px solid var(--border)",
+                  borderLeft: "3px solid var(--danger, #dc2626)",
+                }}
               >
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr style={{ background: "var(--bg-primary)" }}>
                       {result.columns.map((col) => (
-                        <th
-                          key={col.name}
-                          className="text-left px-3 py-2 font-medium whitespace-nowrap"
-                          style={{ color: "var(--text-secondary)" }}
-                        >
-                          {col.name}
-                        </th>
+                        <Th key={col.name}>{col.name}</Th>
                       ))}
                     </tr>
                   </thead>
@@ -581,15 +1775,11 @@ export default function DatasetsPage() {
                         style={{ borderTop: "1px solid var(--border)" }}
                       >
                         {result.columns.map((col) => (
-                          <td
-                            key={col.name}
-                            className="px-3 py-2 whitespace-nowrap"
-                            style={{ color: "var(--text-primary)" }}
-                          >
+                          <Td key={col.name}>
                             {row[col.name] === null
                               ? "—"
                               : String(row[col.name])}
-                          </td>
+                          </Td>
                         ))}
                       </tr>
                     ))}
@@ -599,30 +1789,26 @@ export default function DatasetsPage() {
             </div>
           )}
 
+          {/* Outliers */}
           {Object.entries(result.outliers_by_column).map(([colName, info]) => (
             <div key={colName} className="mb-6">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-                style={{ color: "var(--warning, #d97706)" }}
-              >
-                Outliers in "{colName}": {info.count} (expected range:{" "}
-                {info.lower_bound} – {info.upper_bound})
-              </p>
+              <SectionHeader
+                label={`Outliers in "${colName}" · ${info.count} (expected ${info.lower_bound}–${info.upper_bound})`}
+                icon={<TriangleAlert size={12} />}
+                color="var(--warning, #d97706)"
+              />
               <div
-                className="rounded-xl overflow-hidden"
-                style={{ border: "1px solid var(--border)" }}
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  border: "1px solid var(--border)",
+                  borderLeft: "3px solid var(--warning, #d97706)",
+                }}
               >
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr style={{ background: "var(--bg-primary)" }}>
                       {result.columns.map((col) => (
-                        <th
-                          key={col.name}
-                          className="text-left px-3 py-2 font-medium whitespace-nowrap"
-                          style={{ color: "var(--text-secondary)" }}
-                        >
-                          {col.name}
-                        </th>
+                        <Th key={col.name}>{col.name}</Th>
                       ))}
                     </tr>
                   </thead>
@@ -633,15 +1819,11 @@ export default function DatasetsPage() {
                         style={{ borderTop: "1px solid var(--border)" }}
                       >
                         {result.columns.map((col) => (
-                          <td
-                            key={col.name}
-                            className="px-3 py-2 whitespace-nowrap"
-                            style={{ color: "var(--text-primary)" }}
-                          >
+                          <Td key={col.name}>
                             {row[col.name] === null
                               ? "—"
                               : String(row[col.name])}
-                          </td>
+                          </Td>
                         ))}
                       </tr>
                     ))}
@@ -651,27 +1833,37 @@ export default function DatasetsPage() {
             </div>
           ))}
 
-          <p
-            className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Preview
-          </p>
+          {/* Preview */}
+          <div className="flex items-center justify-between mb-2">
+            <SectionHeader label="Preview" color="#64748b" noMargin />
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+              style={{
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                color: "#2563eb",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#dbeafe";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#eff6ff";
+              }}
+            >
+              <Copy size={12} />
+              Export CSV
+            </button>
+          </div>
           <div
-            className="overflow-x-auto rounded-xl"
+            className="overflow-x-auto rounded-2xl"
             style={{ border: "1px solid var(--border)" }}
           >
             <table className="w-full text-[13px]">
               <thead>
                 <tr style={{ background: "var(--bg-primary)" }}>
                   {result.columns.map((col) => (
-                    <th
-                      key={col.name}
-                      className="text-left px-3 py-2 font-medium whitespace-nowrap"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      {col.name}
-                    </th>
+                    <Th key={col.name}>{col.name}</Th>
                   ))}
                 </tr>
               </thead>
@@ -679,13 +1871,9 @@ export default function DatasetsPage() {
                 {result.preview.map((row, i) => (
                   <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
                     {result.columns.map((col) => (
-                      <td
-                        key={col.name}
-                        className="px-3 py-2 whitespace-nowrap"
-                        style={{ color: "var(--text-primary)" }}
-                      >
+                      <Td key={col.name}>
                         {row[col.name] === null ? "—" : String(row[col.name])}
-                      </td>
+                      </Td>
                     ))}
                   </tr>
                 ))}
@@ -694,6 +1882,8 @@ export default function DatasetsPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk delete modal */}
       {deleteConfirmBulk && (
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
@@ -747,6 +1937,7 @@ export default function DatasetsPage() {
         </div>
       )}
 
+      {/* Single delete modal */}
       {deleteConfirmId && (
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
@@ -801,4 +1992,108 @@ export default function DatasetsPage() {
   );
 }
 
+// --- small shared presentational bits ---
 
+function SectionHeader({
+  label,
+  icon,
+  color = "var(--text-muted)",
+  noMargin = false,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  color?: string;
+  noMargin?: boolean;
+}) {
+  return (
+    <p
+      className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest ${noMargin ? "" : "mb-2"}`}
+      style={{ color }}
+    >
+      {icon}
+      {label}
+    </p>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return (
+    <th
+      className="text-left px-3 py-2.5 font-semibold text-[11px] uppercase tracking-wide whitespace-nowrap"
+      style={{ color: "var(--text-secondary)" }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children }: { children: React.ReactNode }) {
+  return (
+    <td
+      className="px-3 py-2.5 whitespace-nowrap tabular-nums"
+      style={{ color: "var(--text-primary)" }}
+    >
+      {children}
+    </td>
+  );
+}
+
+function roleBadgeStyle(role: string): React.CSSProperties {
+  const map: Record<string, { bg: string; fg: string }> = {
+    date: { bg: "#eff6ff", fg: "#2563eb" },
+    revenue: { bg: "#f0fdf4", fg: "#16a34a" },
+    sales: { bg: "#ecfdf5", fg: "#059669" },
+    customer_id: { bg: "#faf5ff", fg: "#9333ea" },
+    email: { bg: "#fdf4ff", fg: "#c026d3" },
+    product: { bg: "#fff7ed", fg: "#ea580c" },
+    quantity: { bg: "#fefce8", fg: "#ca8a04" },
+    region: { bg: "#ecfeff", fg: "#0891b2" },
+    category: { bg: "#f5f3ff", fg: "#7c3aed" },
+    status: { bg: "#f0fdfa", fg: "#0d9488" },
+    marketing_spend: { bg: "#fff1f2", fg: "#e11d48" },
+    inventory: { bg: "#f1f5f9", fg: "#475569" },
+  };
+  const c = map[role] || { bg: "#f8fafc", fg: "#64748b" };
+  return { background: c.bg, color: c.fg };
+}
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  color,
+  small = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  color: string;
+  small?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{
+        border: "1px solid var(--border)",
+        background: "var(--bg-surface)",
+      }}
+    >
+      <div className="flex items-center gap-1.5 mb-2" style={{ color }}>
+        {icon}
+        <span className="text-[11px] font-semibold uppercase tracking-wide">
+          {label}
+        </span>
+      </div>
+      <div
+        className={
+          small
+            ? "text-[13px] font-semibold tabular-nums"
+            : "text-xl font-semibold tabular-nums"
+        }
+        style={{ color: "var(--text-primary)" }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
