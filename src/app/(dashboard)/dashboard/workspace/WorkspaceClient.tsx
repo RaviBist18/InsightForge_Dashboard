@@ -44,14 +44,7 @@ interface DecisionSnapshot {
   ai_advice: string;
   persona: string;
 }
-interface BusinessEntity {
-  id: string;
-  name: string;
-  type: string;
-  sensitivity_score: number;
-  metadata: Record<string, unknown>;
-  base_value?: number; // ← add this
-}
+
 interface WhyFeedItem {
   headline: string;
   snippet: string;
@@ -82,7 +75,6 @@ interface Props {
   profile: Profile | null;
   briefingSettings: BriefingSettings | null;
   initialSnapshots: DecisionSnapshot[];
-  initialEntities: BusinessEntity[];
   mrr: number;
   churn: number;
   signups: number;
@@ -98,9 +90,6 @@ const KPI_SLUGS = new Set([
   "total-orders",
   "active-users",
   "churn-rate",
-  "total-asset-value",
-  "market-growth-yield",
-  "active-nodes-count",
 ]);
 
 // Slugs restricted to admin only
@@ -111,14 +100,7 @@ const ADMIN_ONLY_SLUGS = new Set([
 ]);
 
 // Slugs available to users
-const USER_KPI_SLUGS = [
-  "total-revenue",
-  "total-profit",
-  "profit-margin",
-  "total-asset-value",
-  "market-growth-yield",
-  "active-nodes-count",
-];
+const USER_KPI_SLUGS = ["total-revenue", "total-profit", "profit-margin"];
 
 // All KPI slugs as array for admin tab rendering
 const ALL_KPI_SLUGS = [
@@ -222,33 +204,6 @@ function FeedSkeleton({ accent }: { accent: string }) {
   );
 }
 
-// ── NODE VAULT DATA GENERATOR ─────────────────────────────────────────────────
-function generateNodeVaultData(entities: BusinessEntity[], baseMrr: number) {
-  const months = [
-    "Oct",
-    "Nov",
-    "Dec",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-  ];
-  return months.map((month, i) => {
-    const totalCoeff = entities.reduce((sum, e) => {
-      const coeff = 1 + (e.sensitivity_score ?? 30) / 200;
-      return sum + Math.pow(coeff, i);
-    }, 0);
-    const base = entities.length > 0 ? baseMrr / entities.length : baseMrr;
-    const fluctuation = 1 + Math.sin(i * 1.3) * 0.06;
-    return {
-      month,
-      value: Math.round(base * totalCoeff * fluctuation),
-    };
-  });
-}
-
 function generateMockSparkline(baseMrr: number) {
   return Array.from({ length: 12 }, (_, i) => ({
     month: `M${i + 1}`,
@@ -267,7 +222,6 @@ export default function WorkspaceClient({
   profile,
   briefingSettings,
   initialSnapshots,
-  initialEntities,
   mrr: initialMrr,
   churn: initialChurn,
   signups: initialSignups,
@@ -281,7 +235,6 @@ export default function WorkspaceClient({
     setActiveTab,
     setMrr: setCtxMrr,
     setChurn: setCtxChurn,
-    setEntityCount,
     setSnapshotCount,
     mrrTrend,
     setMrrTrend,
@@ -330,13 +283,6 @@ export default function WorkspaceClient({
   });
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
-
-  // ── ENTITIES ──
-  const [entities, setEntities] = useState<BusinessEntity[]>(initialEntities);
-  const [newEntity, setNewEntity] = useState({ name: "", type: "product" });
-  const [scoringId, setScoringId] = useState<string | null>(null);
-  const [addingEntity, setAddingEntity] = useState(false);
-  const [forgeBaseValue, setForgeBaseValue] = useState<string>("");
 
   // ── CUSTOMIZER ──
   const [persona, setPersona] = useState<string>(
@@ -499,9 +445,6 @@ export default function WorkspaceClient({
     setCtxChurn(churn);
   }, [churn, setCtxChurn]);
   useEffect(() => {
-    setEntityCount(entities.length);
-  }, [entities.length, setEntityCount]);
-  useEffect(() => {
     setSnapshotCount(snapshots.length);
   }, [snapshots.length, setSnapshotCount]);
 
@@ -576,105 +519,6 @@ export default function WorkspaceClient({
     }
   };
 
-  // ── ENTITY MANAGEMENT ─────────────────────────────────────────────────────
-  const addEntity = async () => {
-    if (!newEntity.name.trim() || isReadOnly) return;
-    setAddingEntity(true);
-    try {
-      const { data, error } = await supabase
-        .from("business_entities")
-        .insert({ user_id: userId, name: newEntity.name, type: newEntity.type })
-        .select()
-        .single();
-      if (!error && data) {
-        setEntities((prev) => [data, ...prev]);
-        setNewEntity({ name: "", type: "product" });
-        scoreEntity(data);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setAddingEntity(false);
-    }
-  };
-
-  const handleForgeNode = async () => {
-    if (!newEntity.name.trim() || !forgeBaseValue || isReadOnly) return;
-    setAddingEntity(true);
-    try {
-      const { data, error } = await supabase
-        .from("business_entities")
-        .insert({
-          user_id: userId,
-          name: newEntity.name,
-          type: newEntity.type ?? "custom",
-          base_value: parseFloat(forgeBaseValue),
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        setEntities((prev) => [data, ...prev]);
-        setNewEntity({ name: "", type: "product" });
-        setForgeBaseValue("");
-        scoreEntity(data);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setAddingEntity(false);
-    }
-  };
-
-  const scoreEntity = async (entity: BusinessEntity) => {
-    setScoringId(entity.id);
-    try {
-      const res = await fetch("/api/workspace", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "score-entities",
-          entities: [entity],
-          marketConditions: {
-            spy_change: tickers.find((t) => t.symbol === "SPY")?.change ?? 0,
-            volatility: 18.5,
-            rate_environment: "rising",
-          },
-        }),
-      });
-      const data = await res.json();
-      const score = data.scores?.[0];
-      if (score) {
-        await supabase
-          .from("business_entities")
-          .update({
-            sensitivity_score: score.score,
-            last_scored_at: new Date().toISOString(),
-          })
-          .eq("id", entity.id);
-        setEntities((prev) =>
-          prev.map((e) =>
-            e.id === entity.id ? { ...e, sensitivity_score: score.score } : e,
-          ),
-        );
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setScoringId(null);
-    }
-  };
-
-  const deleteEntity = async (id: string) => {
-    if (isReadOnly) return;
-    await supabase.from("business_entities").delete().eq("id", id);
-    setEntities((prev) => prev.filter((e) => e.id !== id));
-  };
-
-  const deleteNode = async (id: string) => {
-    await supabase.from("business_entities").delete().eq("id", id);
-    setEntities((prev) => prev.filter((e) => e.id !== id));
-  };
   // ── SAVE SETTINGS ─────────────────────────────────────────────────────────
   const saveSettings = async () => {
     if (isReadOnly) return;
@@ -710,32 +554,13 @@ export default function WorkspaceClient({
       CRITICAL: "var(--danger)",
     })[level] ?? "var(--text-muted)";
 
-  const sensitivityColor = (score: number) => {
-    if (score >= 75) return "var(--danger)";
-    if (score >= 50) return "var(--warning)";
-    if (score >= 25) return "var(--warning)";
-    return "var(--success)";
-  };
-
   // ── TAB DEFINITIONS ───────────────────────────────────────────────────────
   const workspaceTabs = [
     { id: "pulse", label: "Live Metrics", icon: "⚡" },
     { id: "archives", label: "Snapshot Archive", icon: "🔒" },
     { id: "forge", label: "Scenario Simulator", icon: "🔥" },
-    { id: "entities", label: "Asset Registry", icon: "🗺️" },
     { id: "customizer", label: "CEO Briefing", icon: "🎯" },
   ] as const;
-
-  // user-only tab — rendered separately in tab bar
-  const userOnlyTabs = !isAdmin
-    ? [{ id: "forge-node", label: "Add Entity", icon: "🔩" }]
-    : [];
-
-  // KPI slugs available to current role
-  const availableKpiSlugs = isAdmin ? ALL_KPI_SLUGS : USER_KPI_SLUGS;
-
-  // Shared stats object for KPIDetailClient
-  const userHasNodes = !isAdmin && entities.length > 0;
 
   const liveStats: DashboardStats = {
     totalRevenue: mrr,
@@ -748,7 +573,6 @@ export default function WorkspaceClient({
     latestNews: "Telemetry integrated.",
     mrrSparkline: mrrSparkline,
   };
-  const isForgeNodeTab = activeTab === ("forge-node" as any);
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return (
@@ -883,28 +707,6 @@ export default function WorkspaceClient({
               <span className="hidden sm:block">{tab.label}</span>
             </button>
           ))}
-          {/* Forge Node button — user only, right side */}
-          {!isAdmin && (
-            <>
-              <div className="flex-1" /> {/* pushes button to right */}
-              <button
-                onClick={() => setActiveTab("forge-node")}
-                className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold whitespace-nowrap transition-all"
-                style={{
-                  background:
-                    activeTab === "forge-node"
-                      ? `${accent}20`
-                      : `linear-gradient(135deg, ${accent}30, ${accent}15)`,
-                  border: `1px solid ${activeTab === "forge-node" ? accent : accent + "60"}`,
-                  color: accent,
-                  boxShadow: `0 0 16px ${accent}20`,
-                }}
-              >
-                <span>🔩</span>
-                <span className="hidden sm:block">Add Entity</span>
-              </button>
-            </>
-          )}
 
           {/* Divider */}
         </div>
@@ -942,14 +744,7 @@ export default function WorkspaceClient({
                         "active-users",
                         "churn-rate",
                       ]
-                    : [
-                        "total-revenue",
-                        "total-profit",
-                        "profit-margin",
-                        "total-asset-value",
-                        "market-growth-yield",
-                        "active-nodes-count",
-                      ]
+                    : ["total-revenue", "total-profit", "profit-margin"]
                 }
               />
 
@@ -1267,8 +1062,6 @@ export default function WorkspaceClient({
                   persona={persona as any}
                   viewMode="full"
                   onBack={() => setActiveTab("pulse")}
-                  entities={entities} // â† add this
-                  onDeleteNode={deleteNode}
                   userId={userId}
                 />
               </motion.div>
@@ -1697,413 +1490,6 @@ export default function WorkspaceClient({
             </motion.div>
           )}
 
-          {/* ── ENTITY REGISTRY ──────────────────────────────────────────── */}
-          {activeTab === "entities" && (
-            <motion.div
-              key="entities"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-            >
-              {!isReadOnly && (
-                <div
-                  className="rounded-xl p-5 mb-6"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: `1px solid ${accent}30`,
-                  }}
-                >
-                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
-                    🗺️ Register Business Node
-                  </p>
-                  <div className="flex gap-3">
-                    <input
-                      value={newEntity.name}
-                      onChange={(e) =>
-                        setNewEntity((p) => ({ ...p, name: e.target.value }))
-                      }
-                      placeholder="Entity name (e.g. Product A, EU Region)"
-                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none"
-                      style={{
-                        background: "rgba(0,0,0,0.04)",
-                        border: "1px solid rgba(0,0,0,0.08)",
-                      }}
-                    />
-                    <select
-                      value={newEntity.type}
-                      onChange={(e) =>
-                        setNewEntity((p) => ({ ...p, type: e.target.value }))
-                      }
-                      className="px-3 py-2.5 rounded-lg text-sm text-[var(--text-primary)] outline-none"
-                      style={{
-                        background: "rgba(0,0,0,0.04)",
-                        border: "1px solid rgba(0,0,0,0.08)",
-                      }}
-                    >
-                      {["product", "region", "tier", "custom"].map((t) => (
-                        <option
-                          key={t}
-                          value={t}
-                          style={{ background: "var(--bg-surface)" }}
-                        >
-                          {t.charAt(0).toUpperCase() + t.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={addEntity}
-                      disabled={addingEntity || !newEntity.name.trim()}
-                      className="px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
-                      style={{
-                        background: addingEntity ? `${accent}40` : accent,
-                        color: "#FFFFFF",
-                        opacity: !newEntity.name.trim() ? 0.4 : 1,
-                      }}
-                    >
-                      {addingEntity ? "Adding..." : "+ Add"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {entities.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <p className="text-4xl">🗺️</p>
-                  <p className="text-[var(--text-secondary)] text-sm">
-                    No business nodes registered.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {entities.map((entity, i) => {
-                    const score = entity.sensitivity_score ?? 0;
-                    return (
-                      <motion.div
-                        key={entity.id}
-                        initial={{ opacity: 0, scale: 0.96 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="rounded-xl p-4"
-                        style={{
-                          background: "rgba(0,0,0,0.025)",
-                          border: "1px solid rgba(0,0,0,0.07)",
-                        }}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <p className="text-sm font-bold text-[var(--text-primary)]">
-                              {entity.name}
-                            </p>
-                            <p className="text-xs text-[var(--text-secondary)] mt-0.5 capitalize">
-                              {entity.type}
-                            </p>
-                          </div>
-                          {!isReadOnly && (
-                            <button
-                              onClick={() => deleteEntity(entity.id)}
-                              className="text-[var(--text-muted)] hover:text-[var(--danger)] text-xs transition-colors"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs text-[var(--text-secondary)]">
-                              Market Sensitivity
-                            </span>
-                            {scoringId === entity.id ? (
-                              <span className="text-xs text-[var(--text-muted)]">
-                                Scoring...
-                              </span>
-                            ) : (
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: sensitivityColor(score) }}
-                              >
-                                {score.toFixed(0)}
-                              </span>
-                            )}
-                          </div>
-                          <div
-                            className="h-1.5 rounded-full overflow-hidden"
-                            style={{ background: "rgba(0,0,0,0.06)" }}
-                          >
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${score}%` }}
-                              transition={{ duration: 0.8, delay: i * 0.1 }}
-                              className="h-full rounded-full"
-                              style={{ background: sensitivityColor(score) }}
-                            />
-                          </div>
-                          <div className="flex justify-between text-xs text-[var(--text-muted)] mt-1">
-                            <span>Resilient</span>
-                            <span>Volatile</span>
-                          </div>
-                        </div>
-                        {!isReadOnly && (
-                          <button
-                            onClick={() => scoreEntity(entity)}
-                            disabled={scoringId === entity.id}
-                            className="w-full py-1.5 rounded text-xs font-bold transition-all"
-                            style={{
-                              background: "rgba(0,0,0,0.04)",
-                              border: "1px solid rgba(0,0,0,0.08)",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {scoringId === entity.id
-                              ? "⟳ Scoring..."
-                              : "↺ Rescore"}
-                          </button>
-                        )}
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* ── NODE VAULT — user only, shows when entities exist ── */}
-              {!isAdmin && entities.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="mt-8 rounded-xl p-5"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: `1px solid ${accent}30`,
-                    boxShadow: `0 0 40px ${accent}08`,
-                  }}
-                >
-                  {/* Node Vault Header */}
-                  <div className="flex items-center justify-between mb-5">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div
-                          className="w-1.5 h-1.5 rounded-full animate-pulse"
-                          style={{ background: accent }}
-                        />
-                        <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest">
-                          ⚡ Portfolio Projection
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold text-[var(--text-primary)]">
-                        Growth Projection
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                        Compounded growth · equity coefficient model
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span
-                        className="text-xs px-2 py-1 rounded font-bold"
-                        style={{
-                          background: `${accent}20`,
-                          color: accent,
-                          border: `1px solid ${accent}40`,
-                        }}
-                      >
-                        PROJECTED MODEL
-                      </span>
-                      <span className="text-xs text-[var(--text-muted)]">
-                        {entities.length} node{entities.length !== 1 ? "s" : ""}{" "}
-                        tracked
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Growth Chart */}
-                  <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart
-                      data={generateNodeVaultData(entities, mrr)}
-                      margin={{ left: -10, right: 8 }}
-                    >
-                      <defs>
-                        <linearGradient
-                          id="nodeVaultGrad"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor={accent}
-                            stopOpacity={0.3}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor={accent}
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
-                        stroke="rgba(0,0,0,0.04)"
-                      />
-                      <XAxis
-                        dataKey="month"
-                        tick={{
-                          fontSize: 9,
-                          fill: "var(--text-muted)",
-                          fontFamily: "monospace",
-                        }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{
-                          fontSize: 9,
-                          fill: "var(--text-muted)",
-                          fontFamily: "monospace",
-                        }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => `$${v.toLocaleString()}`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--bg-surface)",
-                          border: `1px solid ${accent}40`,
-                          borderRadius: 8,
-                          fontSize: 11,
-                          fontFamily: "monospace",
-                          color: "var(--text-primary)",
-                        }}
-                        formatter={(v: number) => [
-                          `$${v.toLocaleString()}`,
-                          "Portfolio Value",
-                        ]}
-                      />
-                      <ReferenceLine
-                        y={mrr}
-                        stroke="var(--success)"
-                        strokeDasharray="4 4"
-                        strokeOpacity={0.5}
-                        label={{
-                          value: "BASE MRR",
-                          position: "insideTopLeft",
-                          fill: "var(--success)",
-                          fontSize: 8,
-                          fontFamily: "monospace",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke={accent}
-                        strokeWidth={2.5}
-                        fill="url(#nodeVaultGrad)"
-                        dot={{ r: 3, fill: accent, strokeWidth: 0 }}
-                        activeDot={{ r: 6, fill: accent, strokeWidth: 0 }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-
-                  {/* Per-node breakdown */}
-                  <div className="mt-5">
-                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">
-                      6-Month Node Projections
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {entities.slice(0, 4).map((entity, i) => {
-                        const coeff =
-                          1 + (entity.sensitivity_score ?? 30) / 200;
-                        const nodeValue = Math.round(
-                          (mrr / entities.length) * Math.pow(coeff, 6),
-                        );
-                        const growth = ((Math.pow(coeff, 6) - 1) * 100).toFixed(
-                          1,
-                        );
-                        return (
-                          <div
-                            key={entity.id}
-                            className="flex items-center justify-between p-3 rounded-lg"
-                            style={{
-                              background: "rgba(0,0,0,0.03)",
-                              border: "1px solid rgba(0,0,0,0.06)",
-                            }}
-                          >
-                            <div>
-                              <p className="text-xs font-bold text-[var(--text-primary)]">
-                                {entity.name}
-                              </p>
-                              <p className="text-xs text-[var(--text-secondary)] capitalize mt-0.5">
-                                {entity.type} · coeff {coeff.toFixed(2)}x
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p
-                                className="text-sm font-bold tabular-nums"
-                                style={{
-                                  color: accent,
-                                  fontFamily: "monospace",
-                                }}
-                              >
-                                ${nodeValue.toLocaleString()}
-                              </p>
-                              <p
-                                className="text-xs font-bold mt-0.5"
-                                style={{ color: "var(--success)" }}
-                              >
-                                +{growth}%
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {entities.length > 4 && (
-                      <p className="text-xs text-[var(--text-muted)] text-center mt-3">
-                        +{entities.length - 4} more nodes tracked
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Total portfolio value */}
-                  <div
-                    className="mt-4 p-4 rounded-lg flex items-center justify-between"
-                    style={{
-                      background: `${accent}08`,
-                      border: `1px solid ${accent}25`,
-                    }}
-                  >
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest">
-                        Total Portfolio · 6mo
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                        Compounded across all {entities.length} nodes
-                      </p>
-                    </div>
-                    <p
-                      className="text-2xl font-bold tabular-nums"
-                      style={{ color: accent, fontFamily: "monospace" }}
-                    >
-                      $
-                      {entities
-                        .reduce((sum, entity) => {
-                          const coeff =
-                            1 + (entity.sensitivity_score ?? 30) / 200;
-                          return (
-                            sum +
-                            Math.round(
-                              (mrr / entities.length) * Math.pow(coeff, 6),
-                            )
-                          );
-                        }, 0)
-                        .toLocaleString()}
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </motion.div>
-          )}
-
           {/* ── CEO BRIEFING CUSTOMIZER ──────────────────────────────────── */}
           {activeTab === "customizer" && (
             <motion.div
@@ -2256,7 +1642,6 @@ export default function WorkspaceClient({
                         label: "MRR Tracked",
                         value: `$${mrr.toLocaleString()}`,
                       },
-                      { label: "Entities Monitored", value: entities.length },
                       {
                         label: "Access Level",
                         value: isAdmin ? "Administrator" : "Member",
@@ -2302,234 +1687,6 @@ export default function WorkspaceClient({
                         : "Save Briefing Settings"}
                   </button>
                 )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── FORGE NODE — full page, user only ─────────────────── */}
-
-          {isForgeNodeTab && !isAdmin && (
-            <motion.div
-              key="forge-node"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="space-y-6"
-            >
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className="w-2 h-8 rounded-full"
-                  style={{
-                    background: `linear-gradient(to bottom, ${accent}, transparent)`,
-                  }}
-                />
-                <div>
-                  <h2
-                    className="text-xl font-bold tracking-tight"
-                    style={{ color: accent }}
-                  >
-                    Add Entity
-                  </h2>
-                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                    Deploy a new asset node into your active registry.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Forge Form */}
-                <div
-                  className="rounded-xl p-6 space-y-5"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: `1px solid ${accent}40`,
-                    boxShadow: `0 0 40px ${accent}08`,
-                  }}
-                >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
-                    ⚡ Asset Configuration
-                  </p>
-
-                  {/* Node Name */}
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      await handleForgeNode();
-                      setActiveTab("active-nodes-count");
-                    }}
-                  >
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-                        Node Identifier
-                      </label>
-                      <input
-                        value={newEntity.name}
-                        onChange={(e) =>
-                          setNewEntity((p) => ({ ...p, name: e.target.value }))
-                        }
-                        placeholder="e.g., Alpha-Node-01"
-                        className="w-full px-4 py-3 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all"
-                        style={{
-                          background: "rgba(0,0,0,0.04)",
-                          border: `1px solid ${newEntity.name ? accent + "40" : "rgba(0,0,0,0.08)"}`,
-                        }}
-                      />
-                    </div>
-
-                    {/* Base Valuation */}
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-                        Base Valuation Capital
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] text-sm font-bold">
-                          $
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={forgeBaseValue}
-                          onChange={(e) => setForgeBaseValue(e.target.value)}
-                          placeholder="Enter allocation capital..."
-                          className="w-full pl-8 pr-4 py-3 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all"
-                          style={{
-                            background: "rgba(0,0,0,0.04)",
-                            border: `1px solid ${forgeBaseValue ? accent + "40" : "rgba(0,0,0,0.08)"}`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Node Type */}
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-                        Node Type
-                      </label>
-                      <select
-                        value={newEntity.type}
-                        onChange={(e) =>
-                          setNewEntity((p) => ({ ...p, type: e.target.value }))
-                        }
-                        className="w-full px-4 py-3 rounded-lg text-sm text-[var(--text-primary)] outline-none transition-all"
-                        style={{
-                          background: "rgba(0,0,0,0.04)",
-                          border: "1px solid rgba(0,0,0,0.08)",
-                        }}
-                      >
-                        {["product", "region", "tier", "custom"].map((t) => (
-                          <option
-                            key={t}
-                            value={t}
-                            style={{ background: "var(--bg-surface)" }}
-                          >
-                            {t.charAt(0).toUpperCase() + t.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Forge Button */}
-                    <button
-                      type="submit"
-                      disabled={
-                        addingEntity ||
-                        !newEntity.name.trim() ||
-                        !forgeBaseValue
-                      }
-                      className="w-full py-4 rounded-lg text-sm font-bold tracking-widest uppercase transition-all"
-                      style={{
-                        background: addingEntity
-                          ? `${accent}30`
-                          : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                        color: "#FFFFFF",
-                        boxShadow: addingEntity
-                          ? "none"
-                          : `0 4px 24px ${accent}40`,
-                        opacity:
-                          !newEntity.name.trim() || !forgeBaseValue ? 0.4 : 1,
-                        letterSpacing: "0.15em",
-                      }}
-                    >
-                      {addingEntity ? "Adding..." : "Add Entity"}
-                    </button>
-                  </form>
-                </div>
-
-                {/* Live Registry Preview */}
-                <div
-                  className="rounded-xl p-6 space-y-4"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: "1px solid rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
-                    📡 Active Node Registry
-                  </p>
-                  {entities.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 gap-3">
-                      <p className="text-3xl">🔩</p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        No entities added yet.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 custom-scroll">
-                      {entities.map((e, i) => (
-                        <motion.div
-                          key={e.id}
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="flex items-center justify-between p-3 rounded-lg"
-                          style={{
-                            background: "rgba(0,0,0,0.03)",
-                            border: `1px solid ${accent}20`,
-                          }}
-                        >
-                          <div>
-                            <p className="text-xs font-bold text-[var(--text-primary)]">
-                              {e.name}
-                            </p>
-                            <p className="text-[9px] text-[var(--text-secondary)] capitalize mt-0.5">
-                              {e.type}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p
-                              className="text-sm font-bold tabular-nums"
-                              style={{ color: accent }}
-                            >
-                              ${(e.base_value ?? 0).toLocaleString()}
-                            </p>
-                            <p className="text-[9px] text-[var(--text-muted)] mt-0.5">
-                              score {e.sensitivity_score ?? "—"}
-                            </p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Portfolio total */}
-                  {entities.length > 0 && (
-                    <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between">
-                      <span className="text-[9px] text-[var(--text-secondary)] uppercase tracking-widest">
-                        Total Portfolio
-                      </span>
-                      <span
-                        className="text-lg font-bold tabular-nums"
-                        style={{ color: accent }}
-                      >
-                        $
-                        {entities
-                          .reduce((s, e) => s + (e.base_value ?? 0), 0)
-                          .toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
               </div>
             </motion.div>
           )}

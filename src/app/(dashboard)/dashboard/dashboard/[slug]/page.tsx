@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
-import { getDashboardStats } from "@/lib/data";
+import { getAggregateDashboardStats } from "@/lib/data";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -60,7 +60,7 @@ export default async function KPIDetailPage({ params }: PageProps) {
   if (!VALID_SLUGS.includes(slug)) notFound();
 
   const [stats, { role, userId }] = await Promise.all([
-    getDashboardStats("30d"),
+    getAggregateDashboardStats(),
     getUserRoleAndId(),
   ]);
 

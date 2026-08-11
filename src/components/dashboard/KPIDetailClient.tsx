@@ -21,10 +21,6 @@ import {
   Star,
   ChevronRight,
   AlertCircle,
-  Database,
-  Trash2,
-  Search,
-  Box,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -64,17 +60,6 @@ interface KPIDetailClientProps {
   userId?: string;
   viewMode?: "full" | "summary";
   onBack?: () => void;
-  entities?: BusinessEntity[];
-  onDeleteNode?: (id: string) => Promise<void>;
-}
-interface BusinessEntity {
-  id: string;
-  name: string;
-  type: string;
-  sensitivity_score: number;
-  metadata: Record<string, unknown>;
-  base_value?: number;
-  created_at?: string;
 }
 
 // ─── Canonical values (known fake-data debt — original 6 slugs, see roadmap) ──
@@ -188,38 +173,6 @@ const SLUG_CONFIG: Record<
       r === "admin"
         ? "Retention is high — only 1 account lost in the last 30 days."
         : "No churn risk detected on your account. Status: retained.",
-  },
-  "total-asset-value": {
-    label: "Total Asset Value",
-    icon: Database,
-    accentColor: PALETTE[0],
-    prefix: "$",
-    description:
-      "Current combined base valuation of all entities in your portfolio.",
-    adminValue: 0,
-    userValue: 1800,
-    humanLabel: (v) =>
-      `Your portfolio is currently valued at $${v.toLocaleString()}.`,
-  },
-  "market-growth-yield": {
-    label: "Market Growth Yield",
-    icon: TrendingUp,
-    accentColor: PALETTE[3],
-    prefix: "$",
-    description:
-      "Net profit generated from market trend multipliers applied to your assets.",
-    adminValue: 0,
-    userValue: 324,
-    humanLabel: (v) => `$${v.toLocaleString()} yield generated this period.`,
-  },
-  "active-nodes-count": {
-    label: "Active Entities Count",
-    icon: Zap,
-    accentColor: PALETTE[1],
-    description: "Count of live entities in your portfolio.",
-    adminValue: 0,
-    userValue: 0,
-    humanLabel: (v) => `${v} entities currently active in your portfolio.`,
   },
 };
 
@@ -673,31 +626,6 @@ const FB: Record<string, Record<UserRole, Record<AIPersona, string[]>>> = {
         "Maintain usage patterns.",
         "Account in good standing.",
       ],
-    },
-  },
-
-  "total-asset-value": {
-    admin: { aggressive: [], balanced: [], defensive: [] },
-    user: {
-      aggressive: [],
-      balanced: [],
-      defensive: [],
-    },
-  },
-  "market-growth-yield": {
-    admin: { aggressive: [], balanced: [], defensive: [] },
-    user: {
-      aggressive: [],
-      balanced: [],
-      defensive: [],
-    },
-  },
-  "active-nodes-count": {
-    admin: { aggressive: [], balanced: [], defensive: [] },
-    user: {
-      aggressive: [],
-      balanced: [],
-      defensive: [],
     },
   },
 };
@@ -1551,267 +1479,6 @@ function SummaryView({
     </div>
   );
 }
-
-// ─── Entity Registry Panel (real fields only — no fake uptime/pricing/sync) ───
-
-function NodeRegistryPanel({
-  entities,
-  accent,
-  onDelete,
-}: {
-  entities: BusinessEntity[];
-  accent: string;
-  onDelete: (id: string) => Promise<void>;
-}) {
-  const [selectedNode, setSelectedNode] = useState<BusinessEntity | null>(null);
-  const [localNodes, setLocalNodes] = useState<BusinessEntity[]>(entities);
-  const [removing, setRemoving] = useState(false);
-
-  useEffect(() => {
-    setLocalNodes(entities);
-  }, [entities]);
-
-  const removeNode = async (id: string) => {
-    setRemoving(true);
-    try {
-      await onDelete(id);
-      setLocalNodes((prev) => prev.filter((n) => n.id !== id));
-      if (selectedNode?.id === id) setSelectedNode(null);
-    } catch {
-      /* silent */
-    } finally {
-      setRemoving(false);
-    }
-  };
-
-  return (
-    <div
-      className="grid grid-cols-1 gap-4"
-      style={{ gridTemplateColumns: "65% 35%" }}
-    >
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          background: "var(--bg-surface)",
-          borderColor: "var(--border)",
-        }}
-      >
-        <div
-          className="px-5 py-4 border-b"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <p
-            className="text-[12px] font-semibold"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Entity Registry — {localNodes.length} Assets
-          </p>
-        </div>
-
-        {localNodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Box size={28} style={{ color: "var(--text-muted)" }} />
-            <p className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-              No entities added yet.
-            </p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                {["Asset Name", "Date Added", "Base Value", ""].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-3 text-left text-[10px] font-medium"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {localNodes.map((node, i) => {
-                const isSelected = selectedNode?.id === node.id;
-                return (
-                  <motion.tr
-                    key={node.id}
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    onClick={() => setSelectedNode(node)}
-                    className="border-b cursor-pointer transition-colors"
-                    style={{
-                      borderColor: "var(--border)",
-                      background: isSelected
-                        ? "var(--accent-subtle)"
-                        : "transparent",
-                    }}
-                  >
-                    <td className="px-4 py-3">
-                      <p
-                        className="text-[13px] font-medium"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {node.name}
-                      </p>
-                      <p
-                        className="text-[11px] capitalize mt-0.5"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        {node.type}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p
-                        className="text-[12px]"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        {node.created_at
-                          ? new Date(node.created_at).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              },
-                            )
-                          : "—"}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p
-                        className="text-[12px] font-semibold tabular-nums"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        ${(node.base_value ?? 0).toLocaleString()}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeNode(node.id);
-                        }}
-                        className="p-1.5 rounded-lg transition-colors"
-                        style={{
-                          background: "var(--danger-bg)",
-                          border: "1px solid var(--danger)",
-                          color: "var(--danger)",
-                        }}
-                        title="Remove asset"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div
-        className="rounded-xl border p-5"
-        style={{
-          background: "var(--bg-surface)",
-          borderColor: "var(--border)",
-        }}
-      >
-        {!selectedNode ? (
-          <div className="flex flex-col items-center justify-center h-full py-20 gap-3">
-            <Search size={28} style={{ color: "var(--text-muted)" }} />
-            <p
-              className="text-[12px] text-center"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Select an asset to view details.
-            </p>
-          </div>
-        ) : (
-          <motion.div
-            key={selectedNode.id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-5"
-          >
-            <div>
-              <p
-                className="text-[10px] font-medium mb-1"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Asset Detail
-              </p>
-              <p
-                className="text-base font-semibold"
-                style={{ color: "var(--text-primary)" }}
-              >
-                {selectedNode.name}
-              </p>
-              <p
-                className="text-[11px] capitalize mt-0.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {selectedNode.type}
-              </p>
-            </div>
-
-            <div
-              className="p-3 rounded-xl border flex items-center justify-between"
-              style={{
-                borderColor: "var(--border)",
-                background: "var(--bg-primary)",
-              }}
-            >
-              <span
-                className="text-[12px]"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                Base Value
-              </span>
-              <span
-                className="text-[13px] font-semibold tabular-nums"
-                style={{ color: accent }}
-              >
-                ${(selectedNode.base_value ?? 0).toLocaleString()}
-              </span>
-            </div>
-
-            <p
-              className="text-[11px] text-center pt-2 border-t"
-              style={{
-                color: "var(--text-muted)",
-                borderColor: "var(--border)",
-              }}
-            >
-              Added{" "}
-              {selectedNode.created_at
-                ? new Date(selectedNode.created_at).toLocaleDateString(
-                    "en-US",
-                    { month: "long", day: "numeric", year: "numeric" },
-                  )
-                : "—"}
-            </p>
-            <button
-              onClick={() => removeNode(selectedNode.id)}
-              disabled={removing}
-              className="w-full py-3 rounded-xl text-[12px] font-medium transition-all"
-              style={{
-                background: "var(--danger-bg)",
-                border: "1px solid var(--danger)",
-                color: removing ? "var(--text-muted)" : "var(--danger)",
-              }}
-            >
-              {removing ? "Removing…" : "Remove Asset"}
-            </button>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
@@ -1822,8 +1489,6 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
   persona: initPersona = "balanced",
   viewMode = "full",
   onBack,
-  entities = [],
-  onDeleteNode,
   userId,
 }) => {
   const cfg = SLUG_CONFIG[slug];
@@ -2558,56 +2223,6 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
             {isAdmin && <KeyDrivers slug={slug} role={role} />}
           </div>
         </>
-      )}
-
-      {slug === "total-asset-value" &&
-        (() => {
-          const assetVal = stats?.totalAssetValue ?? cfg.userValue;
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <StatCard
-                label="Portfolio Value"
-                value={`$${assetVal.toLocaleString()}`}
-                sub="Sum of base values, current"
-                color={accent}
-              />
-              <StatCard
-                label="Entities Counted"
-                value={String(entities.length)}
-                sub="In portfolio"
-                color={accent}
-              />
-            </div>
-          );
-        })()}
-
-      {slug === "market-growth-yield" &&
-        (() => {
-          const yieldVal = stats?.marketGrowthYield ?? cfg.userValue;
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <StatCard
-                label="Current Yield"
-                value={`$${yieldVal.toLocaleString()}`}
-                sub="This period"
-                color={accent}
-              />
-              <StatCard
-                label="Note"
-                value="—"
-                sub="Historical trend not yet tracked"
-                color={accent}
-              />
-            </div>
-          );
-        })()}
-
-      {slug === "active-nodes-count" && (
-        <NodeRegistryPanel
-          entities={entities}
-          accent={accent}
-          onDelete={onDeleteNode!}
-        />
       )}
 
       <ForensicNarrative

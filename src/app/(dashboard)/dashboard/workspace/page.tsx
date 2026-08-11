@@ -23,7 +23,7 @@ export default function WorkspacePage() {
         return;
       }
 
-      const [profileRes, snapshotsRes, entitiesRes] = await Promise.all([
+      const [profileRes, snapshotsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("full_name, role")
@@ -35,11 +35,6 @@ export default function WorkspacePage() {
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(12),
-        supabase
-          .from("business_entities")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
       ]);
 
       const briefingRes = await supabase
@@ -68,7 +63,6 @@ export default function WorkspacePage() {
         profile: profileRes.data,
         briefingSettings: briefingRes.data,
         initialSnapshots: snapshotsRes.data ?? [],
-        initialEntities: entitiesRes.data ?? [],
         mrr,
         churn,
         signups,

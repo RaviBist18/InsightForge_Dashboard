@@ -93,7 +93,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setActiveTab,
     mrr,
     churn,
-    entityCount,
     snapshotCount,
     mrrTrend,
     isWorkspacePage,
@@ -319,11 +318,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         label: "Churn",
                         value: churn > 0 ? `${churn}%` : "—",
                         color: churn > 3 ? "var(--danger)" : "var(--success)",
-                      },
-                      {
-                        label: "Assets",
-                        value: entityCount,
-                        color: "var(--text-primary)",
                       },
                       {
                         label: "Snapshots",
