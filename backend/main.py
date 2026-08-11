@@ -134,6 +134,32 @@ def apply_dynamic_filters(
     return df
 
 
+def explain_regression_prediction(r_squared, slope, metric_name, unit=""):
+    """Generates a plain-language 'why' explanation from regression stats already computed."""
+    if r_squared > 0.7:
+        fit_desc = "a clear, consistent pattern"
+    elif r_squared > 0.4:
+        fit_desc = "a moderate pattern with some fluctuation"
+    else:
+        fit_desc = "a weak or noisy pattern"
+
+    direction = (
+        "increasing" if slope > 0 else "decreasing" if slope < 0 else "staying flat"
+    )
+
+    why = (
+        f"This prediction is based on {fit_desc} in your historical {metric_name.lower()} data "
+        f"(R² = {r_squared}). The trend line shows {metric_name.lower()} {direction} by about "
+        f"{abs(round(slope, 2))}{unit} per day. "
+    )
+    if r_squared < 0.4:
+        why += "Because the historical data is noisy, treat this forecast as a rough estimate rather than a precise prediction."
+    else:
+        why += "This gives a reasonably reliable basis for the forecast."
+
+    return why
+
+
 def analyze_dataframe(df: pd.DataFrame) -> dict:
     """Shared analysis pipeline — column detection, duplicates, outliers, preview.
     Used by both /upload and /clean so results stay identical after cleaning."""
@@ -416,7 +442,12 @@ async def clean_dataset(
 
 
 @app.get("/datasets/{dataset_id}/kpis")
-async def get_dataset_kpis(dataset_id: str, authorization: str = Header(None)):
+async def get_dataset_kpis(
+    dataset_id: str,
+    authorization: str = Header(None),
+    region: str = None,
+    product: str = None,
+):
     company_id, _ = get_company_id(authorization)
 
     result = (
@@ -446,6 +477,7 @@ async def get_dataset_kpis(dataset_id: str, authorization: str = Header(None)):
         (c["name"] for c in columns if c["role"] == "customer_id"), None
     )
 
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
     kpis = {"row_count": len(df)}
 
     if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
@@ -490,6 +522,8 @@ async def get_revenue_forecast(
     dataset_id: str,
     authorization: str = Header(None),
     days_ahead: int = 7,
+    region: str = None,
+    product: str = None,
 ):
     company_id, _ = get_company_id(authorization)
 
@@ -522,6 +556,8 @@ async def get_revenue_forecast(
         df = pd.read_csv(io.BytesIO(file_bytes))
     else:
         df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
 
     if not pd.api.types.is_numeric_dtype(df[revenue_col]):
         return {"available": False, "reason": "Revenue column is not numeric"}
@@ -587,6 +623,9 @@ async def get_revenue_forecast(
         "r_squared": r_squared,
         "trend": trend,
         "daily_change_rate": round(float(model.coef_[0]), 2),
+        "why_explanation": explain_regression_prediction(
+            r_squared, float(model.coef_[0]), "Revenue"
+        ),
     }
 
 
@@ -699,6 +738,9 @@ async def get_sales_forecast(
         "r_squared": r_squared,
         "trend": trend,
         "daily_change_rate": round(float(model.coef_[0]), 2),
+        "why_explanation": explain_regression_prediction(
+            r_squared, float(model.coef_[0]), "Sales"
+        ),
     }
 
 
@@ -1022,6 +1064,8 @@ async def get_marketing_roi_prediction(
     dataset_id: str,
     authorization: str = Header(None),
     hypothetical_spend: float = None,
+    region: str = None,
+    product: str = None,
 ):
     company_id, _ = get_company_id(authorization)
 
@@ -1056,6 +1100,8 @@ async def get_marketing_roi_prediction(
         df = pd.read_csv(io.BytesIO(file_bytes))
     else:
         df = pd.read_excel(io.BytesIO(file_bytes))
+
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
 
     if not pd.api.types.is_numeric_dtype(
         df[spend_col]
@@ -1102,6 +1148,16 @@ async def get_marketing_roi_prediction(
 
     del df, file_bytes
 
+    why = (
+        f"This ROI prediction assumes the same spend-to-revenue relationship seen in your historical data continues. "
+        f"On average, each additional dollar of marketing spend has been associated with "
+        f"{round(float(model.coef_[0]), 2)} dollars of revenue (R² = {r_squared}). "
+    )
+    if r_squared < 0.4:
+        why += "This relationship is weak in your data, so treat the prediction as directional rather than exact."
+    else:
+        why += "This is a fairly reliable relationship based on your historical spend and revenue patterns."
+
     return {
         "available": True,
         "confidence": confidence,
@@ -1113,6 +1169,7 @@ async def get_marketing_roi_prediction(
         "predicted_revenue": round(predicted_revenue, 2),
         "predicted_roi": predicted_roi,
         "curve": curve,
+        "why_explanation": why,
     }
 
 
@@ -1543,7 +1600,12 @@ async def get_sales_analytics(
 
 
 @app.get("/datasets/{dataset_id}/marketing-analytics")
-async def get_marketing_analytics(dataset_id: str, authorization: str = Header(None)):
+async def get_marketing_analytics(
+    dataset_id: str,
+    authorization: str = Header(None),
+    region: str = None,
+    product: str = None,
+):
     company_id, _ = get_company_id(authorization)
 
     result = (
@@ -1576,6 +1638,7 @@ async def get_marketing_analytics(dataset_id: str, authorization: str = Header(N
     else:
         df = pd.read_excel(io.BytesIO(file_bytes))
 
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
     summary = {}
     if pd.api.types.is_numeric_dtype(df[spend_col]):
         summary["total_spend"] = round(float(df[spend_col].sum()), 2)
@@ -1610,7 +1673,12 @@ async def get_marketing_analytics(dataset_id: str, authorization: str = Header(N
 
 
 @app.get("/datasets/{dataset_id}/inventory-analytics")
-async def get_inventory_analytics(dataset_id: str, authorization: str = Header(None)):
+async def get_inventory_analytics(
+    dataset_id: str,
+    authorization: str = Header(None),
+    region: str = None,
+    product: str = None,
+):
     company_id, _ = get_company_id(authorization)
 
     result = (
@@ -1641,6 +1709,7 @@ async def get_inventory_analytics(dataset_id: str, authorization: str = Header(N
     else:
         df = pd.read_excel(io.BytesIO(file_bytes))
 
+    df = apply_dynamic_filters(df, columns, region, product, None, None)
     LOW_STOCK_THRESHOLD = 10
 
     latest_by_product = []

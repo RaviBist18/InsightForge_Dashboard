@@ -114,6 +114,7 @@ interface RevenueForecast {
   r_squared?: number;
   trend?: "growing" | "declining" | "flat";
   daily_change_rate?: number;
+  why_explanation?: string;
 }
 
 interface SalesForecast {
@@ -126,6 +127,7 @@ interface SalesForecast {
   r_squared?: number;
   trend?: "growing" | "declining" | "flat";
   daily_change_rate?: number;
+  why_explanation?: string;
 }
 
 interface ChurnPrediction {
@@ -185,6 +187,7 @@ interface MarketingRoiPrediction {
   predicted_revenue?: number;
   predicted_roi?: number;
   curve?: { spend: number; predicted_revenue: number }[];
+  why_explanation?: string;
 }
 
 interface RiskPrediction {
@@ -368,6 +371,8 @@ export default function DatasetsPage() {
       loadMarketingAnalytics(viewingId);
       loadInventoryAnalytics(viewingId);
       loadSalesForecast(viewingId);
+      loadRevenueForecast(viewingId);
+      loadMarketingRoi(viewingId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterRegion, filterProduct]);
@@ -443,19 +448,23 @@ export default function DatasetsPage() {
     }
   }, []);
 
-  const loadRevenueForecast = useCallback(async (id: string) => {
-    try {
-      const headers = await getAuthHeader();
-      const res = await fetch(
-        `${BACKEND_URL}/datasets/${id}/revenue-forecast`,
-        { headers },
-      );
-      if (!res.ok) throw new Error("Failed to load revenue forecast");
-      setRevenueForecast(await res.json());
-    } catch {
-      setRevenueForecast(null);
-    }
-  }, []);
+  const loadRevenueForecast = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/revenue-forecast${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load revenue forecast");
+        setRevenueForecast(await res.json());
+      } catch {
+        setRevenueForecast(null);
+      }
+    },
+    [buildFilterParams],
+  );
 
   const loadSalesForecast = useCallback(
     async (id: string) => {
@@ -519,19 +528,23 @@ export default function DatasetsPage() {
     }
   }, []);
 
-  const loadMarketingRoi = useCallback(async (id: string) => {
-    try {
-      const headers = await getAuthHeader();
-      const res = await fetch(
-        `${BACKEND_URL}/datasets/${id}/marketing-roi-prediction`,
-        { headers },
-      );
-      if (!res.ok) throw new Error("Failed to load marketing ROI prediction");
-      setMarketingRoi(await res.json());
-    } catch {
-      setMarketingRoi(null);
-    }
-  }, []);
+  const loadMarketingRoi = useCallback(
+    async (id: string) => {
+      try {
+        const headers = await getAuthHeader();
+        const qs = buildFilterParams();
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${id}/marketing-roi-prediction${qs ? `?${qs}` : ""}`,
+          { headers },
+        );
+        if (!res.ok) throw new Error("Failed to load marketing ROI prediction");
+        setMarketingRoi(await res.json());
+      } catch {
+        setMarketingRoi(null);
+      }
+    },
+    [buildFilterParams],
+  );
 
   const loadRiskPrediction = useCallback(async (id: string) => {
     try {
@@ -1637,6 +1650,9 @@ export default function DatasetsPage() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+                {revenueForecast.why_explanation && (
+                  <WhyExplanation text={revenueForecast.why_explanation} />
+                )}
               </div>
             </div>
           )}
@@ -2228,6 +2244,9 @@ export default function DatasetsPage() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+                {salesForecast.why_explanation && (
+                  <WhyExplanation text={salesForecast.why_explanation} />
+                )}
               </div>
             </div>
           )}
@@ -2434,6 +2453,9 @@ export default function DatasetsPage() {
                       />
                     </LineChart>
                   </ResponsiveContainer>
+                  {marketingRoi.why_explanation && (
+                    <WhyExplanation text={marketingRoi.why_explanation} />
+                  )}
                 </div>
               )}
             </div>
@@ -3080,6 +3102,33 @@ function roleBadgeStyle(role: string): React.CSSProperties {
   };
   const c = map[role] || { bg: "#f8fafc", fg: "#64748b" };
   return { background: c.bg, color: c.fg };
+}
+
+function WhyExplanation({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-[12px] font-medium transition-colors"
+        style={{ color: "#7c3aed" }}
+      >
+        {open ? "▾" : "▸"} Why this prediction?
+      </button>
+      {open && (
+        <p
+          className="text-[13px] mt-2 px-3 py-2.5 rounded-xl"
+          style={{
+            background: "#faf5ff",
+            border: "1px solid #e9d5ff",
+            color: "var(--text-secondary)",
+          }}
+        >
+          {text}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function KpiCard({
