@@ -210,6 +210,133 @@ export const getCategoryData = async (range?: string) => {
     value: Math.floor(value),
   }));
 };
+
+// ─── getAggregateDashboardStats — real, replaces transactions-based stats ─
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) return {};
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
+interface DatasetSummary {
+  id: string;
+  filename: string;
+  row_count: number;
+  created_at: string;
+}
+
+export const getAggregateDashboardStats = async (): Promise<
+  DashboardStats & { datasetCount: number }
+> => {
+  const headers = await getAuthHeader();
+
+  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+
+  if (datasets.length === 0) {
+    return {
+      totalRevenue: 0,
+      totalProfit: 0,
+      profitMargin: 0,
+      totalOrders: 0,
+      activeUsers: 0,
+      churnRate: 0,
+      efficiency: 0,
+      latestNews: "No datasets uploaded yet.",
+      mrrSparkline: [],
+      datasetCount: 0,
+    };
+  }
+
+  const kpiResults = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
+        headers,
+      });
+      return res.ok ? res.json() : { kpis: {}, revenue_series: [] };
+    }),
+  );
+
+  let totalRevenue = 0;
+  let totalOrders = 0;
+  let uniqueCustomersSum = 0;
+  const monthMap: Record<string, number> = {};
+
+  kpiResults.forEach(({ kpis, revenue_series }) => {
+    totalRevenue += kpis.total_revenue ?? 0;
+    totalOrders += kpis.row_count ?? 0;
+    uniqueCustomersSum += kpis.unique_customers ?? 0;
+
+    (revenue_series || []).forEach(
+      (point: { date: string; revenue: number }) => {
+        const key = new Date(point.date).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+        monthMap[key] = (monthMap[key] ?? 0) + point.revenue;
+      },
+    );
+  });
+
+  const sparkline = Object.entries(monthMap)
+    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+    .map(([, v]) => Math.round(v));
+
+  return {
+    totalRevenue: Math.round(totalRevenue),
+    totalProfit: 0, // TODO: no cost/profit column exists in dataset schema yet — not fabricated
+    profitMargin: 0, // TODO: same — needs a cost field before this is real
+    totalOrders,
+    activeUsers: uniqueCustomersSum, // sum across datasets — flagged, not deduped across files
+    churnRate: 0, // TODO: no churn source until churn-prediction endpoint is wired in here
+    efficiency: 0,
+    latestNews: `Aggregated across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
+    mrrSparkline: sparkline,
+    datasetCount: datasets.length,
+  };
+};
+
+export const getAggregateRevenueChart = async () => {
+  const headers = await getAuthHeader();
+  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+
+  const kpiResults = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
+        headers,
+      });
+      return res.ok ? res.json() : { revenue_series: [] };
+    }),
+  );
+
+  const monthMap: Record<string, number> = {};
+  kpiResults.forEach(({ revenue_series }) => {
+    (revenue_series || []).forEach(
+      (point: { date: string; revenue: number }) => {
+        const key = new Date(point.date).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+        monthMap[key] = (monthMap[key] ?? 0) + point.revenue;
+      },
+    );
+  });
+
+  return Object.entries(monthMap)
+    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+    .map(([month, total]) => ({
+      name: month.split(" ")[0],
+      revenue: Math.round(total),
+      profit: 0, // no cost data — real, not estimated at 0.4 anymore
+    }));
+};
+
 // ─── getStatusBreakdown — real, replaces old fake region pie ─────────────
 export const getStatusBreakdown = async (range?: string) => {
   const companyId = await getCurrentCompanyId();

@@ -1,28 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Plus } from "lucide-react";
 import { KPISection } from "@/components/dashboard/KPISection";
-import { FiltersPanel } from "@/components/dashboard/FiltersPanel";
 import { ChartsSection } from "@/components/dashboard/ChartsSection";
-import { DataTable, ForensicNode } from "@/components/dashboard/DataTable";
 import { InsightsPanel } from "@/components/dashboard/InsightsPanel";
-import { RealTimeDashboard } from "@/components/dashboard/RealTimeDashboard";
 import { AIChat } from "@/components/dashboard/AIChat";
 import { CEOBriefing } from "@/components/CEOBriefing";
-import { AddNodeModal } from "@/components/dashboard/AddNodeModal";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
 import {
-  getTransactions,
   getInsights,
-  getDashboardStats,
-  getBucketedRevenue,
-  getCategoryData,
+  getAggregateDashboardStats,
+  getAggregateRevenueChart,
   getCurrentCompanyId,
 } from "@/lib/data";
+import Link from "next/link";
 
 // KPI slugs that trigger the detail panel
 const KPI_SLUGS = new Set([
@@ -36,11 +31,8 @@ const KPI_SLUGS = new Set([
 
 export default function Home({ searchParams }: { searchParams: any }) {
   // 1. State Management
-  const [nodes, setNodes] = useState<ForensicNode[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>([]);
-  const [categoryData, setCategoryData] = useState<any>([]);
   const [insights, setInsights] = useState<any>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -50,7 +42,6 @@ export default function Home({ searchParams }: { searchParams: any }) {
   const [localTab, setLocalTab] = useState<string | null>(null);
   useWorkspace();
 
-  const tableRef = useRef<HTMLDivElement>(null);
   const stableEfficiency = useMemo(
     () => stats?.efficiency ?? 0,
     [stats?.efficiency],
@@ -64,66 +55,22 @@ export default function Home({ searchParams }: { searchParams: any }) {
   useEffect(() => {
     async function initDashboard() {
       const range = "monthly";
-      const [tx, ins, st, rev, cat, cid, userResult] = await Promise.all([
-        getTransactions(),
+      const [st, rev, ins, cid, userResult] = await Promise.all([
+        getAggregateDashboardStats(),
+        getAggregateRevenueChart(),
         getInsights(range),
-        getDashboardStats(range),
-        getBucketedRevenue(range),
-        getCategoryData(range),
         getCurrentCompanyId(),
         supabase.auth.getUser(),
       ]);
       setCompanyId(cid);
       setUserId(userResult.data.user?.id);
-
-      const initialNodes: ForensicNode[] = (tx || []).map((tx: any) => {
-        const stringId = String(tx.id || "");
-        return {
-          id: stringId,
-          status: tx.status === "Completed" ? "Settled" : "Pending",
-          entity: tx.customer || "Unknown",
-          category: tx.category || "General",
-          amount: tx.amount,
-          audit: tx.status === "Completed" ? "Verified" : "Needs Review",
-          type: "transaction",
-          metadata: {
-            timestamp: new Date().toISOString(),
-          },
-          briefing: {
-            status:
-              tx.status === "Completed"
-                ? "Payment confirmed."
-                : "Awaiting settlement.",
-            context: `${tx.category || "Transaction"} from ${tx.customer || "customer"}.`,
-            action:
-              tx.status === "Completed"
-                ? "No action needed."
-                : "Follow up with customer.",
-          },
-        };
-      });
-
-      setNodes(initialNodes);
       setStats(st);
       setInsights(ins);
       setRevenueData(rev);
-      setCategoryData(cat);
       setLoading(false);
     }
     initDashboard();
   }, []);
-
-  // 4. Handlers
-  const handleAddNode = (newNode: ForensicNode) => {
-    setNodes((prev) => [newNode, ...prev]);
-    setTimeout(() => {
-      tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
-  };
-
-  const handleDeleteNode = (id: string) => {
-    setNodes((prev) => prev.filter((node) => node.id !== id));
-  };
 
   if (loading)
     return (
@@ -190,14 +137,13 @@ export default function Home({ searchParams }: { searchParams: any }) {
               ← Dashboard
             </button>
           )}
-          <button
-            onClick={() => setIsModalOpen(true)}
-            disabled={!companyId}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors disabled:opacity-40"
+          <Link
+            href="/dashboard/datasets"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
             style={{ background: "var(--accent)" }}
           >
-            <Plus size={14} /> Add Entity
-          </button>
+            <Plus size={14} /> Upload Dataset
+          </Link>
         </div>
       </header>
 
@@ -249,30 +195,35 @@ export default function Home({ searchParams }: { searchParams: any }) {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              <FiltersPanel />
-              <ChartsSection
-                revenueData={revenueData}
-                categoryData={categoryData}
-                range="monthly"
-              />
-              <InsightsPanel insights={insights} />
-              <RealTimeDashboard />
-
-              <div ref={tableRef} className="pt-4">
-                <DataTable nodes={nodes} onDelete={handleDeleteNode} />
-              </div>
-
-              <AIChat nodes={nodes} stats={stats} />
+              {stats?.datasetCount === 0 ? (
+                <div
+                  className="text-center py-20 text-[13px]"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  No datasets uploaded yet.{" "}
+                  <Link
+                    href="/dashboard/datasets"
+                    className="underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    Upload your first CSV
+                  </Link>{" "}
+                  to see live KPIs here.
+                </div>
+              ) : (
+                <>
+                  <ChartsSection
+                    revenueData={revenueData}
+                    categoryData={[]}
+                    range="monthly"
+                  />
+                  <InsightsPanel insights={insights} />
+                  <AIChat nodes={[]} stats={stats} />
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
-
-        <AddNodeModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onAdd={handleAddNode}
-          companyId={companyId ?? ""}
-        />
       </div>
     </div>
   );
