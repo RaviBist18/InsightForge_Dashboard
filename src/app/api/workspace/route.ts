@@ -4,7 +4,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY!;
@@ -177,14 +183,9 @@ Persona: ${persona}`;
       timestamp: Date.now(),
     });
     const hash = crypto.createHash("sha256").update(payload).digest("hex");
-
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    const { data, error } = await supabase
+    // service-role client — bypasses RLS. Safe because userId passed in here
+    // is now the verified auth.uid() from the POST handler, not client body input.
+    const { data, error } = await supabaseAdmin
       .from("forensic_snapshots")
       .insert({
         user_id: userId,
@@ -221,7 +222,7 @@ Persona: ${persona}`;
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { action, userId } = body;
+  const { action } = body;
 
   switch (action) {
     case "why-feed":
@@ -230,8 +231,29 @@ export async function POST(req: NextRequest) {
       return handleSimulation(body);
     case "score-entities":
       return handleEntityScore(body);
-    case "seal-snapshot":
-      return handleSealSnapshot(body, userId);
+    case "seal-snapshot": {
+      // seal-snapshot writes to the DB — verify the caller's identity
+      // server-side instead of trusting body.userId (client-supplied, spoofable)
+      const authHeader = req.headers.get("authorization");
+      const token = authHeader?.replace("Bearer ", "");
+      if (!token) {
+        return NextResponse.json(
+          { error: "Not authenticated" },
+          { status: 401 },
+        );
+      }
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !user) {
+        return NextResponse.json(
+          { error: "Not authenticated" },
+          { status: 401 },
+        );
+      }
+      return handleSealSnapshot(body, user.id);
+    }
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }

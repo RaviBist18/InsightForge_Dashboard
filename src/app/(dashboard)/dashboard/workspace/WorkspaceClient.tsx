@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
-import { DashboardStats } from "@/lib/data";
+import { DashboardStats, getAggregateDashboardStats } from "@/lib/data";
 import { Building2 } from "lucide-react";
 
 // ── IMPORT FORENSIC COMPONENTS ──────────────────────────────────────────────
@@ -367,76 +367,30 @@ export default function WorkspaceClient({
     personaRef.current = persona;
   }, [persona]);
 
-  // ── FETCH REAL MRR ────────────────────────────────────────────────────────
+  // ── FETCH REAL MRR — now dataset-aggregated, not transactions table ───────
   useEffect(() => {
-    if (!isAdmin) {
-      setMetricsLoading(false);
-      return;
-    }
     async function fetchMetrics() {
       setMetricsLoading(true);
       try {
-        if (!companyId) {
+        const stats = await getAggregateDashboardStats();
+
+        if (stats.datasetCount === 0) {
           setMrrSparkline(generateMockSparkline(initialMrr));
           setMetricsLoading(false);
           return;
         }
 
-        const { data } = await supabase
-          .from("transactions")
-          .select("amount, status, created_at")
-          .eq("company_id", companyId)
-          .order("created_at", { ascending: true });
+        const sparkline = stats.mrrSparkline || [];
+        setMrrSparkline(sparkline);
+        setMrr(stats.totalRevenue);
+        setCurrentMonthOrders(stats.totalOrders);
+        setCurrentMonthUsers(stats.activeUsers);
 
-        if (data && data.length > 0) {
-          const monthMap: Record<string, { total: number; date: Date }> = {};
-          data.forEach((t: any) => {
-            const d = new Date(t.created_at);
-            const key = d.toLocaleDateString("en-US", {
-              month: "short",
-              year: "numeric",
-            });
-            if (!monthMap[key]) monthMap[key] = { total: 0, date: d };
-            monthMap[key].total += t.amount ?? 0;
-          });
-
-          const sparkline = Object.entries(monthMap)
-            .sort((a, b) => a[1].date.getTime() - b[1].date.getTime())
-            .map(([key, val]) => ({
-              month: key.split(" ")[0],
-              mrr: Math.round(val.total),
-            }));
-
-          setMrrSparkline(sparkline);
-
-          const now = new Date();
-          const currentMonthKey = now.toLocaleDateString("en-US", {
-            month: "short",
-            year: "numeric",
-          });
-          const currentMrr = monthMap[currentMonthKey]?.total ?? 0;
-          setMrr(Math.round(currentMrr));
-
-          const currentMonthRows = data.filter(
-            (t: any) =>
-              new Date(t.created_at).toLocaleDateString("en-US", {
-                month: "short",
-                year: "numeric",
-              }) === currentMonthKey,
-          );
-          setCurrentMonthOrders(currentMonthRows.length);
-          setCurrentMonthUsers(
-            new Set(currentMonthRows.map((t: any) => t.customer)).size,
-          );
-
-          if (sparkline.length >= 2) {
-            const prev = sparkline[sparkline.length - 2].mrr;
-            const curr = sparkline[sparkline.length - 1].mrr;
-            const trend = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
-            setMrrTrend(parseFloat(trend.toFixed(1)));
-          }
-        } else {
-          setMrrSparkline(generateMockSparkline(initialMrr));
+        if (sparkline.length >= 2) {
+          const prev = sparkline[sparkline.length - 2].mrr;
+          const curr = sparkline[sparkline.length - 1].mrr;
+          const trend = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+          setMrrTrend(parseFloat(trend.toFixed(1)));
         }
       } catch {
         setMrrSparkline(generateMockSparkline(initialMrr));
@@ -445,7 +399,7 @@ export default function WorkspaceClient({
       }
     }
     fetchMetrics();
-  }, [initialMrr, setMrrTrend, isAdmin, companyId]);
+  }, [initialMrr, setMrrTrend]);
 
   // ── FETCH TICKERS ─────────────────────────────────────────────────────────
   const fetchTickers = useCallback(async () => {
@@ -539,11 +493,11 @@ export default function WorkspaceClient({
   }, [setIsWorkspacePage]);
 
   useEffect(() => {
-    if (isAdmin) setCtxMrr(mrr);
-  }, [mrr, isAdmin, setCtxMrr]);
+    setCtxMrr(mrr);
+  }, [mrr, setCtxMrr]);
   useEffect(() => {
-    if (isAdmin) setCtxChurn(churn);
-  }, [churn, isAdmin, setCtxChurn]);
+    setCtxChurn(churn);
+  }, [churn, setCtxChurn]);
   useEffect(() => {
     setEntityCount(entities.length);
   }, [entities.length, setEntityCount]);
@@ -556,16 +510,25 @@ export default function WorkspaceClient({
     if (!sealLabel.trim() || isReadOnly) return;
     setSealing(true);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setSealing(false);
+        return;
+      }
       const res = await fetch("/api/workspace", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           action: "seal-snapshot",
           label: sealLabel,
           mrr,
           churn,
           signups,
-          userId,
           marketConditions: {
             spy: tickers.find((t) => t.symbol === "SPY")?.price ?? 0,
             nvda: tickers.find((t) => t.symbol === "NVDA")?.price ?? 0,
@@ -774,47 +737,17 @@ export default function WorkspaceClient({
   // Shared stats object for KPIDetailClient
   const userHasNodes = !isAdmin && entities.length > 0;
 
-  // ── user metric derivations ────────────────────────────────
-  const totalAssetValue = entities.reduce(
-    (sum, e) => sum + (e.base_value ?? 0),
-    0,
-  );
-  const activeNodesCount = entities.length; // ← move this UP before totalRevenue
-  const totalRevenue = Math.round(totalAssetValue * 1.15);
-  const gasFee = Math.round(totalAssetValue * 0.02 * activeNodesCount);
-  const totalProfit = Math.round(totalRevenue - gasFee);
-  const profitMargin =
-    totalRevenue > 0
-      ? parseFloat(((totalProfit / totalRevenue) * 100).toFixed(1))
-      : 0;
-  const marketGrowthYield = Math.round(totalAssetValue * 0.08);
-
-  const liveStats: DashboardStats = isAdmin
-    ? {
-        totalRevenue: mrr,
-        totalProfit: Math.round(mrr * 0.4),
-        profitMargin: 40,
-        totalOrders: currentMonthOrders,
-        activeUsers: currentMonthUsers,
-        churnRate: churn,
-        efficiency: 78.5,
-        latestNews: "Telemetry integrated.",
-        mrrSparkline: mrrSparkline.map((d) => d.mrr),
-      }
-    : {
-        totalRevenue,
-        totalProfit,
-        profitMargin,
-        totalOrders: activeNodesCount,
-        activeUsers: activeNodesCount > 0 ? 1 : 0,
-        churnRate: 0,
-        efficiency: activeNodesCount > 0 ? 78.5 : 0,
-        latestNews: "Telemetry integrated.",
-        mrrSparkline: [],
-        totalAssetValue,
-        marketGrowthYield,
-        activeNodesCount,
-      };
+  const liveStats: DashboardStats = {
+    totalRevenue: mrr,
+    totalProfit: Math.round(mrr * 0.4),
+    profitMargin: 40,
+    totalOrders: currentMonthOrders,
+    activeUsers: currentMonthUsers,
+    churnRate: churn,
+    efficiency: 78.5,
+    latestNews: "Telemetry integrated.",
+    mrrSparkline: mrrSparkline,
+  };
   const isForgeNodeTab = activeTab === ("forge-node" as any);
 
   // ── RENDER ─────────────────────────────────────────────────────────────────

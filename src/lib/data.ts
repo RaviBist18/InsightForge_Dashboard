@@ -11,7 +11,7 @@ export interface DashboardStats {
   churnRate: number;
   efficiency: number;
   latestNews: string;
-  mrrSparkline?: number[];
+  mrrSparkline?: { month: string; mrr: number }[];
   totalAssetValue?: number;
   marketGrowthYield?: number;
   activeNodesCount?: number;
@@ -103,7 +103,7 @@ export const getDashboardStats = async (
 
   const sparkline = Object.entries(monthMap)
     .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-    .map(([, v]) => Math.round(v));
+    .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
 
   return {
     totalRevenue,
@@ -285,7 +285,7 @@ export const getAggregateDashboardStats = async (): Promise<
 
   const sparkline = Object.entries(monthMap)
     .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-    .map(([, v]) => Math.round(v));
+    .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
 
   return {
     totalRevenue: Math.round(totalRevenue),
