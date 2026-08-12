@@ -286,7 +286,13 @@ export const getAggregateDashboardStats = async (): Promise<
   const sparkline = Object.entries(monthMap)
     .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
     .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
-
+  const growthRate =
+    sparkline.length >= 2
+      ? ((sparkline[sparkline.length - 1].mrr -
+          sparkline[sparkline.length - 2].mrr) /
+          (sparkline[sparkline.length - 2].mrr || 1)) *
+        100
+      : 0;
   return {
     totalRevenue: Math.round(totalRevenue),
     totalProfit: 0, // TODO: no cost/profit column exists in dataset schema yet — not fabricated
@@ -294,11 +300,65 @@ export const getAggregateDashboardStats = async (): Promise<
     totalOrders,
     activeUsers: uniqueCustomersSum, // sum across datasets — flagged, not deduped across files
     churnRate: 0, // TODO: no churn source until churn-prediction endpoint is wired in here
-    efficiency: 0,
-    latestNews: `Aggregated across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
+    efficiency: Math.round(growthRate * 10) / 10,
+    latestNews:
+      sparkline.length >= 2
+        ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`
+        : `Aggregated across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
     mrrSparkline: sparkline,
     datasetCount: datasets.length,
   };
+};
+
+export interface DatasetMover {
+  filename: string;
+  revenue: number;
+  rowCount: number;
+  deltaPct: number; // vs previous month, per-dataset
+}
+
+export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
+  const headers = await getAuthHeader();
+  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+
+  const results = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
+        headers,
+      });
+      const data = res.ok ? await res.json() : { kpis: {}, revenue_series: [] };
+
+      const monthMap: Record<string, number> = {};
+      (data.revenue_series || []).forEach(
+        (point: { date: string; revenue: number }) => {
+          const key = new Date(point.date).toLocaleDateString("en-US", {
+            month: "short",
+            year: "numeric",
+          });
+          monthMap[key] = (monthMap[key] ?? 0) + point.revenue;
+        },
+      );
+      const months = Object.entries(monthMap).sort(
+        (a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime(),
+      );
+      const deltaPct =
+        months.length >= 2
+          ? ((months[months.length - 1][1] - months[months.length - 2][1]) /
+              (months[months.length - 2][1] || 1)) *
+            100
+          : 0;
+
+      return {
+        filename: d.filename,
+        revenue: Math.round(data.kpis?.total_revenue ?? 0),
+        rowCount: data.kpis?.row_count ?? 0,
+        deltaPct: Math.round(deltaPct * 10) / 10,
+      };
+    }),
+  );
+
+  return results.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
 };
 
 export const getAggregateRevenueChart = async () => {

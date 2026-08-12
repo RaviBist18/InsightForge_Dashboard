@@ -3,16 +3,27 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ShieldAlert, TrendingUp } from "lucide-react";
 
 interface CEOBriefingProps {
   efficiency?: number;
   newsHeadline?: string;
+  persona?: string;
+  personaFocus?: string;
+  onInsights?: (
+    sectionALabel: string,
+    sectionAItems: string[],
+    sectionBLabel: string,
+    sectionBItems: string[],
+  ) => void;
 }
 
 export const CEOBriefing = ({
   efficiency = 0,
   newsHeadline = "Market stable",
+  persona = "balanced",
+  personaFocus = "Holistic strategic view",
+  onInsights,
 }: CEOBriefingProps) => {
   const searchParams = useSearchParams();
   const range = searchParams.get("range") || "monthly";
@@ -21,6 +32,10 @@ export const CEOBriefing = ({
   const [briefing, setBriefing] = useState<string>(
     "Forging strategic insight...",
   );
+  const [sectionAItems, setSectionAItems] = useState<string[]>([]);
+  const [sectionBItems, setSectionBItems] = useState<string[]>([]);
+  const [sectionALabel, setSectionALabel] = useState("Risks");
+  const [sectionBLabel, setSectionBLabel] = useState("Opportunities");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // ─── AI Strategic Handshake ───────────────────────────────────────────────
@@ -31,21 +46,42 @@ export const CEOBriefing = ({
         const response = await fetch("/api/briefing", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ range, category, efficiency, newsHeadline }),
+          body: JSON.stringify({
+            range,
+            category,
+            efficiency,
+            newsHeadline,
+            persona,
+            personaFocus,
+          }),
         });
 
         const data = await response.json();
         setBriefing(data.briefing);
+        setSectionALabel(data.sectionALabel || "Risks");
+        setSectionAItems(data.sectionAItems || []);
+        setSectionBLabel(data.sectionBLabel || "Opportunities");
+        setSectionBItems(data.sectionBItems || []);
+        onInsights?.(
+          data.sectionALabel || "Risks",
+          data.sectionAItems || [],
+          data.sectionBLabel || "Opportunities",
+          data.sectionBItems || [],
+        );
       } catch (error) {
         // Fallback to clear, plain-English status
         setBriefing("Consultant offline. Check internal growth metrics.");
+        setSectionAItems([]);
+        setSectionBItems([]);
       } finally {
         setIsLoading(false);
       }
     }
 
     fetchAiInsight();
-  }, [range, category, efficiency, newsHeadline]); // Re-runs on every filter shift
+    const interval = setInterval(fetchAiInsight, 10000);
+    return () => clearInterval(interval);
+  }, [range, category, efficiency, newsHeadline, persona, personaFocus]); // Re-runs on every filter shift, plus auto-refresh every 10s
 
   return (
     <motion.div

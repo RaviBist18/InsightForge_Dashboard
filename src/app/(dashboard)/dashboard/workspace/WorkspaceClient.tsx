@@ -16,8 +16,26 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
-import { DashboardStats, getAggregateDashboardStats } from "@/lib/data";
-import { Building2 } from "lucide-react";
+import {
+  DashboardStats,
+  getAggregateDashboardStats,
+  getDatasetMovers,
+} from "@/lib/data";
+import {
+  Building2,
+  Target,
+  Shield,
+  Scale,
+  Rocket,
+  ShieldAlert,
+  TrendingUp,
+  TrendingDown,
+  Lightbulb,
+  Activity,
+  Archive,
+  Flame,
+} from "lucide-react";
+import { CEOBriefing } from "@/components/CEOBriefing";
 
 // ── IMPORT FORENSIC COMPONENTS ──────────────────────────────────────────────
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
@@ -52,15 +70,7 @@ interface WhyFeedItem {
   impact_delta: number;
   source: string;
 }
-interface SimulationResult {
-  mrr_delta_pct: number;
-  burn_delta_pct: number;
-  subscriber_delta_pct: number;
-  runway_months: number;
-  risk_level: string;
-  recommended_action: string;
-  summary: string;
-}
+
 interface Ticker {
   symbol: string;
   price: number | null;
@@ -131,14 +141,6 @@ const MOCK_HEADLINES = [
   "New data privacy laws in California impact third-party integrations",
   "SMB sector facing credit tightening as banks raise lending standards",
   "Global economic slowdown fears mount; IMF revises growth forecasts down",
-];
-
-const SHOCK_PRESETS = [
-  { key: "nasdaq_drop", label: "NASDAQ −20%", value: -20, icon: "📉" },
-  { key: "ai_regulation", label: "AI Regulation +1", value: 1, icon: "⚖️" },
-  { key: "inflation", label: "Inflation +5%", value: 5, icon: "🔥" },
-  { key: "vc_freeze", label: "VC Freeze", value: -15, icon: "🧊" },
-  { key: "rate_hike", label: "Rate +0.75%", value: 0.75, icon: "🏦" },
 ];
 
 // ── SKELETON LOADER ───────────────────────────────────────────────────────────
@@ -245,7 +247,13 @@ export default function WorkspaceClient({
 
   // ── LIVE METRICS ──
   const [mrr, setMrr] = useState(initialMrr);
-  const [churn] = useState(initialChurn);
+  const [churn, setChurn] = useState(initialChurn);
+  const [efficiency, setEfficiency] = useState(0);
+  const [latestNews, setLatestNews] = useState("Market stable");
+  const [sectionALabel, setSectionALabel] = useState("Risks");
+  const [sectionAItems, setSectionAItems] = useState<string[]>([]);
+  const [sectionBLabel, setSectionBLabel] = useState("Opportunities");
+  const [sectionBItems, setSectionBItems] = useState<string[]>([]);
   const [signups] = useState(initialSignups);
   const [mrrSparkline, setMrrSparkline] = useState<
     { month: string; mrr: number }[]
@@ -273,15 +281,6 @@ export default function WorkspaceClient({
   const [sealing, setSealing] = useState(false);
   const [sealSuccess, setSealSuccess] = useState(false);
 
-  // ── FORGE ──
-  const [shocks, setShocks] = useState<Record<string, number>>({
-    nasdaq_drop: 0,
-    ai_regulation: 0,
-    inflation: 0,
-    vc_freeze: 0,
-    rate_hike: 0,
-  });
-  const [simulation, setSimulation] = useState<SimulationResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
 
   // ── CUSTOMIZER ──
@@ -331,6 +330,9 @@ export default function WorkspaceClient({
         setMrr(stats.totalRevenue);
         setCurrentMonthOrders(stats.totalOrders);
         setCurrentMonthUsers(stats.activeUsers);
+        setChurn(stats.churnRate);
+        setEfficiency(stats.efficiency);
+        setLatestNews(stats.latestNews);
 
         if (sparkline.length >= 2) {
           const prev = sparkline[sparkline.length - 2].mrr;
@@ -391,20 +393,16 @@ export default function WorkspaceClient({
     setFeedLoading(true);
     setFeedError(false);
     try {
+      const movers = await getDatasetMovers();
       const res = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "why-feed",
-          headlines: MOCK_HEADLINES,
+          movers,
           mrr: mrrRef.current,
           churn: churnRef.current,
           persona: personaRef.current,
-          marketData: {
-            SPY: tickersRef.current.find((t) => t.symbol === "SPY"),
-            NVDA: tickersRef.current.find((t) => t.symbol === "NVDA"),
-            BTC: tickersRef.current.find((t) => t.symbol === "BTC"),
-          },
         }),
       });
       const data = await res.json();
@@ -494,31 +492,6 @@ export default function WorkspaceClient({
     }
   };
 
-  // ── SIMULATION ────────────────────────────────────────────────────────────
-  const runSimulation = async () => {
-    setSimLoading(true);
-    try {
-      const res = await fetch("/api/workspace", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "simulate",
-          shocks,
-          mrr,
-          burn: Math.round(mrr * 0.6),
-          subscribers: Math.round(mrr / 49),
-          persona,
-        }),
-      });
-      const data = await res.json();
-      if (data.simulation) setSimulation(data.simulation);
-    } catch {
-      /* silent */
-    } finally {
-      setSimLoading(false);
-    }
-  };
-
   // ── SAVE SETTINGS ─────────────────────────────────────────────────────────
   const saveSettings = async () => {
     if (isReadOnly) return;
@@ -527,7 +500,7 @@ export default function WorkspaceClient({
       await supabase.from("briefing_settings").upsert({
         user_id: userId,
         persona,
-        frequency,
+        frequency: "daily",
         updated_at: new Date().toISOString(),
       });
       setSettingsSaved(true);
@@ -546,20 +519,11 @@ export default function WorkspaceClient({
     return "var(--warning)";
   };
 
-  const riskLevelColor = (level: string) =>
-    ({
-      LOW: "var(--success)",
-      MEDIUM: "var(--warning)",
-      HIGH: "var(--warning)",
-      CRITICAL: "var(--danger)",
-    })[level] ?? "var(--text-muted)";
-
   // ── TAB DEFINITIONS ───────────────────────────────────────────────────────
   const workspaceTabs = [
-    { id: "pulse", label: "Live Metrics", icon: "⚡" },
-    { id: "archives", label: "Snapshot Archive", icon: "🔒" },
-    { id: "forge", label: "Scenario Simulator", icon: "🔥" },
-    { id: "customizer", label: "CEO Briefing", icon: "🎯" },
+    { id: "pulse", label: "Live Metrics", icon: Activity },
+    { id: "archives", label: "Snapshot Archive", icon: Archive },
+    { id: "customizer", label: "CEO Briefing", icon: Target },
   ] as const;
 
   const liveStats: DashboardStats = {
@@ -703,7 +667,7 @@ export default function WorkspaceClient({
                 color: activeTab === tab.id ? accent : "var(--text-secondary)",
               }}
             >
-              <span>{tab.icon}</span>
+              <tab.icon size={14} />
               <span className="hidden sm:block">{tab.label}</span>
             </button>
           ))}
@@ -985,45 +949,75 @@ export default function WorkspaceClient({
                     )}
                     {!feedLoading &&
                       !feedError &&
-                      whyFeed.map((item, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.08 }}
-                          className="p-3 rounded-lg"
-                          style={{
-                            background: "rgba(0,0,0,0.025)",
-                            border: `1px solid ${impactColor(item.impact_type, item.impact_delta)}25`,
-                            borderLeft: `3px solid ${impactColor(item.impact_type, item.impact_delta)}`,
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
-                              {item.headline}
+                      whyFeed.map((item, i) => {
+                        const color = impactColor(
+                          item.impact_type,
+                          item.impact_delta,
+                        );
+                        const Icon =
+                          item.impact_type === "risk"
+                            ? ShieldAlert
+                            : item.impact_type === "opportunity"
+                              ? Lightbulb
+                              : item.impact_type === "churn"
+                                ? TrendingDown
+                                : TrendingUp;
+                        return (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.08 }}
+                            className="p-4 rounded-lg"
+                            style={{
+                              background: "rgba(0,0,0,0.025)",
+                              border: `1px solid ${color}25`,
+                              borderLeft: `3px solid ${color}`,
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-3 mb-2">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Icon
+                                  size={14}
+                                  strokeWidth={2}
+                                  className="shrink-0 mt-0.5"
+                                  style={{ color }}
+                                />
+                                <p className="text-sm font-semibold text-[var(--text-primary)] leading-snug">
+                                  {item.headline}
+                                </p>
+                              </div>
+                              <span
+                                className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full"
+                                style={{
+                                  background: `${color}20`,
+                                  color,
+                                }}
+                              >
+                                {Number(item.impact_delta ?? 0) > 0 ? "+" : ""}
+                                {Number(item.impact_delta ?? 0).toFixed(1)}%
+                              </span>
+                            </div>
+                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed pl-6">
+                              {item.snippet}
                             </p>
-                            <span
-                              className="shrink-0 text-xs font-bold px-2 py-0.5 rounded"
-                              style={{
-                                background: `${impactColor(item.impact_type, item.impact_delta)}20`,
-                                color: impactColor(
-                                  item.impact_type,
-                                  item.impact_delta,
-                                ),
-                              }}
-                            >
-                              {(item.impact_delta ?? 0) > 0 ? "+" : ""}
-                              {(item.impact_delta ?? 0).toFixed(1)}%
-                            </span>
-                          </div>
-                          <p className="text-xs text-[var(--text-primary)] leading-relaxed">
-                            {item.snippet}
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)] mt-1">
-                            {item.source} · {item.impact_type.toUpperCase()}
-                          </p>
-                        </motion.div>
-                      ))}
+                            <div className="flex items-center gap-2 mt-2 pl-6">
+                              <span
+                                className="text-[10px] font-medium px-2 py-0.5 rounded"
+                                style={{
+                                  background: "rgba(0,0,0,0.05)",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                {item.source}
+                              </span>
+                              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">
+                                {item.impact_type}
+                              </span>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
                     {!feedLoading && !feedError && whyFeed.length === 0 && (
                       <div className="flex flex-col items-center justify-center py-12 gap-2">
                         <p className="text-[var(--text-muted)] text-sm">
@@ -1100,396 +1094,6 @@ export default function WorkspaceClient({
               </motion.div>
             )}
 
-          {/* ── INTELLIGENCE ARCHIVES ────────────────────────────────────── */}
-          {activeTab === "archives" && (
-            <motion.div
-              key="archives"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-            >
-              {!isReadOnly && (
-                <div
-                  className="rounded-xl p-5 mb-6"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: `1px solid ${accent}30`,
-                  }}
-                >
-                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
-                    🔒 Save Decision Snapshot
-                  </p>
-                  <div className="flex gap-3">
-                    <input
-                      value={sealLabel}
-                      onChange={(e) => setSealLabel(e.target.value)}
-                      placeholder="Decision label (e.g. 'Launched EU Campaign')"
-                      className="flex-1 px-4 py-2.5 rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none"
-                      style={{
-                        background: "rgba(0,0,0,0.04)",
-                        border: "1px solid rgba(0,0,0,0.08)",
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && handleSeal()}
-                    />
-                    <button
-                      onClick={handleSeal}
-                      disabled={sealing || !sealLabel.trim()}
-                      className="px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
-                      style={{
-                        background: sealSuccess
-                          ? "var(--success)"
-                          : sealing
-                            ? `${accent}40`
-                            : accent,
-                        color: "#FFFFFF",
-                        opacity: !sealLabel.trim() ? 0.4 : 1,
-                      }}
-                    >
-                      {sealSuccess
-                        ? "✓ Saved"
-                        : sealing
-                          ? "Saving..."
-                          : "Save Snapshot"}
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-2">
-                    Captures: internal metrics + market conditions + AI advice →
-                    SHA-256 hash
-                  </p>
-                </div>
-              )}
-              {snapshots.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <p className="text-4xl">🔒</p>
-                  <p className="text-[var(--text-secondary)] text-sm">
-                    No snapshots saved yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {snapshots.map((snap, i) => (
-                    <motion.div
-                      key={snap.id}
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="rounded-xl p-4"
-                      style={{
-                        background: "rgba(0,0,0,0.025)",
-                        border: "1px solid rgba(0,0,0,0.07)",
-                      }}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="text-sm font-bold text-[var(--text-primary)]">
-                            {snap.label}
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                            {new Date(snap.created_at).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )}
-                          </p>
-                        </div>
-                        <span
-                          className="text-xs px-2 py-0.5 rounded font-bold"
-                          style={{ background: `${accent}20`, color: accent }}
-                        >
-                          {snap.persona}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 mb-3">
-                        {[
-                          {
-                            label: "MRR",
-                            value: `$${snap.mrr.toLocaleString()}`,
-                          },
-                          { label: "Churn", value: `${snap.churn}%` },
-                          { label: "Signups", value: snap.signups },
-                        ].map((m) => (
-                          <div
-                            key={m.label}
-                            className="text-center p-2 rounded"
-                            style={{ background: "rgba(0,0,0,0.03)" }}
-                          >
-                            <p className="text-xs text-[var(--text-secondary)]">
-                              {m.label}
-                            </p>
-                            <p className="text-sm font-bold text-[var(--text-primary)]">
-                              {m.value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      <div
-                        className="p-3 rounded-lg mb-3"
-                        style={{ background: "rgba(0,0,0,0.03)" }}
-                      >
-                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-3">
-                          {snap.ai_advice}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="flex-1 px-2 py-1 rounded font-mono text-xs text-[var(--text-muted)] truncate"
-                          style={{ background: "rgba(0,0,0,0.3)" }}
-                        >
-                          #{snap.hash.slice(0, 20)}...
-                        </div>
-                        <span className="text-[var(--success)] text-xs">
-                          ✓ SAVED
-                        </span>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── WHAT-IF FORGE ────────────────────────────────────────────── */}
-          {activeTab === "forge" && (
-            <motion.div
-              key="forge"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-            >
-              <div
-                className="rounded-xl p-5"
-                style={{
-                  background: "rgba(0,0,0,0.02)",
-                  border: `1px solid ${accent}30`,
-                }}
-              >
-                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-5">
-                  🔥 Macro Shock Simulator
-                </p>
-                <div className="space-y-5">
-                  {SHOCK_PRESETS.map((preset) => (
-                    <div key={preset.key}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-[var(--text-secondary)]">
-                          {preset.icon} {preset.label}
-                        </span>
-                        <span
-                          className="text-xs font-bold font-mono px-2 py-0.5 rounded"
-                          style={{
-                            background:
-                              shocks[preset.key] !== 0
-                                ? `${accent}20`
-                                : "rgba(0,0,0,0.05)",
-                            color:
-                              shocks[preset.key] !== 0
-                                ? accent
-                                : "var(--text-muted)",
-                          }}
-                        >
-                          {shocks[preset.key] > 0 ? "+" : ""}
-                          {shocks[preset.key].toFixed(1)}
-                          {preset.key === "rate_hike"
-                            ? "%"
-                            : preset.key === "ai_regulation"
-                              ? " law"
-                              : "%"}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={Math.abs(preset.value) * 2}
-                        step={preset.key === "rate_hike" ? 0.25 : 1}
-                        value={shocks[preset.key]}
-                        onChange={(e) =>
-                          setShocks((prev) => ({
-                            ...prev,
-                            [preset.key]: parseFloat(e.target.value),
-                          }))
-                        }
-                        className="w-full h-1.5 rounded appearance-none cursor-pointer"
-                        style={{ accentColor: accent }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={runSimulation}
-                  disabled={simLoading}
-                  className="w-full mt-6 py-3 rounded-lg font-bold text-sm transition-all"
-                  style={{
-                    background: simLoading
-                      ? `${accent}40`
-                      : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                    color: "#FFFFFF",
-                    boxShadow: simLoading ? "none" : `0 4px 20px ${accent}40`,
-                  }}
-                >
-                  {simLoading ? "⟳ Running Simulation..." : "⚡ Run Simulation"}
-                </button>
-                <button
-                  onClick={() => {
-                    setShocks({
-                      nasdaq_drop: 0,
-                      ai_regulation: 0,
-                      inflation: 0,
-                      vc_freeze: 0,
-                      rate_hike: 0,
-                    });
-                    setSimulation(null);
-                  }}
-                  className="w-full mt-2 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
-                >
-                  Reset All Shocks
-                </button>
-              </div>
-
-              <div
-                className="rounded-xl p-5"
-                style={{
-                  background: "rgba(0,0,0,0.02)",
-                  border: "1px solid rgba(0,0,0,0.06)",
-                }}
-              >
-                <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-5">
-                  📊 Projected Impact
-                </p>
-                {!simulation && !simLoading && (
-                  <div className="flex flex-col items-center justify-center py-20 gap-3">
-                    <p className="text-4xl">🔮</p>
-                    <p className="text-[var(--text-secondary)] text-sm text-center">
-                      Apply shocks and run simulation
-                    </p>
-                  </div>
-                )}
-                {simLoading && (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4">
-                    <div
-                      className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-                      style={{ borderColor: accent }}
-                    />
-                    <p className="text-[var(--text-secondary)] text-sm">
-                      AI projecting scenario...
-                    </p>
-                  </div>
-                )}
-                {simulation && !simLoading && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-[var(--text-secondary)]">
-                        Risk Level
-                      </span>
-                      <span
-                        className="text-sm font-bold px-3 py-1 rounded font-mono"
-                        style={{
-                          background: `${riskLevelColor(simulation.risk_level)}20`,
-                          color: riskLevelColor(simulation.risk_level),
-                          border: `1px solid ${riskLevelColor(simulation.risk_level)}40`,
-                        }}
-                      >
-                        {simulation.risk_level}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        {
-                          label: "MRR Impact",
-                          value: simulation.mrr_delta_pct,
-                          suffix: "%",
-                        },
-                        {
-                          label: "Burn Change",
-                          value: simulation.burn_delta_pct,
-                          suffix: "%",
-                        },
-                        {
-                          label: "Sub Change",
-                          value: simulation.subscriber_delta_pct,
-                          suffix: "%",
-                        },
-                      ].map((m) => (
-                        <div
-                          key={m.label}
-                          className="p-3 rounded-lg text-center"
-                          style={{ background: "rgba(0,0,0,0.03)" }}
-                        >
-                          <p className="text-xs text-[var(--text-secondary)] mb-1">
-                            {m.label}
-                          </p>
-                          <p
-                            className="text-xl font-bold"
-                            style={{
-                              color:
-                                m.value >= 0
-                                  ? "var(--success)"
-                                  : "var(--danger)",
-                            }}
-                          >
-                            {m.value >= 0 ? "+" : ""}
-                            {m.value.toFixed(1)}
-                            {m.suffix}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      className="flex items-center justify-between p-3 rounded-lg"
-                      style={{ background: "rgba(0,0,0,0.03)" }}
-                    >
-                      <span className="text-sm text-[var(--text-secondary)]">
-                        Projected Runway
-                      </span>
-                      <span className="text-sm font-bold text-[var(--text-primary)]">
-                        {simulation.runway_months} months
-                      </span>
-                    </div>
-                    <div
-                      className="p-4 rounded-lg"
-                      style={{
-                        background: "rgba(0,0,0,0.03)",
-                        border: `1px solid ${accent}20`,
-                      }}
-                    >
-                      <p className="text-xs text-[var(--text-secondary)] mb-2 font-bold">
-                        EXECUTIVE SUMMARY
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                        {simulation.summary}
-                      </p>
-                    </div>
-                    <div
-                      className="p-4 rounded-lg"
-                      style={{
-                        background: `${accent}08`,
-                        border: `1px solid ${accent}30`,
-                      }}
-                    >
-                      <p
-                        className="text-xs font-bold mb-2"
-                        style={{ color: accent }}
-                      >
-                        RECOMMENDED ACTION
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                        {simulation.recommended_action}
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </motion.div>
-          )}
-
           {/* ── CEO BRIEFING CUSTOMIZER ──────────────────────────────────── */}
           {activeTab === "customizer" && (
             <motion.div
@@ -1499,36 +1103,71 @@ export default function WorkspaceClient({
               exit={{ opacity: 0, y: -8 }}
               className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
             >
+              <div className="lg:col-span-2">
+                <CEOBriefing
+                  efficiency={efficiency}
+                  newsHeadline={latestNews}
+                  persona={persona}
+                  personaFocus={
+                    {
+                      defensive: "Focus on threats & mitigation",
+                      balanced: "Holistic strategic view",
+                      aggressive: "Maximize growth opportunities",
+                    }[persona] ?? "Holistic strategic view"
+                  }
+                  onInsights={(aLabel, aItems, bLabel, bItems) => {
+                    setSectionALabel(aLabel);
+                    setSectionAItems(aItems);
+                    setSectionBLabel(bLabel);
+                    setSectionBItems(bItems);
+                  }}
+                />
+              </div>
               <div className="space-y-6">
                 <div
                   className="rounded-xl p-5"
                   style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: `1px solid ${accent}30`,
+                    background: `linear-gradient(135deg, ${accent}06, transparent)`,
+                    border: `1px solid ${accent}25`,
+                    boxShadow: `0 1px 3px rgba(0,0,0,0.04)`,
                   }}
                 >
-                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-4">
-                    🎯 Consultant Persona
-                  </p>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div
+                      className="flex items-center justify-center w-6 h-6 rounded-md"
+                      style={{ background: `${accent}15` }}
+                    >
+                      <Target size={13} style={{ color: accent }} />
+                    </div>
+                    <p
+                      className="text-xs font-semibold uppercase tracking-widest"
+                      style={{ color: accent }}
+                    >
+                      Briefing Focus
+                    </p>
+                  </div>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       {
                         id: "defensive",
                         label: "Risk Defensive",
-                        icon: "🛡️",
+                        icon: Shield,
                         desc: "Focus on threats & mitigation",
+                        color: "#dc2626",
                       },
                       {
                         id: "balanced",
                         label: "Balanced",
-                        icon: "⚖️",
+                        icon: Scale,
                         desc: "Holistic strategic view",
+                        color: accent,
                       },
                       {
                         id: "aggressive",
                         label: "Growth Aggressive",
-                        icon: "🚀",
+                        icon: Rocket,
                         desc: "Maximize growth opportunities",
+                        color: "#16a34a",
                       },
                     ].map((p) => (
                       <button
@@ -1538,20 +1177,38 @@ export default function WorkspaceClient({
                         style={{
                           background:
                             persona === p.id
-                              ? `${accent}15`
+                              ? `${p.color}12`
                               : "rgba(0,0,0,0.03)",
-                          border: `1px solid ${persona === p.id ? accent + "60" : "rgba(0,0,0,0.06)"}`,
+                          border: `1px solid ${persona === p.id ? p.color + "50" : "rgba(0,0,0,0.06)"}`,
                           boxShadow:
-                            persona === p.id ? `0 0 20px ${accent}15` : "none",
+                            persona === p.id ? `0 0 20px ${p.color}18` : "none",
                           cursor: isReadOnly ? "not-allowed" : "pointer",
                         }}
                       >
-                        <p className="text-2xl mb-2">{p.icon}</p>
+                        <div
+                          className="flex items-center justify-center w-9 h-9 rounded-lg mb-2 mx-auto"
+                          style={{
+                            background:
+                              persona === p.id
+                                ? `${p.color}18`
+                                : "rgba(0,0,0,0.04)",
+                          }}
+                        >
+                          <p.icon
+                            size={18}
+                            style={{
+                              color:
+                                persona === p.id
+                                  ? p.color
+                                  : "var(--text-muted)",
+                            }}
+                          />
+                        </div>
                         <p
                           className="text-xs font-bold mb-1"
                           style={{
                             color:
-                              persona === p.id ? accent : "var(--text-muted)",
+                              persona === p.id ? p.color : "var(--text-muted)",
                           }}
                         >
                           {p.label}
@@ -1564,103 +1221,82 @@ export default function WorkspaceClient({
                   </div>
                 </div>
 
-                <div
-                  className="rounded-xl p-5"
-                  style={{
-                    background: "rgba(0,0,0,0.02)",
-                    border: "1px solid rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-4">
-                    📅 Briefing Frequency
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      {
-                        id: "daily",
-                        label: "Daily Summary",
-                        icon: "📆",
-                      },
-                      {
-                        id: "weekly",
-                        label: "Weekly Summary",
-                        icon: "📋",
-                      },
-                    ].map((f) => (
-                      <button
-                        key={f.id}
-                        onClick={() => !isReadOnly && setFrequency(f.id)}
-                        className="p-4 rounded-xl text-left transition-all"
+                {(sectionAItems.length > 0 || sectionBItems.length > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {sectionAItems.length > 0 && (
+                      <div
+                        className="rounded-xl p-4"
                         style={{
-                          background:
-                            frequency === f.id
-                              ? `${accent}15`
-                              : "rgba(0,0,0,0.03)",
-                          border: `1px solid ${frequency === f.id ? accent + "60" : "rgba(0,0,0,0.06)"}`,
-                          cursor: isReadOnly ? "not-allowed" : "pointer",
+                          background: "rgba(220,38,38,0.05)",
+                          borderLeft: "3px solid #dc2626",
+                          border: "1px solid rgba(220,38,38,0.15)",
+                          borderLeftWidth: "3px",
                         }}
                       >
-                        <p className="text-xl mb-2">{f.icon}</p>
-                        <p
-                          className="text-sm font-bold"
-                          style={{
-                            color:
-                              frequency === f.id ? accent : "var(--text-muted)",
-                          }}
-                        >
-                          {f.label}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-xl p-5"
-                  style={{
-                    background: `${accent}08`,
-                    border: `1px solid ${accent}25`,
-                  }}
-                >
-                  <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-3">
-                    Preview — Current Config
-                  </p>
-                  <div className="space-y-2">
-                    {[
-                      {
-                        label: "Persona",
-                        value:
-                          persona.charAt(0).toUpperCase() + persona.slice(1),
-                      },
-                      {
-                        label: "Delivery",
-                        value:
-                          frequency.charAt(0).toUpperCase() +
-                          frequency.slice(1),
-                      },
-                      {
-                        label: "MRR Tracked",
-                        value: `$${mrr.toLocaleString()}`,
-                      },
-                      {
-                        label: "Access Level",
-                        value: isAdmin ? "Administrator" : "Member",
-                      },
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        className="flex items-center justify-between"
-                      >
-                        <span className="text-xs text-[var(--text-secondary)]">
-                          {row.label}
-                        </span>
-                        <span className="text-xs font-bold text-[var(--text-primary)]">
-                          {row.value}
-                        </span>
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <ShieldAlert size={14} style={{ color: "#dc2626" }} />
+                          <span
+                            className="text-[11px] font-semibold uppercase tracking-wide"
+                            style={{ color: "#dc2626" }}
+                          >
+                            {sectionALabel}
+                          </span>
+                        </div>
+                        <ul className="space-y-2">
+                          {sectionAItems.map((item, i) => (
+                            <li
+                              key={i}
+                              className="text-xs leading-relaxed pl-3 relative"
+                              style={{ color: "var(--text-secondary)" }}
+                            >
+                              <span
+                                className="absolute left-0 top-1.5 w-1 h-1 rounded-full"
+                                style={{ background: "#dc2626" }}
+                              />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    ))}
+                    )}
+                    {sectionBItems.length > 0 && (
+                      <div
+                        className="rounded-xl p-4"
+                        style={{
+                          background: "rgba(22,163,74,0.05)",
+                          border: "1px solid rgba(22,163,74,0.15)",
+                          borderLeftWidth: "3px",
+                          borderLeftColor: "#16a34a",
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <TrendingUp size={14} style={{ color: "#16a34a" }} />
+                          <span
+                            className="text-[11px] font-semibold uppercase tracking-wide"
+                            style={{ color: "#16a34a" }}
+                          >
+                            {sectionBLabel}
+                          </span>
+                        </div>
+                        <ul className="space-y-2">
+                          {sectionBItems.map((item, i) => (
+                            <li
+                              key={i}
+                              className="text-xs leading-relaxed pl-3 relative"
+                              style={{ color: "var(--text-secondary)" }}
+                            >
+                              <span
+                                className="absolute left-0 top-1.5 w-1 h-1 rounded-full"
+                                style={{ background: "#16a34a" }}
+                              />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {!isReadOnly && (
                   <button

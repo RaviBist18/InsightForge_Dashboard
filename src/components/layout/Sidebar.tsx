@@ -1,7 +1,8 @@
 "use client";
 // src/components/layout/Sidebar.tsx
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { loadAlerts, runCheckAllAlerts } from "@/lib/alertCenter";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -111,6 +112,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const TrendIcon =
     mrrTrend > 0 ? TrendingUp : mrrTrend < 0 ? TrendingDown : Minus;
+
+  // ─── Alert Center (background polling only — UI moved to Navbar) ──
+  const runCheck = async () => {
+    const current = loadAlerts();
+    if (current.length === 0) return;
+    await runCheckAllAlerts(current);
+  };
+
+  useEffect(() => {
+    runCheck(); // check on mount (page load / nav)
+    const poll = setInterval(runCheck, 60000); // 60s catch-all
+    return () => clearInterval(poll);
+  }, []);
 
   const renderNavItem = (item: {
     icon: any;

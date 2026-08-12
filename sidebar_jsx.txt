@@ -1,0 +1,137 @@
+        {/* ── Alert Center ── */}
+        <div ref={alertPanelRef} className="relative px-3 pt-3">
+          <button
+            onClick={() => setAlertPanelOpen((v) => !v)}
+            className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 group text-[13px] font-medium"
+            style={{
+              color: "var(--text-secondary)",
+              background: alertPanelOpen
+                ? "var(--accent-subtle)"
+                : "transparent",
+            }}
+          >
+            <motion.div
+              animate={justTriggered ? { scale: [1, 1.25, 1] } : {}}
+              transition={{ duration: 0.5 }}
+              className="relative flex-shrink-0"
+            >
+              <Bell
+                className="w-4 h-4 transition-colors duration-150"
+                style={{
+                  color:
+                    unreadCount > 0 ? "var(--danger)" : "var(--text-muted)",
+                }}
+              />
+              {unreadCount > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold text-white"
+                  style={{ background: "var(--danger)" }}
+                >
+                  {unreadCount}
+                </motion.span>
+              )}
+            </motion.div>
+            <AnimatePresence>
+              {(!collapsed || mobileOpen) && (
+                <motion.span
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="whitespace-nowrap tracking-wide"
+                >
+                  Alerts
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+
+          <AnimatePresence>
+            {alertPanelOpen && (!collapsed || mobileOpen) && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+                className="absolute left-3 right-3 top-full mt-1 rounded-xl shadow-lg overflow-hidden z-50"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div
+                  className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
+                  style={{
+                    color: "var(--text-muted)",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  {triggered.length > 0
+                    ? `${triggered.length} Active Alert${triggered.length > 1 ? "s" : ""}`
+                    : "Alerts"}
+                </div>
+
+                <div className="max-h-[280px] overflow-y-auto">
+                  {triggered.length === 0 ? (
+                    <div
+                      className="px-3 py-6 text-center text-[12px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      Nothing triggered right now
+                    </div>
+                  ) : (
+                    triggered.map((a) => (
+                      <Link
+                        key={a.id}
+                        href="/dashboard/saved-views"
+                        onClick={() => {
+                          setAlerts(markAlertRead(loadAlerts(), a.id));
+                          setAlertPanelOpen(false);
+                        }}
+                        className="block px-3 py-2.5 transition-colors hover:bg-black/[0.02]"
+                        style={{
+                          borderLeft: "3px solid var(--danger)",
+                          background: "var(--danger-bg)",
+                        }}
+                      >
+                        <p
+                          className="text-[12px] font-semibold truncate"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {a.name}
+                        </p>
+                        <p
+                          className="text-[11px] mt-0.5"
+                          style={{ color: "var(--danger)" }}
+                        >
+                          {describeAlert(a)}
+                        </p>
+                        {a.lastChecked && (
+                          <p
+                            className="text-[10px] mt-0.5"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            Checked {a.lastChecked}
+                          </p>
+                        )}
+                      </Link>
+                    ))
+                  )}
+                </div>
+
+                <Link
+                  href="/dashboard/saved-views"
+                  onClick={() => setAlertPanelOpen(false)}
+                  className="block px-3 py-2 text-[11px] font-medium text-center transition-colors hover:bg-black/[0.02]"
+                  style={{
+                    color: "var(--accent)",
+                    borderTop: "1px solid var(--border)",
+                  }}
+                >
+                  View all alerts
+                </Link>
+              </motion.div>
+            )}
+          </AnimatePresence>

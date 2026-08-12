@@ -29,6 +29,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { loadAlerts, runCheckAllAlerts } from "@/lib/alertCenter";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -826,6 +827,7 @@ export default function DatasetsPage() {
       loadMarketingRoi(data.id);
       loadRiskPrediction(data.id);
       loadTrendDetection(data.id);
+      runCheckAllAlerts(loadAlerts()); // fire-and-forget — instant alert check on new data
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {

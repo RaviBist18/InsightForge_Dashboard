@@ -2,6 +2,7 @@
 import Link from "next/link";
 
 import { useState, useEffect, useRef } from "react";
+import { getAggregateDashboardStats } from "@/lib/data";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bookmark,
@@ -30,17 +31,24 @@ import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface SavedView {
+type AlertMetric = "dataset_delta" | "mrr_delta";
+type AlertOperator = "above" | "below";
+type AlertStatus = "triggered" | "safe" | "unchecked";
+
+interface SavedAlert {
   id: string;
   name: string;
-  description: string;
-  range: string;
-  category: string;
+  metric: AlertMetric;
+  datasetFilter: string; // "" = any dataset (only used when metric === "dataset_delta")
+  operator: AlertOperator;
+  threshold: number; // percent
   createdAt: string;
   color: string;
-  frozen: boolean;
-  frozenAt: string | null;
-  verificationId: string;
+  active: boolean;
+  lastChecked: string | null;
+  lastStatus: AlertStatus;
+  triggeredValue: number | null;
+  triggeredSource: string | null; // e.g. filename that triggered it
   aiInsight: string | null;
   selectedForCompare: boolean;
 }
@@ -55,7 +63,7 @@ const COLORS = [
   "#db2777",
   "#0891b2",
 ];
-const STORAGE_KEY = "insightforge_saved_views_v4";
+const STORAGE_KEY = "insightforge_saved_alerts_v1";
 
 const RANGE_LABEL: Record<string, string> = {
   "7d": "7 Days",
@@ -66,50 +74,12 @@ const RANGE_LABEL: Record<string, string> = {
   annual: "Annual",
 };
 
-const DEFAULT_VIEWS: SavedView[] = [
-  {
-    id: "seed-monthly-overview",
-    name: "Monthly Overview",
-    description: "30-day all categories performance",
-    range: "30d",
-    category: "",
-    createdAt: "May 1, 2026",
-    color: "#003366",
-    frozen: false,
-    frozenAt: null,
-    verificationId: "seed-vid-0001-0000-0000-000000000001",
-    aiInsight: null,
-    selectedForCompare: false,
-  },
-  {
-    id: "seed-revenue-focus",
-    name: "Revenue Focus",
-    description: "90-day revenue deep dive",
-    range: "90d",
-    category: "revenue",
-    createdAt: "Apr 28, 2026",
-    color: "#059669",
-    frozen: true,
-    frozenAt: "10:15 AM",
-    verificationId: "seed-vid-0002-0000-0000-000000000002",
-    aiInsight: null,
-    selectedForCompare: false,
-  },
-  {
-    id: "seed-weekly-pulse",
-    name: "Weekly Pulse",
-    description: "Quick 7-day snapshot",
-    range: "7d",
-    category: "",
-    createdAt: "Apr 25, 2026",
-    color: "#d97706",
-    frozen: false,
-    frozenAt: null,
-    verificationId: "seed-vid-0003-0000-0000-000000000003",
-    aiInsight: null,
-    selectedForCompare: false,
-  },
-];
+const DEFAULT_ALERTS: SavedAlert[] = [];
+
+const METRIC_LABEL: Record<AlertMetric, string> = {
+  dataset_delta: "Dataset Revenue Change",
+  mrr_delta: "Total MRR Change",
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,19 +99,77 @@ function saveLS(key: string, val: unknown) {
   }
 }
 
+import { getDatasetMovers } from "@/lib/data";
+
+async function checkAlert(alert: SavedAlert): Promise<{
+  status: AlertStatus;
+  value: number | null;
+  source: string | null;
+}> {
+  try {
+    if (alert.metric === "dataset_delta") {
+      const movers = await getDatasetMovers();
+      const pool = alert.datasetFilter
+        ? movers.filter((m) => m.filename === alert.datasetFilter)
+        : movers;
+      const hit = pool.find((m) =>
+        alert.operator === "above"
+          ? m.deltaPct > alert.threshold
+          : m.deltaPct < -alert.threshold,
+      );
+      if (hit) {
+        return {
+          status: "triggered",
+          value: hit.deltaPct,
+          source: hit.filename,
+        };
+      }
+      const worst = pool.sort(
+        (a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct),
+      )[0];
+      return {
+        status: "safe",
+        value: worst?.deltaPct ?? null,
+        source: worst?.filename ?? null,
+      };
+    }
+
+    // mrr_delta — computed from real sparkline, no fake field
+    const stats = await getAggregateDashboardStats();
+    const points = stats.mrrSparkline ?? [];
+    if (points.length < 2) {
+      return { status: "unchecked", value: null, source: null };
+    }
+    const last = points[points.length - 1].mrr;
+    const prev = points[points.length - 2].mrr;
+    const deltaPct = prev !== 0 ? ((last - prev) / prev) * 100 : 0;
+    const triggered =
+      alert.operator === "above"
+        ? deltaPct > alert.threshold
+        : deltaPct < -alert.threshold;
+    return {
+      status: triggered ? "triggered" : "safe",
+      value: Math.round(deltaPct * 10) / 10,
+      source: null,
+    };
+  } catch {
+    return { status: "unchecked", value: null, source: null };
+  }
+}
+
 // Real call — adjust query params / method if your /api/briefing route differs
 async function fetchInsight(
-  range: string,
-  category: string,
+  metricLabel: string,
   context: string,
+  efficiency: number,
 ): Promise<string> {
   const res = await fetch("/api/briefing", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      range,
-      category: category || "all",
-      efficiency: "",
+      range: metricLabel,
+      category: "all",
+      efficiency,
       newsHeadline: context,
     }),
   });
@@ -156,7 +184,7 @@ function ShareModule({
   view,
   onClose,
 }: {
-  view: SavedView;
+  view: SavedAlert;
   onClose: () => void;
 }) {
   const [token] = useState(() => crypto.randomUUID());
@@ -344,7 +372,7 @@ function ComparePanel({
   views,
   onClose,
 }: {
-  views: SavedView[];
+  views: SavedAlert[];
   onClose: () => void;
 }) {
   const [a, b] = views;
@@ -407,8 +435,8 @@ function ComparePanel({
                 className="text-xs font-mono mb-3"
                 style={{ color: "var(--text-muted)" }}
               >
-                {v.createdAt} · {RANGE_LABEL[v.range] || v.range}
-                {v.category ? ` · ${v.category}` : ""}
+                {v.createdAt} · {METRIC_LABEL[v.metric]} {v.operator}{" "}
+                {v.threshold}%{v.datasetFilter ? ` · ${v.datasetFilter}` : ""}
               </p>
               {v.aiInsight ? (
                 <p
@@ -438,23 +466,24 @@ function ComparePanel({
 function ViewCard({
   view,
   savedId,
-  onLoad,
+  onCheck,
   onDelete,
-  onToggleFreeze,
+  onTogglePause,
   onToggleCompare,
   onShare,
   onGenerateInsight,
 }: {
-  view: SavedView;
+  view: SavedAlert;
   savedId: string | null;
-  onLoad: (v: SavedView) => void;
+  onCheck: (id: string) => void;
   onDelete: (id: string) => void;
-  onToggleFreeze: (id: string) => void;
+  onTogglePause: (id: string) => void;
   onToggleCompare: (id: string) => void;
-  onShare: (v: SavedView) => void;
+  onShare: (v: SavedAlert) => void;
   onGenerateInsight: (id: string) => void;
 }) {
   const [genLoading, setGenLoading] = useState(false);
+  const [checkLoading, setCheckLoading] = useState(false);
 
   const handleGenerate = async () => {
     setGenLoading(true);
@@ -462,8 +491,17 @@ function ViewCard({
     setGenLoading(false);
   };
 
-  const cardBorder = view.frozen
-    ? "var(--warning)"
+  const handleCheck = async () => {
+    setCheckLoading(true);
+    await Promise.resolve(onCheck(view.id));
+    setCheckLoading(false);
+  };
+
+  const isTriggered = view.lastStatus === "triggered";
+  const isPaused = !view.active;
+
+  const cardBorder = isTriggered
+    ? "var(--danger)"
     : view.selectedForCompare
       ? "var(--accent)"
       : "var(--border)";
@@ -477,15 +515,16 @@ function ViewCard({
       style={{
         background: "var(--bg-surface)",
         border: `1px solid ${cardBorder}`,
+        opacity: isPaused ? 0.6 : 1,
       }}
     >
       <div
         className="absolute top-0 left-0 right-0 h-[2px]"
-        style={{ background: view.frozen ? "var(--warning)" : view.color }}
+        style={{ background: isTriggered ? "var(--danger)" : view.color }}
       />
 
       <AnimatePresence>
-        {view.frozen && (
+        {isTriggered && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -495,11 +534,11 @@ function ViewCard({
             <span
               className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
               style={{
-                background: "var(--warning-bg)",
-                color: "var(--warning)",
+                background: "var(--danger-bg)",
+                color: "var(--danger)",
               }}
             >
-              <Snowflake size={9} /> Frozen
+              <AlertTriangle size={9} /> Triggered
             </span>
           </motion.div>
         )}
@@ -551,9 +590,7 @@ function ViewCard({
                 style={{ color: "var(--text-muted)" }}
               >
                 <Clock size={10} /> {view.createdAt}
-                {view.frozen && view.frozenAt && (
-                  <span>· snapped {view.frozenAt}</span>
-                )}
+                {view.lastChecked && <span>· checked {view.lastChecked}</span>}
               </p>
             </div>
           </div>
@@ -581,30 +618,41 @@ function ViewCard({
               color: "var(--text-secondary)",
             }}
           >
-            {RANGE_LABEL[view.range] || view.range}
+            {METRIC_LABEL[view.metric]}
           </span>
-          {view.category && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[10px] font-medium"
+            style={{
+              background: "var(--bg-primary)",
+              border: "1px solid var(--border)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {view.operator === "above" ? "Above" : "Below"} {view.threshold}%
+          </span>
+          {view.datasetFilter && (
             <span
-              className="px-2 py-0.5 rounded-full text-[10px] font-medium capitalize"
+              className="px-2 py-0.5 rounded-full text-[10px] font-medium"
               style={{
                 background: "var(--bg-primary)",
                 border: "1px solid var(--border)",
                 color: "var(--text-secondary)",
               }}
             >
-              {view.category}
+              {view.datasetFilter}
             </span>
           )}
         </div>
 
-        {view.description && (
-          <p
-            className="text-xs mb-3"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            {view.description}
-          </p>
-        )}
+        <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
+          {view.lastStatus === "unchecked"
+            ? "Not checked yet."
+            : view.triggeredValue != null
+              ? `Latest: ${view.triggeredValue > 0 ? "+" : ""}${view.triggeredValue}%${
+                  view.triggeredSource ? ` (${view.triggeredSource})` : ""
+                }`
+              : "No data available for this metric yet."}
+        </p>
 
         {/* AI Insight — real, on-demand */}
         <div
@@ -669,27 +717,16 @@ function ViewCard({
             </div>
           </div>
         </div>
-
-        <div
-          className="flex items-center gap-1.5 text-[10px] mb-4"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <Hash size={10} />
-          <span className="font-mono truncate">
-            {view.verificationId.slice(0, 13)}
-          </span>
-        </div>
-
         <div
           className="flex items-center justify-between gap-2 pt-3 flex-wrap"
           style={{ borderTop: "1px solid var(--border)" }}
         >
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onToggleFreeze(view.id)}
+              onClick={() => onTogglePause(view.id)}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition-colors"
               style={
-                view.frozen
+                isPaused
                   ? {
                       background: "var(--warning-bg)",
                       borderColor: "var(--warning)",
@@ -701,13 +738,13 @@ function ViewCard({
                     }
               }
             >
-              {view.frozen ? (
+              {isPaused ? (
                 <>
-                  <Snowflake size={10} /> Frozen
+                  <Lock size={10} /> Paused
                 </>
               ) : (
                 <>
-                  <Lock size={10} /> Freeze
+                  <Shield size={10} /> Active
                 </>
               )}
             </button>
@@ -742,11 +779,17 @@ function ViewCard({
             </button>
           </div>
           <button
-            onClick={() => onLoad(view)}
-            className="flex items-center gap-1.5 text-xs font-semibold shrink-0"
+            onClick={handleCheck}
+            disabled={checkLoading}
+            className="flex items-center gap-1.5 text-xs font-semibold shrink-0 disabled:opacity-50"
             style={{ color: view.color }}
           >
-            Load <ExternalLink size={10} />
+            {checkLoading ? (
+              <Loader2 size={10} className="animate-spin" />
+            ) : (
+              <RefreshCw size={10} />
+            )}
+            Check Now
           </button>
         </div>
       </div>
@@ -760,66 +803,128 @@ export default function SavedViewsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [views, setViews] = useState<SavedView[]>(DEFAULT_VIEWS);
+  const [views, setViews] = useState<SavedAlert[]>(DEFAULT_ALERTS);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
+  const [newMetric, setNewMetric] = useState<AlertMetric>("dataset_delta");
+  const [newDatasetFilter, setNewDatasetFilter] = useState("");
+  const [newOperator, setNewOperator] = useState<AlertOperator>("above");
+  const [newThreshold, setNewThreshold] = useState("10");
   const [newColor, setNewColor] = useState(COLORS[0]);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [showCompare, setShowCompare] = useState(false);
-  const [shareTarget, setShareTarget] = useState<SavedView | null>(null);
+  const [shareTarget, setShareTarget] = useState<SavedAlert | null>(null);
+  const [checkingAll, setCheckingAll] = useState(false);
+  const [cardFilter, setCardFilter] = useState<"all" | "triggered" | "insight">(
+    "all",
+  );
+  const [showTriggerBar, setShowTriggerBar] = useState(true);
+  const prevTriggeredRef = useRef(0);
+
+  const [efficiency, setEfficiency] = useState(0);
 
   useEffect(() => {
-    const stored = loadLS<SavedView[]>(STORAGE_KEY, []);
-    if (stored.length) setViews(stored);
+    getAggregateDashboardStats()
+      .then((stats) => setEfficiency(stats.efficiency ?? 0))
+      .catch(() => setEfficiency(0));
   }, []);
 
-  const persist = (updated: SavedView[]) => {
+  useEffect(() => {
+    const stored = loadLS<SavedAlert[]>(STORAGE_KEY, []);
+    if (stored.length) {
+      setViews(stored);
+      runCheckAll(stored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persist = (updated: SavedAlert[]) => {
     setViews(updated);
     saveLS(STORAGE_KEY, updated);
   };
 
-  const currentRange = searchParams.get("range") || "30d";
-  const currentCategory = searchParams.get("category") || "";
+  const runCheckAll = async (list: SavedAlert[]) => {
+    setCheckingAll(true);
+    const results = await Promise.all(
+      list.map(async (a) => {
+        if (!a.active) return a;
+        const { status, value, source } = await checkAlert(a);
+        return {
+          ...a,
+          lastStatus: status,
+          triggeredValue: value,
+          triggeredSource: source,
+          lastChecked:
+            status === "unchecked"
+              ? a.lastChecked
+              : new Date().toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+        };
+      }),
+    );
+    persist(results);
+    setCheckingAll(false);
+  };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newName.trim()) return;
-    const view: SavedView = {
+    const threshold = parseFloat(newThreshold);
+    if (isNaN(threshold) || threshold <= 0) return;
+    const alert: SavedAlert = {
       id: crypto.randomUUID(),
       name: newName.trim(),
-      description:
-        newDesc.trim() ||
-        `${currentRange} · ${currentCategory || "All categories"}`,
-      range: currentRange,
-      category: currentCategory,
+      metric: newMetric,
+      datasetFilter: newDatasetFilter.trim(),
+      operator: newOperator,
+      threshold,
       createdAt: new Date().toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
       }),
       color: newColor,
-      frozen: false,
-      frozenAt: null,
-      verificationId: crypto.randomUUID(),
+      active: true,
+      lastChecked: null,
+      lastStatus: "unchecked",
+      triggeredValue: null,
+      triggeredSource: null,
       aiInsight: null,
       selectedForCompare: false,
     };
-    persist([view, ...views]);
-    setSavedId(view.id);
+    const checked = await checkAlert(alert);
+    const finalAlert: SavedAlert = {
+      ...alert,
+      lastStatus: checked.status,
+      triggeredValue: checked.value,
+      triggeredSource: checked.source,
+      lastChecked:
+        checked.status === "unchecked"
+          ? null
+          : new Date().toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+    };
+    persist([finalAlert, ...views]);
+    setSavedId(finalAlert.id);
     setTimeout(() => setSavedId(null), 2000);
     setShowCreate(false);
     setNewName("");
-    setNewDesc("");
+    setNewDatasetFilter("");
+    setNewThreshold("10");
   };
 
   const handleGenerateInsight = async (id: string) => {
     const v = views.find((x) => x.id === id);
     if (!v) return;
     try {
+      const context = `Alert "${v.name}": ${METRIC_LABEL[v.metric]} ${v.operator} ${v.threshold}%. Current status: ${v.lastStatus}${v.triggeredValue != null ? `, latest value ${v.triggeredValue}%` : ""}${v.triggeredSource ? ` (${v.triggeredSource})` : ""}.`;
       const briefing = await fetchInsight(
-        v.range,
-        v.category,
-        `${v.name} — ${v.description}`,
+        METRIC_LABEL[v.metric],
+        context,
+        efficiency,
       );
       persist(
         views.map((x) => (x.id === id ? { ...x, aiInsight: briefing } : x)),
@@ -837,32 +942,34 @@ export default function SavedViewsPage() {
       );
     }
   };
-
-  const handleLoad = (view: SavedView) => {
-    const p = new URLSearchParams();
-    if (view.range !== "30d") p.set("range", view.range);
-    if (view.category) p.set("category", view.category);
-    router.push(`/?${p.toString()}`);
-  };
   const handleDelete = (id: string) =>
     persist(views.filter((v) => v.id !== id));
-  const handleToggleFreeze = (id: string) =>
+  const handleTogglePause = (id: string) =>
+    persist(views.map((v) => (v.id === id ? { ...v, active: !v.active } : v)));
+  const handleCheckOne = async (id: string) => {
+    const v = views.find((x) => x.id === id);
+    if (!v) return;
+    const { status, value, source } = await checkAlert(v);
     persist(
-      views.map((v) =>
-        v.id === id
+      views.map((x) =>
+        x.id === id
           ? {
-              ...v,
-              frozen: !v.frozen,
-              frozenAt: !v.frozen
-                ? new Date().toLocaleTimeString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : null,
+              ...x,
+              lastStatus: status,
+              triggeredValue: value,
+              triggeredSource: source,
+              lastChecked:
+                status === "unchecked"
+                  ? x.lastChecked
+                  : new Date().toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
             }
-          : v,
+          : x,
       ),
     );
+  };
   const handleToggleCompare = (id: string) => {
     const sel = views.filter((v) => v.selectedForCompare);
     const tgt = views.find((v) => v.id === id);
@@ -889,9 +996,16 @@ export default function SavedViewsPage() {
 
   const stats = {
     total: views.length,
-    frozen: views.filter((v) => v.frozen).length,
+    triggered: views.filter((v) => v.lastStatus === "triggered").length,
     withInsight: views.filter((v) => v.aiInsight).length,
   };
+
+  useEffect(() => {
+    if (stats.triggered > prevTriggeredRef.current) {
+      setShowTriggerBar(true);
+    }
+    prevTriggeredRef.current = stats.triggered;
+  }, [stats.triggered]);
 
   return (
     <div className="space-y-6 relative pb-24">
@@ -926,97 +1040,149 @@ export default function SavedViewsPage() {
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors"
             style={{ background: "var(--accent)" }}
           >
-            <Plus size={14} /> Save Current View
+            <Plus size={14} /> New Alert
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Snapshots", value: stats.total },
-          { label: "Frozen", value: stats.frozen },
-          { label: "With Insight", value: stats.withInsight },
-        ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="rounded-lg px-4 py-3 text-center"
-            style={{
-              border: "1px solid var(--border)",
-              background: "var(--bg-surface)",
-            }}
-          >
+        {(
+          [
+            { label: "View All", value: stats.total, filterKey: "all" },
+            {
+              label: "Triggered",
+              value: stats.triggered,
+              filterKey: "triggered",
+            },
+            {
+              label: "With Insight",
+              value: stats.withInsight,
+              filterKey: "insight",
+            },
+          ] as const
+        ).map(({ label, value, filterKey }) => {
+          const active = cardFilter === filterKey;
+          const clickable = filterKey === "all" || value > 0;
+          return (
             <div
-              className="text-[10px] uppercase tracking-wide mb-1"
-              style={{ color: "var(--text-muted)" }}
+              key={label}
+              onClick={() =>
+                clickable &&
+                setCardFilter((f) => (f === filterKey ? "all" : filterKey))
+              }
+              className="rounded-lg px-4 py-3 text-center"
+              style={{
+                border: active
+                  ? "1px solid var(--accent)"
+                  : "1px solid var(--border)",
+                background: "var(--bg-surface)",
+                cursor: clickable ? "pointer" : "default",
+              }}
             >
-              {label}
+              <div
+                className="text-[10px] uppercase tracking-wide mb-1"
+                style={{
+                  color: active ? "var(--accent)" : "var(--text-muted)",
+                }}
+              >
+                {label}
+              </div>
+              <div
+                className="text-xl font-semibold"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {value}
+              </div>
             </div>
-            <div
-              className="text-xl font-semibold"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {value}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div
-        className="flex items-center gap-3 p-4 rounded-lg"
-        style={{
-          border: "1px solid var(--border)",
-          background: "var(--bg-surface)",
-        }}
-      >
-        <Filter size={13} style={{ color: "var(--text-muted)" }} />
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Active context:{" "}
-          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
-            {RANGE_LABEL[currentRange] || currentRange}
-          </span>
-          {currentCategory && (
-            <>
-              {" "}
-              ·{" "}
-              <span
-                style={{ color: "var(--text-primary)", fontWeight: 600 }}
-                className="capitalize"
-              >
-                {currentCategory}
-              </span>
-            </>
-          )}
-        </p>
-        {compareViews.length > 0 && (
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{
-              background: "var(--accent-subtle)",
-              color: "var(--accent)",
-            }}
-          >
-            {compareViews.length}/2 selected
-          </span>
-        )}
-        <button
-          onClick={() => setShowCreate(true)}
-          className="ml-auto text-xs font-semibold"
-          style={{ color: "var(--accent)" }}
+      {showTriggerBar && (
+        <div
+          onClick={() => {
+            if (stats.triggered === 0) return;
+            if (cardFilter === "triggered") {
+              setCardFilter("all");
+              setShowTriggerBar(false);
+            } else {
+              setCardFilter("triggered");
+            }
+          }}
+          className="flex items-center gap-3 p-4 rounded-lg"
+          style={{
+            border:
+              cardFilter === "triggered"
+                ? "1px solid var(--danger)"
+                : "1px solid var(--border)",
+            background: "var(--bg-surface)",
+            cursor: stats.triggered > 0 ? "pointer" : "default",
+          }}
         >
-          Save this →
-        </button>
-      </div>
+          <Filter
+            size={13}
+            style={{
+              color:
+                cardFilter === "triggered"
+                  ? "var(--danger)"
+                  : "var(--text-muted)",
+            }}
+          />
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {stats.triggered > 0 ? (
+              <span style={{ color: "var(--danger)", fontWeight: 600 }}>
+                {stats.triggered} alert{stats.triggered > 1 ? "s" : ""}{" "}
+                triggered
+                {cardFilter === "triggered"
+                  ? " (filtered)"
+                  : " — click to filter"}
+              </span>
+            ) : (
+              <span style={{ color: "var(--success)", fontWeight: 600 }}>
+                All clear
+              </span>
+            )}
+          </p>
+          {compareViews.length > 0 && (
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{
+                background: "var(--accent-subtle)",
+                color: "var(--accent)",
+              }}
+            >
+              {compareViews.length}/2 selected
+            </span>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              runCheckAll(views);
+            }}
+            disabled={checkingAll}
+            className="ml-auto text-xs font-semibold disabled:opacity-50"
+            style={{ color: "var(--accent)" }}
+          >
+            {checkingAll ? "Checking..." : "Check All"}
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <AnimatePresence>
-          {views.map((view) => (
+          {(cardFilter === "triggered"
+            ? views.filter((v) => v.lastStatus === "triggered")
+            : cardFilter === "insight"
+              ? views.filter((v) => v.aiInsight)
+              : views
+          ).map((view) => (
             <ViewCard
               key={view.id}
               view={view}
               savedId={savedId}
-              onLoad={handleLoad}
+              onCheck={handleCheckOne}
               onDelete={handleDelete}
-              onToggleFreeze={handleToggleFreeze}
+              onTogglePause={handleTogglePause}
               onToggleCompare={handleToggleCompare}
               onShare={setShareTarget}
               onGenerateInsight={handleGenerateInsight}
@@ -1129,7 +1295,7 @@ export default function SavedViewsPage() {
                     className="font-semibold text-sm"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    Save View
+                    New Alert
                   </h3>
                 </div>
                 <button
@@ -1164,19 +1330,92 @@ export default function SavedViewsPage() {
                     className="text-xs font-medium block mb-1.5"
                     style={{ color: "var(--text-secondary)" }}
                   >
-                    Note (optional)
+                    Metric
                   </label>
-                  <input
-                    value={newDesc}
-                    onChange={(e) => setNewDesc(e.target.value)}
-                    placeholder="What triggered this snapshot?"
+                  <select
+                    value={newMetric}
+                    onChange={(e) =>
+                      setNewMetric(e.target.value as AlertMetric)
+                    }
                     className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none"
                     style={{
                       border: "1px solid var(--border)",
                       color: "var(--text-primary)",
                       background: "var(--bg-primary)",
                     }}
-                  />
+                  >
+                    {Object.entries(METRIC_LABEL).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {newMetric === "dataset_delta" && (
+                  <div>
+                    <label
+                      className="text-xs font-medium block mb-1.5"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Dataset filename (optional)
+                    </label>
+                    <input
+                      value={newDatasetFilter}
+                      onChange={(e) => setNewDatasetFilter(e.target.value)}
+                      placeholder="Leave blank for any dataset"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none"
+                      style={{
+                        border: "1px solid var(--border)",
+                        color: "var(--text-primary)",
+                        background: "var(--bg-primary)",
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label
+                      className="text-xs font-medium block mb-1.5"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Condition
+                    </label>
+                    <select
+                      value={newOperator}
+                      onChange={(e) =>
+                        setNewOperator(e.target.value as AlertOperator)
+                      }
+                      className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none"
+                      style={{
+                        border: "1px solid var(--border)",
+                        color: "var(--text-primary)",
+                        background: "var(--bg-primary)",
+                      }}
+                    >
+                      <option value="above">Rises above</option>
+                      <option value="below">Drops below</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label
+                      className="text-xs font-medium block mb-1.5"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Threshold (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={newThreshold}
+                      onChange={(e) => setNewThreshold(e.target.value)}
+                      placeholder="10"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none"
+                      style={{
+                        border: "1px solid var(--border)",
+                        color: "var(--text-primary)",
+                        background: "var(--bg-primary)",
+                      }}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label
@@ -1218,11 +1457,11 @@ export default function SavedViewsPage() {
                   </button>
                   <button
                     onClick={handleCreate}
-                    disabled={!newName.trim()}
+                    disabled={!newName.trim() || !newThreshold.trim()}
                     className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
                     style={{ background: "var(--accent)" }}
                   >
-                    Save View
+                    Create Alert
                   </button>
                 </div>
               </div>

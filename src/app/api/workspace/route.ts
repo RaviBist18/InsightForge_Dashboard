@@ -42,25 +42,35 @@ async function groq(
 
 // ── WHY FEED ──────────────────────────────────────────────────────────────────
 async function handleWhyFeed(body: {
-  headlines: string[];
+  movers: {
+    filename: string;
+    revenue: number;
+    rowCount: number;
+    deltaPct: number;
+  }[];
   mrr: number;
   churn: number;
   persona: string;
 }) {
-  const { headlines, mrr, churn, persona } = body;
+  const { movers, mrr, churn, persona } = body;
+
+  if (!movers || movers.length === 0) {
+    return NextResponse.json({ feed: [] });
+  }
 
   const system = `You are InsightForge's Strategic Intelligence Engine.
-Persona: ${persona}. You analyze global news through the lens of a B2B SaaS CEO's metrics.
+Persona: ${persona}. You explain WHY the company's numbers are moving, based on real dataset-level activity — not external news.
 Respond ONLY with a JSON array of objects: [{headline, snippet, impact_type, impact_delta, source}]
-- snippet: 1 sentence explaining business impact (be specific, use numbers).
-- impact_type: one of "churn" | "revenue" | "opportunity" | "risk"
-- impact_delta: float between -30 and +30 (negative = bad)
-- source: short source label
-No markdown, no extra text.`;
+- headline: short label naming the dataset and its movement (e.g. "Sales dataset revenue up 20%")
+- snippet: 1 sentence explaining the business impact, be specific, use the real numbers given.
+- impact_type: one of "revenue" | "opportunity" | "risk"
+- impact_delta: the dataset's actual deltaPct value, unmodified
+- source: the dataset's filename
+No markdown, no extra text. Only include datasets with a non-zero deltaPct.`;
 
-  const user = `Current MRR: $${mrr.toLocaleString()}. Churn: ${churn}%.
-Headlines: ${headlines.slice(0, 5).join(" | ")}
-Map each headline to a business impact snippet.`;
+  const user = `Current total MRR: $${mrr.toLocaleString()}. Churn: ${churn}%.
+Dataset movement this period: ${JSON.stringify(movers.slice(0, 6))}
+Explain what's driving the numbers, dataset by dataset.`;
 
   const raw = await groq(system, user, 800);
 
@@ -69,50 +79,6 @@ Map each headline to a business impact snippet.`;
     return NextResponse.json({ feed: parsed });
   } catch {
     return NextResponse.json({ feed: [] });
-  }
-}
-
-// ── SCENARIO SIMULATION ───────────────────────────────────────────────────────
-async function handleSimulation(body: {
-  shocks: Record<string, number>;
-  mrr: number;
-  burn: number;
-  subscribers: number;
-  persona: string;
-}) {
-  const { shocks, mrr, burn, subscribers, persona } = body;
-
-  const system = `You are InsightForge's What-If Forge engine.
-Persona: ${persona}. Given macro shocks, project business impact and suggest a Counter-Forge strategy.
-Respond ONLY with JSON: {mrr_delta_pct, burn_delta_pct, subscriber_delta_pct, runway_months, risk_level, recommended_action, summary}
-- All deltas are floats (negative = decrease).
-- risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-- recommended_action: 2-3 sentence actionable strategy.
-- summary: 1 sentence executive summary.
-No markdown, no extra text.`;
-
-  const user = `Current state — MRR: $${mrr}, Monthly Burn: $${burn}, Subscribers: ${subscribers}.
-Applied shocks: ${JSON.stringify(shocks)}
-Project the impact.`;
-
-  const raw = await groq(system, user, 600);
-
-  try {
-    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-    return NextResponse.json({ simulation: parsed });
-  } catch {
-    return NextResponse.json({
-      simulation: {
-        mrr_delta_pct: -10,
-        burn_delta_pct: 5,
-        subscriber_delta_pct: -8,
-        runway_months: 14,
-        risk_level: "MEDIUM",
-        recommended_action:
-          "Shift focus to enterprise tier. Reduce SMB exposure.",
-        summary: "Moderate impact. Action required within 30 days.",
-      },
-    });
   }
 }
 
@@ -227,8 +193,6 @@ export async function POST(req: NextRequest) {
   switch (action) {
     case "why-feed":
       return handleWhyFeed(body);
-    case "simulate":
-      return handleSimulation(body);
     case "score-entities":
       return handleEntityScore(body);
     case "seal-snapshot": {

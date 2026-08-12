@@ -12,6 +12,14 @@ import {
   Shield,
   Building2,
 } from "lucide-react";
+import {
+  loadAlerts,
+  getTriggeredAlerts,
+  getUnreadTriggeredAlerts,
+  markAlertRead,
+  ALERTS_UPDATED_EVENT,
+  type SavedAlert,
+} from "@/lib/alertCenter";
 import { TRANSACTIONS } from "@/data/mockData";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -30,46 +38,6 @@ const getInitials = (nameOrEmail: string) => {
     : nameOrEmail.substring(0, 2).toUpperCase();
 };
 
-const ADMIN_NOTIFICATIONS = [
-  {
-    id: 1,
-    title: "New transaction pending",
-    desc: "TX-1053 requires review",
-    time: "2m ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    title: "Revenue target hit",
-    desc: "90% of Q2 goal reached",
-    time: "1h ago",
-    unread: true,
-  },
-  {
-    id: 3,
-    title: "Churn rate alert",
-    desc: "Spike detected in EMEA region",
-    time: "3h ago",
-    unread: false,
-  },
-];
-
-const USER_NOTIFICATIONS = [
-  {
-    id: 1,
-    title: "Dashboard updated",
-    desc: "New data available",
-    time: "5m ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    title: "Weekly report ready",
-    desc: "Your summary is ready to view",
-    time: "2h ago",
-    unread: false,
-  },
-];
 export const Navbar: React.FC<{
   onMenuClick?: () => void;
   companyName?: string | null;
@@ -86,16 +54,17 @@ export const Navbar: React.FC<{
     "idle" | "generating" | "done"
   >("idle");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [notifications, setNotifications] = useState(
-    isAdmin ? ADMIN_NOTIFICATIONS : USER_NOTIFICATIONS,
-  );
+  const [alerts, setAlerts] = useState<SavedAlert[]>([]);
 
-  // Update notifications when role loads
   useEffect(() => {
-    setNotifications(isAdmin ? ADMIN_NOTIFICATIONS : USER_NOTIFICATIONS);
-  }, [isAdmin]);
+    setAlerts(loadAlerts());
+    const handler = () => setAlerts(loadAlerts());
+    window.addEventListener(ALERTS_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(ALERTS_UPDATED_EVENT, handler);
+  }, []);
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  const triggeredAlerts = getTriggeredAlerts(alerts);
+  const unreadCount = getUnreadTriggeredAlerts(alerts).length;
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -131,7 +100,9 @@ export const Navbar: React.FC<{
   }, [isAdmin]);
 
   const markAllRead = () =>
-    setNotifications((n) => n.map((x) => ({ ...x, unread: false })));
+    setAlerts(
+      triggeredAlerts.reduce((acc, a) => markAlertRead(acc, a.id), alerts),
+    );
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -312,9 +283,7 @@ export const Navbar: React.FC<{
           {/* Notifications */}
           <div className="relative" data-dropdown>
             <button
-              onClick={() => {
-                router.push("/dashboard/settings");
-              }}
+              onClick={() => setShowNotifications((v) => !v)}
               className="relative p-2 rounded-xl transition-colors"
               style={{ color: "var(--text-secondary)" }}
             >
@@ -347,7 +316,7 @@ export const Navbar: React.FC<{
                       className="text-[12px] font-semibold"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      Notifications
+                      Alerts
                     </p>
                     {unreadCount > 0 && (
                       <button
@@ -360,51 +329,60 @@ export const Navbar: React.FC<{
                     )}
                   </div>
                   <div
-                    className="divide-y"
+                    className="divide-y max-h-[320px] overflow-y-auto"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    {notifications.map((n) => (
+                    {triggeredAlerts.length === 0 ? (
                       <div
-                        key={n.id}
-                        onClick={() =>
-                          setNotifications((prev) =>
-                            prev.map((x) =>
-                              x.id === n.id ? { ...x, unread: false } : x,
-                            ),
-                          )
-                        }
-                        className="px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-primary)]"
+                        className="px-4 py-6 text-center text-[12px]"
+                        style={{ color: "var(--text-muted)" }}
                       >
-                        <div className="flex items-start gap-2.5">
-                          {n.unread && (
-                            <div
-                              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
-                              style={{ background: "var(--accent)" }}
-                            />
-                          )}
-                          <div className={cn(!n.unread && "pl-4")}>
-                            <p
-                              className="text-[13px] font-medium"
-                              style={{ color: "var(--text-primary)" }}
-                            >
-                              {n.title}
-                            </p>
-                            <p
-                              className="text-[12px] mt-0.5"
-                              style={{ color: "var(--text-secondary)" }}
-                            >
-                              {n.desc}
-                            </p>
-                            <p
-                              className="text-[10px] mt-1 font-medium uppercase tracking-wider"
-                              style={{ color: "var(--text-muted)" }}
-                            >
-                              {n.time}
-                            </p>
+                        No alerts triggered
+                      </div>
+                    ) : (
+                      triggeredAlerts.map((a) => (
+                        <div
+                          key={a.id}
+                          onClick={() => {
+                            setAlerts(markAlertRead(loadAlerts(), a.id));
+                            setShowNotifications(false);
+                            router.push("/dashboard/saved-views");
+                          }}
+                          className="px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-primary)]"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            {!a.read && (
+                              <div
+                                className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                                style={{ background: "var(--accent)" }}
+                              />
+                            )}
+                            <div className={cn(a.read && "pl-4")}>
+                              <p
+                                className="text-[13px] font-medium"
+                                style={{ color: "var(--text-primary)" }}
+                              >
+                                {a.name}
+                              </p>
+                              <p
+                                className="text-[12px] mt-0.5"
+                                style={{ color: "var(--text-secondary)" }}
+                              >
+                                {a.triggeredValue != null
+                                  ? `${a.triggeredValue > 0 ? "+" : ""}${a.triggeredValue}%${a.triggeredSource ? ` (${a.triggeredSource})` : ""}`
+                                  : "Triggered"}
+                              </p>
+                              <p
+                                className="text-[10px] mt-1 font-medium uppercase tracking-wider"
+                                style={{ color: "var(--text-muted)" }}
+                              >
+                                {a.lastChecked ?? ""}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </motion.div>
               )}
