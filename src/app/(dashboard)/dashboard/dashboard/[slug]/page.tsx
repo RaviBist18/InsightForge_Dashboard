@@ -3,6 +3,7 @@ import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { getAggregateDashboardStats } from "@/lib/data";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+export const dynamic = "force-dynamic";
 
 const VALID_SLUGS = [
   "total-revenue",
@@ -15,10 +16,6 @@ const VALID_SLUGS = [
 
 interface PageProps {
   params: Promise<{ slug: string }>;
-}
-
-export async function generateStaticParams() {
-  return VALID_SLUGS.map((slug) => ({ slug }));
 }
 
 async function getUserRoleAndId(): Promise<{
