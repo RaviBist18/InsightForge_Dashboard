@@ -20,6 +20,7 @@ import {
   ALERTS_UPDATED_EVENT,
   type SavedAlert,
 } from "@/lib/alertCenter";
+import { getAggregateRisks, type AggregateRiskResult } from "@/lib/data";
 import { TRANSACTIONS } from "@/data/mockData";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -74,6 +75,14 @@ export const Navbar: React.FC<{
     }, 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const [riskData, setRiskData] = useState<AggregateRiskResult | null>(null);
+
+  useEffect(() => {
+    getAggregateRisks()
+      .then(setRiskData)
+      .catch(() => {});
+  }, []);
 
   const handleSearchFocus = () => {
     if (pathname !== "/") router.push("/");
@@ -332,7 +341,8 @@ export const Navbar: React.FC<{
                     className="divide-y max-h-[320px] overflow-y-auto"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    {triggeredAlerts.length === 0 ? (
+                    {triggeredAlerts.length === 0 &&
+                    (!riskData || riskData.risks.length === 0) ? (
                       <div
                         className="px-4 py-6 text-center text-[12px]"
                         style={{ color: "var(--text-muted)" }}
@@ -340,48 +350,108 @@ export const Navbar: React.FC<{
                         No alerts triggered
                       </div>
                     ) : (
-                      triggeredAlerts.map((a) => (
-                        <div
-                          key={a.id}
-                          onClick={() => {
-                            setAlerts(markAlertRead(loadAlerts(), a.id));
-                            setShowNotifications(false);
-                            router.push("/dashboard/saved-views");
-                          }}
-                          className="px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-primary)]"
-                        >
-                          <div className="flex items-start gap-2.5">
-                            {!a.read && (
-                              <div
-                                className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
-                                style={{ background: "var(--accent)" }}
-                              />
-                            )}
-                            <div className={cn(a.read && "pl-4")}>
-                              <p
-                                className="text-[13px] font-medium"
-                                style={{ color: "var(--text-primary)" }}
-                              >
-                                {a.name}
-                              </p>
-                              <p
-                                className="text-[12px] mt-0.5"
-                                style={{ color: "var(--text-secondary)" }}
-                              >
-                                {a.triggeredValue != null
-                                  ? `${a.triggeredValue > 0 ? "+" : ""}${a.triggeredValue}%${a.triggeredSource ? ` (${a.triggeredSource})` : ""}`
-                                  : "Triggered"}
-                              </p>
-                              <p
-                                className="text-[10px] mt-1 font-medium uppercase tracking-wider"
-                                style={{ color: "var(--text-muted)" }}
-                              >
-                                {a.lastChecked ?? ""}
-                              </p>
+                      <>
+                        {triggeredAlerts.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => {
+                              setAlerts(markAlertRead(loadAlerts(), a.id));
+                              setShowNotifications(false);
+                              router.push("/dashboard/saved-views");
+                            }}
+                            className="px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-primary)]"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {!a.read && (
+                                <div
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                                  style={{ background: "var(--accent)" }}
+                                />
+                              )}
+                              <div className={cn(a.read && "pl-4")}>
+                                <p
+                                  className="text-[13px] font-medium"
+                                  style={{ color: "var(--text-primary)" }}
+                                >
+                                  {a.name}
+                                </p>
+                                <p
+                                  className="text-[12px] mt-0.5"
+                                  style={{ color: "var(--text-secondary)" }}
+                                >
+                                  {a.triggeredValue != null
+                                    ? `${a.triggeredValue > 0 ? "+" : ""}${a.triggeredValue}%${a.triggeredSource ? ` (${a.triggeredSource})` : ""}`
+                                    : "Triggered"}
+                                </p>
+                                <p
+                                  className="text-[10px] mt-1 font-medium uppercase tracking-wider"
+                                  style={{ color: "var(--text-muted)" }}
+                                >
+                                  {a.lastChecked ?? ""}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        ))}
+
+                        {riskData && riskData.risks.length > 0 && (
+                          <>
+                            <div
+                              className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
+                              style={{
+                                color: "var(--text-muted)",
+                                background: "var(--bg-primary)",
+                              }}
+                            >
+                              Risks ({riskData.riskCount.high} high,{" "}
+                              {riskData.riskCount.medium} medium)
+                            </div>
+                            {riskData.risks.map((r, i) => (
+                              <div
+                                key={`${r.filename}-${r.category}-${i}`}
+                                className="px-4 py-3"
+                              >
+                                <div className="flex items-start gap-2.5">
+                                  <div
+                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                                    style={{
+                                      background:
+                                        r.severity === "high"
+                                          ? "var(--danger)"
+                                          : "var(--warning)",
+                                    }}
+                                  />
+                                  <div>
+                                    <p
+                                      className="text-[13px] font-medium"
+                                      style={{
+                                        color:
+                                          r.severity === "high"
+                                            ? "var(--danger)"
+                                            : "var(--warning)",
+                                      }}
+                                    >
+                                      {r.category} Risk
+                                    </p>
+                                    <p
+                                      className="text-[12px] mt-0.5"
+                                      style={{ color: "var(--text-secondary)" }}
+                                    >
+                                      {r.message}
+                                    </p>
+                                    <p
+                                      className="text-[10px] mt-1 font-medium uppercase tracking-wider"
+                                      style={{ color: "var(--text-muted)" }}
+                                    >
+                                      {r.filename}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>

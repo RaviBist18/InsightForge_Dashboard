@@ -5,17 +5,22 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Plus } from "lucide-react";
 import { KPISection } from "@/components/dashboard/KPISection";
 import { ChartsSection } from "@/components/dashboard/ChartsSection";
-import { InsightsPanel } from "@/components/dashboard/InsightsPanel";
 import { AIChat } from "@/components/dashboard/AIChat";
 import { CEOBriefing } from "@/components/CEOBriefing";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
+import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
+import { RecommendationsPanel } from "@/components/dashboard/RecommendationsPanel";
+
 import {
-  getInsights,
   getAggregateDashboardStats,
   getAggregateRevenueChart,
   getCurrentCompanyId,
+  getAggregateOpportunities,
+  getAggregateRisks,
+  getAIRecommendations,
+  type Recommendation,
 } from "@/lib/data";
 import Link from "next/link";
 
@@ -33,11 +38,11 @@ export default function Home({ searchParams }: { searchParams: any }) {
   // 1. State Management
   const [stats, setStats] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>([]);
-  const [insights, setInsights] = useState<any>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
-
+  const [opportunities, setOpportunities] = useState<any>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   // Active KPI tab — null = main dashboard, slug string = detail panel
   const [localTab, setLocalTab] = useState<string | null>(null);
   useWorkspace();
@@ -54,19 +59,26 @@ export default function Home({ searchParams }: { searchParams: any }) {
   // 2. Fetch Initial Data
   useEffect(() => {
     async function initDashboard() {
-      const range = "monthly";
-      const [st, rev, ins, cid, userResult] = await Promise.all([
+      const [st, rev, cid, userResult, opp] = await Promise.all([
         getAggregateDashboardStats(),
         getAggregateRevenueChart(),
-        getInsights(range),
         getCurrentCompanyId(),
         supabase.auth.getUser(),
+        getAggregateOpportunities(),
       ]);
       setCompanyId(cid);
       setUserId(userResult.data.user?.id);
       setStats(st);
-      setInsights(ins);
       setRevenueData(rev);
+      setOpportunities(opp.opportunities);
+
+      const riskData = await getAggregateRisks();
+      const recs = await getAIRecommendations(
+        riskData.risks,
+        opp.opportunities,
+      );
+      setRecommendations(recs);
+
       setLoading(false);
     }
     initDashboard();
@@ -217,7 +229,9 @@ export default function Home({ searchParams }: { searchParams: any }) {
                     categoryData={[]}
                     range="monthly"
                   />
-                  <InsightsPanel insights={insights} />
+
+                  <OpportunitiesPanel opportunities={opportunities} />
+                  <RecommendationsPanel recommendations={recommendations} />
                   <AIChat nodes={[]} stats={stats} />
                 </>
               )}

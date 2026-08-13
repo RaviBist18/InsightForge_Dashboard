@@ -361,6 +361,183 @@ export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
   return results.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
 };
 
+export interface RiskItem {
+  category: string; // "Revenue" | "Sales" | "Inventory" | "Customer"
+  severity: "high" | "medium";
+  message: string;
+  filename: string; // which dataset this risk came from
+}
+
+export interface AggregateRiskResult {
+  overallRiskLevel: "high" | "medium" | "low";
+  riskCount: { high: number; medium: number };
+  risks: RiskItem[];
+}
+
+export const getAggregateRisks = async (): Promise<AggregateRiskResult> => {
+  const headers = await getAuthHeader();
+  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+  datasets.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  ); // ← add this line
+
+  if (datasets.length === 0) {
+    return {
+      overallRiskLevel: "low",
+      riskCount: { high: 0, medium: 0 },
+      risks: [],
+    };
+  }
+
+  const results = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${d.id}/risk-prediction`,
+        {
+          headers,
+        },
+      );
+      const data = res.ok ? await res.json() : { available: false, risks: [] };
+
+      const risks: RiskItem[] = (data.risks || []).map(
+        (r: {
+          category: string;
+          severity: "high" | "medium";
+          message: string;
+        }) => ({
+          ...r,
+          filename: d.filename,
+        }),
+      );
+      return risks;
+    }),
+  );
+
+  const allRisks = results.flat();
+
+  const severityOrder = { high: 0, medium: 1 };
+  allRisks.sort(
+    (a, b) => severityOrder[a.severity] - severityOrder[b.severity],
+  );
+
+  const highCount = allRisks.filter((r) => r.severity === "high").length;
+  const mediumCount = allRisks.filter((r) => r.severity === "medium").length;
+
+  return {
+    overallRiskLevel:
+      highCount > 0 ? "high" : mediumCount > 0 ? "medium" : "low",
+    riskCount: { high: highCount, medium: mediumCount },
+    risks: allRisks,
+  };
+};
+
+export interface OpportunityItem {
+  category: string; // "Revenue" | "Sales" | "Product" | "Customer"
+  impact: "high" | "medium";
+  message: string;
+  filename: string;
+}
+
+export interface AggregateOpportunityResult {
+  overallOpportunityLevel: "high" | "medium" | "low";
+  opportunityCount: { high: number; medium: number };
+  opportunities: OpportunityItem[];
+}
+
+export const getAggregateOpportunities =
+  async (): Promise<AggregateOpportunityResult> => {
+    const headers = await getAuthHeader();
+    const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+    const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+    datasets.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    ); // ← add this line
+
+    if (datasets.length === 0) {
+      return {
+        overallOpportunityLevel: "low",
+        opportunityCount: { high: 0, medium: 0 },
+        opportunities: [],
+      };
+    }
+
+    const results = await Promise.all(
+      datasets.map(async (d) => {
+        const res = await fetch(
+          `${BACKEND_URL}/datasets/${d.id}/opportunity-detection`,
+          { headers },
+        );
+        const data = res.ok
+          ? await res.json()
+          : { available: false, opportunities: [] };
+
+        const opportunities: OpportunityItem[] = (data.opportunities || []).map(
+          (o: {
+            category: string;
+            impact: "high" | "medium";
+            message: string;
+          }) => ({
+            ...o,
+            filename: d.filename,
+          }),
+        );
+        return opportunities;
+      }),
+    );
+
+    const allOpportunities = results.flat();
+
+    const impactOrder = { high: 0, medium: 1 };
+    allOpportunities.sort(
+      (a, b) => impactOrder[a.impact] - impactOrder[b.impact],
+    );
+
+    const highCount = allOpportunities.filter(
+      (o) => o.impact === "high",
+    ).length;
+    const mediumCount = allOpportunities.filter(
+      (o) => o.impact === "medium",
+    ).length;
+
+    return {
+      overallOpportunityLevel:
+        highCount > 0 ? "high" : mediumCount > 0 ? "medium" : "low",
+      opportunityCount: { high: highCount, medium: mediumCount },
+      opportunities: allOpportunities,
+    };
+  };
+
+export interface Recommendation {
+  priority: "high" | "medium";
+  action: string;
+  basis: string;
+}
+
+export const getAIRecommendations = async (
+  risks: RiskItem[],
+  opportunities: OpportunityItem[],
+): Promise<Recommendation[]> => {
+  if (risks.length === 0 && opportunities.length === 0) return [];
+
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const res = await fetch(`${baseUrl}/api/recommendations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ risks, opportunities }),
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.recommendations) ? data.recommendations : [];
+  } catch {
+    return [];
+  }
+};
+
 export const getAggregateRevenueChart = async () => {
   const headers = await getAuthHeader();
   const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });

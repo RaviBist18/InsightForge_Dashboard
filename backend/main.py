@@ -1311,6 +1311,154 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
     }
 
 
+@app.get("/datasets/{dataset_id}/opportunity-detection")
+async def get_opportunity_detection(dataset_id: str, authorization: str = Header(None)):
+    company_id, _ = get_company_id(authorization)
+
+    result = (
+        supabase.table("datasets")
+        .select("storage_path, filename, analysis")
+        .eq("id", dataset_id)
+        .eq("company_id", company_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    storage_path = result.data["storage_path"]
+    filename = result.data["filename"]
+    columns = result.data["analysis"]["columns"]
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+
+    opportunities = []
+
+    # Revenue growth opportunity
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[revenue_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope > 0:
+                opportunities.append(
+                    {
+                        "category": "Revenue",
+                        "impact": "high" if slope > 50 else "medium",
+                        "message": f"Revenue is trending upward (~{round(slope,2)}/day). Consider scaling marketing spend to accelerate growth.",
+                    }
+                )
+
+    # Sales growth opportunity
+    metric_col = sales_col or quantity_col
+    if date_col and metric_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        temp = df[[date_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[metric_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope > 0:
+                opportunities.append(
+                    {
+                        "category": "Sales",
+                        "impact": "high" if slope > 20 else "medium",
+                        "message": f"Sales volume is growing (~{round(slope,2)}/day trend). Demand is rising.",
+                    }
+                )
+
+    # Product-level demand opportunity
+    if (
+        product_col
+        and metric_col
+        and date_col
+        and pd.api.types.is_numeric_dtype(df[metric_col])
+    ):
+        temp = df[[date_col, product_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        for prod, group in temp.groupby(product_col):
+            daily = (
+                group.groupby(group[date_col].dt.date)[metric_col].sum().reset_index()
+            )
+            if len(daily) >= 3:
+                daily["idx"] = range(len(daily))
+                model = LinearRegression().fit(
+                    daily[["idx"]].values, daily[daily.columns[1]].values
+                )
+                slope = float(model.coef_[0])
+                if slope > 0:
+                    opportunities.append(
+                        {
+                            "category": "Product",
+                            "impact": "high" if slope > 10 else "medium",
+                            "message": f"{prod} shows rising demand (~{round(slope,2)}/day). Consider increasing production/stock.",
+                        }
+                    )
+
+    # Customer base growth opportunity
+    if customer_col and date_col:
+        temp = df[[customer_col, date_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        if len(temp) > 0:
+            first_half = temp[temp[date_col] <= temp[date_col].median()]
+            second_half = temp[temp[date_col] > temp[date_col].median()]
+            first_unique = first_half[customer_col].nunique()
+            second_unique = second_half[customer_col].nunique()
+            if first_unique > 0 and second_unique > first_unique:
+                growth_pct = round(
+                    ((second_unique - first_unique) / first_unique) * 100, 1
+                )
+                opportunities.append(
+                    {
+                        "category": "Customer",
+                        "impact": "high" if growth_pct > 30 else "medium",
+                        "message": f"Customer base grew {growth_pct}% in the latest period ({second_unique} vs {first_unique} unique customers). Consider expanding marketing reach.",
+                    }
+                )
+
+    del df, file_bytes
+
+    impact_order = {"high": 0, "medium": 1}
+    opportunities.sort(key=lambda o: impact_order.get(o["impact"], 2))
+
+    high_count = sum(1 for o in opportunities if o["impact"] == "high")
+    medium_count = sum(1 for o in opportunities if o["impact"] == "medium")
+
+    return {
+        "available": True,
+        "overall_opportunity_level": (
+            "high" if high_count > 0 else "medium" if medium_count > 0 else "low"
+        ),
+        "opportunity_count": {"high": high_count, "medium": medium_count},
+        "opportunities": opportunities,
+    }
+
+
 @app.get("/datasets/{dataset_id}/trend-detection")
 async def get_trend_detection(dataset_id: str, authorization: str = Header(None)):
     company_id, _ = get_company_id(authorization)
