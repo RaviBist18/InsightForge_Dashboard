@@ -145,14 +145,15 @@ export const getTransactions = async (): Promise<Transaction[]> => {
 export const getInsights = async (range?: string): Promise<Insight[]> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const stats = await getAggregateDashboardStats();
     const response = await fetch(`${baseUrl}/api/briefing`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         range: range || "monthly",
         category: "enterprise",
-        efficiency: 78.1,
-        newsHeadline: "Tech sector resilient amid market dip",
+        efficiency: stats.efficiency,
+        newsHeadline: stats.latestNews,
       }),
       cache: "no-store",
     });
@@ -819,4 +820,32 @@ export const getAnalyticsByCategory = async (slug: string) => {
     default:
       return { title: slug, totalValue: 0, growthPercentage: 0, chartData: [] };
   }
+};
+
+export interface SimulationResult {
+  projected: { revenue: number; orders: number; profit: number };
+  deltaPct: { revenue: number; orders: number };
+  confidence: string;
+  basis: string;
+}
+
+export const runSimulation = async (
+  leverDeltas: Record<string, number>,
+): Promise<SimulationResult> => {
+  const stats = await getAggregateDashboardStats();
+  const headers = await getAuthHeader();
+  const res = await fetch(`${BACKEND_URL}/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({
+      baseline: {
+        revenue: stats.totalRevenue,
+        orders: stats.totalOrders,
+        profit: stats.totalProfit,
+      },
+      leverDeltas,
+    }),
+  });
+  if (!res.ok) throw new Error("simulation failed");
+  return res.json();
 };

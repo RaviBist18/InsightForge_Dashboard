@@ -919,6 +919,20 @@ export default function SavedViewsPage() {
   const handleGenerateInsight = async (id: string) => {
     const v = views.find((x) => x.id === id);
     if (!v) return;
+    if (efficiency === 0) {
+      persist(
+        views.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                aiInsight:
+                  "Still loading dashboard data — try again in a moment.",
+              }
+            : x,
+        ),
+      );
+      return;
+    }
     try {
       const context = `Alert "${v.name}": ${METRIC_LABEL[v.metric]} ${v.operator} ${v.threshold}%. Current status: ${v.lastStatus}${v.triggeredValue != null ? `, latest value ${v.triggeredValue}%` : ""}${v.triggeredSource ? ` (${v.triggeredSource})` : ""}.`;
       const briefing = await fetchInsight(

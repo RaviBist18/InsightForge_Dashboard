@@ -12,6 +12,8 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from fastapi import FastAPI, UploadFile, File, HTTPException, Header
+from pydantic import BaseModel
+from typing import Dict
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from jwt import PyJWKClient
@@ -1960,3 +1962,60 @@ async def delete_dataset(dataset_id: str, authorization: str = Header(None)):
     ).execute()
 
     return {"status": "deleted", "id": dataset_id}
+
+
+class SimulateBaseline(BaseModel):
+    revenue: float
+    orders: float
+    profit: float
+
+
+class SimulateRequest(BaseModel):
+    baseline: SimulateBaseline
+    leverDeltas: Dict[str, float]
+
+
+# industry-standard elasticity ranges — NOT trained on user data, labeled estimate
+ELASTICITY = {
+    "marketing_spend": {"revenue": 0.35, "orders": 0.28},
+    "price": {"revenue": 0.6, "orders": -0.9},
+    "headcount": {"revenue": 0.15, "orders": 0.1},
+}
+
+
+@app.post("/simulate")
+async def simulate(payload: SimulateRequest):
+    base = payload.baseline
+    revenue = base.revenue
+    orders = base.orders
+
+    for lever, pct_change in payload.leverDeltas.items():
+        e = ELASTICITY.get(lever)
+        if not e:
+            continue
+        revenue *= 1 + (pct_change / 100) * e["revenue"]
+        orders *= 1 + (pct_change / 100) * e["orders"]
+
+    profit = revenue * 0.4
+
+    return {
+        "projected": {
+            "revenue": round(revenue, 2),
+            "orders": round(orders, 2),
+            "profit": round(profit, 2),
+        },
+        "deltaPct": {
+            "revenue": (
+                round((revenue - base.revenue) / base.revenue * 100, 1)
+                if base.revenue
+                else 0
+            ),
+            "orders": (
+                round((orders - base.orders) / base.orders * 100, 1)
+                if base.orders
+                else 0
+            ),
+        },
+        "confidence": "estimated",
+        "basis": "Industry-standard elasticity ranges — connect marketing spend data for precision.",
+    }

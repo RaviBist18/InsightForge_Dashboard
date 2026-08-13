@@ -28,6 +28,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  SlidersHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "../../lib/utils";
@@ -50,6 +51,7 @@ const ADMIN_NAV_ITEMS = [
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: Database, label: "Data Sources", href: "/dashboard/data-sources" },
   { icon: FileText, label: "Reports", href: "/dashboard/reports" },
+  { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: UserCog, label: "User Management", href: "/dashboard/admin/users" },
@@ -59,6 +61,7 @@ const ADMIN_NAV_ITEMS = [
 const USER_NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Overview", href: "/" },
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
+  { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
