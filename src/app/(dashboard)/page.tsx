@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Plus } from "lucide-react";
 import { KPISection } from "@/components/dashboard/KPISection";
 import { ChartsSection } from "@/components/dashboard/ChartsSection";
+import { RangeSwitcher } from "@/components/dashboard/RangeSwitcher";
 import { AIChat } from "@/components/dashboard/AIChat";
 import { CEOBriefing } from "@/components/CEOBriefing";
 import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
@@ -34,7 +35,7 @@ const KPI_SLUGS = new Set([
   "churn-rate",
 ]);
 
-export default function Home({ searchParams }: { searchParams: any }) {
+export default function Home() {
   // 1. State Management
   const [stats, setStats] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>([]);
@@ -179,7 +180,12 @@ export default function Home({ searchParams }: { searchParams: any }) {
           ]}
         />
 
-        {/* AnimatePresence router: main dashboard ↔ summary KPI panel */}
+        {/* range filter — sits right-aligned under Churn Rate card */}
+        <div className="flex justify-end">
+          <RangeSwitcher />
+        </div>
+
+        {/* AnimatePresence router: main dashboard â†” summary KPI panel */}
         <AnimatePresence mode="wait">
           {isKPIActive ? (
             <motion.div
@@ -223,17 +229,20 @@ export default function Home({ searchParams }: { searchParams: any }) {
                   to see live KPIs here.
                 </div>
               ) : (
-                <>
+                <div
+                  id="revenue-trend-section"
+                  style={{ scrollMarginTop: "64px" }}
+                >
                   <ChartsSection
                     revenueData={revenueData}
                     categoryData={[]}
-                    range="monthly"
+                    range={undefined}
                   />
 
                   <OpportunitiesPanel opportunities={opportunities} />
                   <RecommendationsPanel recommendations={recommendations} />
-                  <AIChat nodes={[]} stats={stats} />
-                </>
+                  <AIChat dashboardStats={stats} />
+                </div>
               )}
             </motion.div>
           )}

@@ -14,33 +14,26 @@ export async function POST(req: NextRequest) {
     }
     const { message, history, systemPrompt } = data;
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY_COPILOT || process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { reply: "Groq API key not configured." },
+        { reply: "Groq API key not configured.", followups: [] },
         { status: 500 },
       );
     }
 
-    // ─── DYNAMIC CONTEXT INJECTION ───
-    // We use the full systemPrompt built in AIChat.tsx which already contains
-    // the formatted nodes and stats strings
     const SYSTEM_CONTEXT = `
-ACT AS: InsightForge Lead Strategic Consultant. Boardroom-aggressive, blunt, zero-fluff.
+ACT AS: InsightForge Lead Strategic Consultant. Boardroom-direct, no fluff.
+${systemPrompt || "No live dashboard data detected."}
 
-CORE LOGIC:
-1. DATA FIDELITY: Use the LIVE LEDGER DATA below to answer questions about specific entities.
-2. EXTERNAL CORRELATION: Link internal revenue to market trends.
-3. PRESCRIPTIVE DIRECTIVES: Use only action verbs — Squeeze, Cut, Pivot, Defend, Capture.
-4. BANNED WORDS: overall, stable, healthy, monitor, good, slightly.
-
-${systemPrompt || "No live ledger data detected."}
-
-DASHBOARD OVERVIEW:
-- MRR: $678,460 (+12.5%) | Margin: 18.6%
-- Efficiency: 78.1% (-1.7% leak detected)
-- Market (SPY): $723.77 (+0.8%)
-`;
+RESPONSE FORMAT — respond ONLY with valid JSON, no markdown fences, no preamble:
+{"reply":"your answer here","followups":["short follow-up question 1","short follow-up question 2"]}
+Rules:
+- "reply" answers the user's question directly using only the data given above. If a metric is marked "not available," say so — never invent a number.
+- Always write "reply" as at least one full, natural sentence — never a bare number or fragment alone. Sound like you're talking to the user, not printing a stat.
+- Match reply length to the question: a simple factual ask ("what's our revenue") gets 1-2 sentences. A request for detail, explanation, or "why" gets a fuller breakdown — 3-5 sentences, referencing multiple data points from above where relevant.
+- "followups" = 2 short natural next questions the user might ask, based on what's actually answerable given the data above. Omit questions about unavailable metrics.
+`.trim();
 
     const messages = [
       { role: "system", content: SYSTEM_CONTEXT },
@@ -64,24 +57,49 @@ DASHBOARD OVERVIEW:
         body: JSON.stringify({
           model: "llama-3.1-8b-instant",
           messages,
-          max_tokens: 450, // Increased slightly for more detailed financial strategy
-          temperature: 0.2, // Lowered to 0.2 to prevent the AI from "guessing"
+          max_tokens: 500,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
         }),
       },
     );
 
-    const groqData = await groqRes.json();
-    const reply =
-      groqData?.choices?.[0]?.message?.content ?? "No response generated.";
+    if (groqRes.status === 429) {
+      logger.warn("Groq rate limit hit on ai-chat");
+      return NextResponse.json(
+        {
+          reply:
+            "I'm getting a lot of requests right now — give me a moment and try again.",
+          followups: [],
+          isRateLimited: true,
+        },
+        { status: 200 },
+      );
+    }
 
-    return NextResponse.json({ reply });
+    const groqData = await groqRes.json();
+    const raw = groqData?.choices?.[0]?.message?.content;
+
+    let parsed: { reply?: string; followups?: string[] } | null = null;
+    try {
+      parsed = raw ? JSON.parse(raw) : null;
+    } catch {
+      parsed = null;
+    }
+
+    return NextResponse.json({
+      reply: parsed?.reply || "No response generated.",
+      followups: Array.isArray(parsed?.followups)
+        ? parsed.followups.slice(0, 3)
+        : [],
+    });
   } catch (err: any) {
     logger.error("ai-chat route failed", {
       error: err.message,
       stack: err.stack,
     });
     return NextResponse.json(
-      { reply: "The Forge is offline. Check API connectivity." },
+      { reply: "The Forge is offline. Check API connectivity.", followups: [] },
       { status: 500 },
     );
   }

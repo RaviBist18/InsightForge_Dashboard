@@ -538,7 +538,7 @@ export const getAIRecommendations = async (
   }
 };
 
-export const getAggregateRevenueChart = async () => {
+export const getAggregateRevenueChart = async (range: string = "monthly") => {
   const headers = await getAuthHeader();
   const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
   const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
@@ -552,23 +552,79 @@ export const getAggregateRevenueChart = async () => {
     }),
   );
 
-  const monthMap: Record<string, number> = {};
+  // bucket key + display label depend on range
+  const getBucket = (dateStr: string): { key: string; label: string } => {
+    const d = new Date(dateStr);
+    switch (range) {
+      case "daily":
+        return {
+          key: d.toISOString().slice(0, 10), // YYYY-MM-DD
+          label: d.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+        };
+      case "weekly": {
+        // ISO week start (Monday)
+        const day = d.getDay() || 7;
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - day + 1);
+        return {
+          key: weekStart.toISOString().slice(0, 10),
+          label: weekStart.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+        };
+      }
+      case "quarterly": {
+        const q = Math.floor(d.getMonth() / 3) + 1;
+        return {
+          key: `${d.getFullYear()}-Q${q}`,
+          label: `Q${q} ${d.getFullYear()}`,
+        };
+      }
+      case "annually":
+        return {
+          key: `${d.getFullYear()}`,
+          label: `${d.getFullYear()}`,
+        };
+      case "monthly":
+      default:
+        return {
+          key: d.toLocaleDateString("en-US", {
+            month: "short",
+            year: "numeric",
+          }),
+          label: d.toLocaleDateString("en-US", { month: "short" }),
+        };
+    }
+  };
+
+  const bucketMap: Record<
+    string,
+    { total: number; label: string; sortKey: number }
+  > = {};
   kpiResults.forEach(({ revenue_series }) => {
     (revenue_series || []).forEach(
       (point: { date: string; revenue: number }) => {
-        const key = new Date(point.date).toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        });
-        monthMap[key] = (monthMap[key] ?? 0) + point.revenue;
+        const { key, label } = getBucket(point.date);
+        if (!bucketMap[key]) {
+          bucketMap[key] = {
+            total: 0,
+            label,
+            sortKey: new Date(point.date).getTime(),
+          };
+        }
+        bucketMap[key].total += point.revenue;
       },
     );
   });
 
-  return Object.entries(monthMap)
-    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-    .map(([month, total]) => ({
-      name: month.split(" ")[0],
+  return Object.values(bucketMap)
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .map(({ label, total }) => ({
+      name: label,
       revenue: Math.round(total),
       profit: 0, // no cost data — real, not estimated at 0.4 anymore
     }));
@@ -603,17 +659,13 @@ export const getStatusBreakdown = async (range?: string) => {
 export const getBucketedRevenue = async (range?: string) => {
   const companyId = await getCurrentCompanyId();
   if (!companyId) return [];
-
   const { data, error } = await supabase
     .from("transactions")
     .select("created_at, amount")
     .eq("company_id", companyId)
     .order("created_at", { ascending: true });
-
   if (error || !data) return [];
-
   const now = new Date();
-
   if (range === "daily") {
     const today = data.filter(
       (t) => new Date(t.created_at).toDateString() === now.toDateString(),
@@ -635,7 +687,6 @@ export const getBucketedRevenue = async (range?: string) => {
         profit: Math.round(revenue * 0.4),
       }));
   }
-
   if (range === "weekly") {
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 6);
@@ -657,7 +708,6 @@ export const getBucketedRevenue = async (range?: string) => {
         profit: Math.round(revenue * 0.4),
       }));
   }
-
   // base: real monthly buckets
   const monthMap: Record<string, number> = {};
   data.forEach((t) => {
@@ -674,7 +724,6 @@ export const getBucketedRevenue = async (range?: string) => {
       revenue,
       profit: Math.round(revenue * 0.4),
     }));
-
   if (range === "quarterly") {
     const quarters: Record<string, number> = {};
     monthly.forEach((m) => {
@@ -688,7 +737,6 @@ export const getBucketedRevenue = async (range?: string) => {
       profit: Math.round(revenue * 0.4),
     }));
   }
-
   if (range === "annually") {
     const years: Record<string, number> = {};
     monthly.forEach((m) => {
@@ -701,7 +749,6 @@ export const getBucketedRevenue = async (range?: string) => {
       profit: Math.round(revenue * 0.4),
     }));
   }
-
   return monthly; // "monthly" or default
 };
 

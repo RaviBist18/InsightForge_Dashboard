@@ -24,6 +24,7 @@ import {
   Activity,
   Zap,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
@@ -137,7 +138,6 @@ const CustomBarTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-// ─── Chart Card wrapper ─────────────────────────────────────────────────────
 const ChartCard = ({
   title,
   icon: Icon,
@@ -146,6 +146,7 @@ const ChartCard = ({
   delay = 0,
   badge,
   id,
+  explainPayload,
 }: {
   title: string;
   icon: React.ElementType;
@@ -154,39 +155,132 @@ const ChartCard = ({
   delay?: number;
   badge?: React.ReactNode;
   id?: string;
-}) => (
-  <motion.div
-    id={id}
-    initial={{ opacity: 0, y: 16 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.4, delay, ease: [0.23, 1, 0.32, 1] }}
-    className={`relative rounded-xl p-5 overflow-hidden ${className}`}
-    style={{
-      background: "var(--bg-surface)",
-      border: "1px solid var(--border)",
-    }}
-  >
-    <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-      <div className="flex items-center gap-2">
-        <div
-          className="p-1.5 rounded-xl"
-          style={{ background: "var(--accent-subtle)" }}
-        >
-          <Icon className="w-4 h-4" style={{ color: "var(--accent)" }} />
+  explainPayload?: { data: any[]; note: string };
+}) => {
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explanation, setExplanation] = useState("");
+
+  const handleExplain = async () => {
+    if (!explainPayload) return;
+    setExplainOpen(true);
+    if (explanation) return; // already fetched, just toggling open
+    setExplainLoading(true);
+    try {
+      const res = await fetch("/api/copilot/explain-chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chartTitle: title,
+          note: explainPayload.note,
+          data: explainPayload.data,
+        }),
+      });
+      const json = await res.json();
+      setExplanation(
+        json.explanation || "Couldn't generate an explanation right now.",
+      );
+    } catch {
+      setExplanation("Couldn't generate an explanation right now.");
+    } finally {
+      setExplainLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      id={id}
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.4, delay, ease: [0.23, 1, 0.32, 1] }}
+      className={`relative rounded-xl p-5 overflow-hidden ${className}`}
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-2">
+          <div
+            className="p-1.5 rounded-xl"
+            style={{ background: "var(--accent-subtle)" }}
+          >
+            <Icon className="w-4 h-4" style={{ color: "var(--accent)" }} />
+          </div>
+          <h3
+            className="font-semibold text-[13px]"
+            style={{ color: "var(--text-primary)" }}
+          >
+            {title}
+          </h3>
         </div>
-        <h3
-          className="font-semibold text-[13px]"
-          style={{ color: "var(--text-primary)" }}
-        >
-          {title}
-        </h3>
+        <div className="flex items-center gap-2">
+          {explainPayload && (
+            <button
+              onClick={() =>
+                explainOpen ? setExplainOpen(false) : handleExplain()
+              }
+              className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-medium transition-colors"
+              style={{
+                background: explainOpen
+                  ? "var(--accent)"
+                  : "var(--accent-subtle)",
+                color: explainOpen ? "#fff" : "var(--accent)",
+              }}
+            >
+              <Sparkles size={11} />
+              {explainOpen ? "Hide" : "Explain"}
+            </button>
+          )}
+          {badge}
+        </div>
       </div>
-      {badge}
-    </div>
-    <div>{children}</div>
-  </motion.div>
-);
+
+      <AnimatePresence>
+        {explainOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden mb-4"
+          >
+            <div
+              className="px-3.5 py-3 rounded-xl text-[12px] leading-relaxed"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+              }}
+            >
+              {explainLoading ? (
+                <div className="flex items-center gap-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: "var(--accent)" }}
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{
+                        duration: 0.8,
+                        repeat: Infinity,
+                        delay: i * 0.15,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                explanation
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div>{children}</div>
+    </motion.div>
+  );
+};
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 interface ChartsSectionProps {
@@ -330,6 +424,10 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         icon={TrendingUp}
         delay={0}
         className="col-span-1 lg:col-span-2"
+        explainPayload={{
+          data: revenueChartData,
+          note: `Revenue is real transaction data. Profit is an ESTIMATED 40% flat margin (no real cost data exists yet) — always describe profit/margin figures as estimated, never as precise.`,
+        }}
         badge={
           <div className="flex flex-wrap items-center gap-4">
             {revenueChartData.length > 0 && (
@@ -387,15 +485,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
                 </motion.span>
               )}
             </AnimatePresence>
-            <span
-              className="px-2 py-0.5 rounded-md text-[11px] font-medium"
-              style={{
-                background: "var(--accent-subtle)",
-                color: "var(--accent)",
-              }}
-            >
-              {rangeLabel[range] || "This Month"}
-            </span>
             <div className="flex gap-3">
               {[
                 { label: "Revenue", color: COLORS[0] },
@@ -525,6 +614,10 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         icon={BarChart2}
         delay={0.1}
         id="category-chart"
+        explainPayload={{
+          data: filteredCategoryData,
+          note: `Real revenue totals per transaction category for the selected period.`,
+        }}
         badge={
           categoryInsight ? (
             <div className="group relative">
@@ -633,6 +726,10 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
         icon={Activity}
         delay={0.2}
         id="status-chart"
+        explainPayload={{
+          data: statusChartData,
+          note: `Real percentage breakdown of transaction statuses for the selected period.`,
+        }}
       >
         {statusChartData.length === 0 && !loading ? (
           <div
