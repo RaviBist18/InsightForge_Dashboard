@@ -9,6 +9,8 @@ export interface DashboardStats {
   totalOrders: number;
   activeUsers: number;
   churnRate: number;
+  signups: number;
+  churned: number;
   efficiency: number;
   latestNews: string;
   mrrSparkline?: { month: string; mrr: number }[];
@@ -67,56 +69,6 @@ async function fetchTransactionsBucketed() {
 
   return { rows: data, monthMap };
 }
-
-// ─── getDashboardStats — real, replaces CANONICAL ─────────────────────────
-export const getDashboardStats = async (
-  range?: string,
-): Promise<DashboardStats> => {
-  const { rows, monthMap } = await fetchTransactionsBucketed();
-
-  const now = new Date();
-  const currentKey = now.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
-  const totalRevenue = Math.round(monthMap[currentKey] ?? 0);
-  const totalProfit = Math.round(totalRevenue * 0.4); // margin ratio kept — no cost data exists yet
-  const profitMargin = totalRevenue > 0 ? 40 : 0;
-  const totalOrders = rows.filter((t) => {
-    const key = new Date(t.created_at).toLocaleDateString("en-US", {
-      month: "short",
-      year: "numeric",
-    });
-    return key === currentKey;
-  }).length;
-  const activeUsers = new Set(
-    rows
-      .filter((t) => {
-        const key = new Date(t.created_at).toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        });
-        return key === currentKey;
-      })
-      .map((t) => t.customer),
-  ).size;
-
-  const sparkline = Object.entries(monthMap)
-    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-    .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
-
-  return {
-    totalRevenue,
-    totalProfit,
-    profitMargin,
-    totalOrders,
-    activeUsers,
-    churnRate: 0, // no real churn data source yet — flagged, not fabricated
-    efficiency: profitMargin, // same 0.4 margin basis as profit — no separate real efficiency metric exists yet
-    latestNews: "Live data connected.",
-    mrrSparkline: sparkline,
-  };
-};
 
 // ─── getTransactions — real, CoinGecko stripped ────────────────────────────
 export const getTransactions = async (): Promise<Transaction[]> => {
@@ -247,6 +199,8 @@ export const getAggregateDashboardStats = async (): Promise<
       totalOrders: 0,
       activeUsers: 0,
       churnRate: 0,
+      signups: 0,
+      churned: 0,
       efficiency: 0,
       latestNews: "No datasets uploaded yet.",
       mrrSparkline: [],
@@ -266,12 +220,18 @@ export const getAggregateDashboardStats = async (): Promise<
   let totalRevenue = 0;
   let totalOrders = 0;
   let uniqueCustomersSum = 0;
+  let signupsSum = 0;
+  let churnedSum = 0;
+  let totalCostSum = 0;
   const monthMap: Record<string, number> = {};
 
   kpiResults.forEach(({ kpis, revenue_series }) => {
     totalRevenue += kpis.total_revenue ?? 0;
     totalOrders += kpis.row_count ?? 0;
     uniqueCustomersSum += kpis.unique_customers ?? 0;
+    signupsSum += kpis.signups ?? 0;
+    churnedSum += kpis.churned ?? 0;
+    totalCostSum += kpis.total_cost ?? 0;
 
     (revenue_series || []).forEach(
       (point: { date: string; revenue: number }) => {
@@ -294,18 +254,127 @@ export const getAggregateDashboardStats = async (): Promise<
           (sparkline[sparkline.length - 2].mrr || 1)) *
         100
       : 0;
+  const totalProfit = totalRevenue - totalCostSum;
+  const profitMargin =
+    totalRevenue > 0
+      ? Math.round((totalProfit / totalRevenue) * 100 * 100) / 100
+      : 0;
+  const churnRate =
+    signupsSum > 0
+      ? Math.round((churnedSum / signupsSum) * 100 * 100) / 100
+      : 0;
+
   return {
     totalRevenue: Math.round(totalRevenue),
-    totalProfit: 0, // TODO: no cost/profit column exists in dataset schema yet — not fabricated
-    profitMargin: 0, // TODO: same — needs a cost field before this is real
+    totalProfit: Math.round(totalProfit),
+    profitMargin,
     totalOrders,
-    activeUsers: uniqueCustomersSum, // sum across datasets — flagged, not deduped across files
-    churnRate: 0, // TODO: no churn source until churn-prediction endpoint is wired in here
+    activeUsers: uniqueCustomersSum,
+    churnRate,
+    signups: signupsSum,
+    churned: churnedSum,
     efficiency: Math.round(growthRate * 10) / 10,
     latestNews:
       sparkline.length >= 2
         ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`
         : `Aggregated across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
+    mrrSparkline: sparkline,
+    datasetCount: datasets.length,
+  };
+};
+
+export const getMyDatasetStats = async (): Promise<
+  DashboardStats & { datasetCount: number }
+> => {
+  const headers = await getAuthHeader();
+
+  const listRes = await fetch(`${BACKEND_URL}/datasets?mine=true`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+
+  if (datasets.length === 0) {
+    return {
+      totalRevenue: 0,
+      totalProfit: 0,
+      profitMargin: 0,
+      totalOrders: 0,
+      activeUsers: 0,
+      churnRate: 0,
+      signups: 0,
+      churned: 0,
+      efficiency: 0,
+      latestNews: "No datasets uploaded yet.",
+      mrrSparkline: [],
+      datasetCount: 0,
+    };
+  }
+
+  const kpiResults = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
+        headers,
+      });
+      return res.ok ? res.json() : { kpis: {}, revenue_series: [] };
+    }),
+  );
+
+  let totalRevenue = 0;
+  let totalOrders = 0;
+  let uniqueCustomersSum = 0;
+  let signupsSum = 0;
+  let churnedSum = 0;
+  let totalCostSum = 0;
+  const monthMap: Record<string, number> = {};
+
+  kpiResults.forEach(({ kpis, revenue_series }) => {
+    totalRevenue += kpis.total_revenue ?? 0;
+    totalOrders += kpis.row_count ?? 0;
+    uniqueCustomersSum += kpis.unique_customers ?? 0;
+    signupsSum += kpis.signups ?? 0;
+    churnedSum += kpis.churned ?? 0;
+    totalCostSum += kpis.total_cost ?? 0;
+    (revenue_series || []).forEach(
+      (point: { date: string; revenue: number }) => {
+        const key = new Date(point.date).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+        monthMap[key] = (monthMap[key] ?? 0) + point.revenue;
+      },
+    );
+  });
+
+  const sparkline = Object.entries(monthMap)
+    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+    .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
+  const growthRate =
+    sparkline.length >= 2
+      ? ((sparkline[sparkline.length - 1].mrr -
+          sparkline[sparkline.length - 2].mrr) /
+          (sparkline[sparkline.length - 2].mrr || 1)) *
+        100
+      : 0;
+
+  const totalProfit = totalRevenue - totalCostSum;
+  const profitMargin =
+    totalRevenue > 0
+      ? Math.round((totalProfit / totalRevenue) * 100 * 100) / 100
+      : 0;
+  const churnRate =
+    signupsSum > 0
+      ? Math.round((churnedSum / signupsSum) * 100 * 100) / 100
+      : 0;
+
+  return {
+    totalRevenue: Math.round(totalRevenue),
+    totalProfit: Math.round(totalProfit),
+    profitMargin,
+    totalOrders,
+    activeUsers: uniqueCustomersSum,
+    churnRate,
+    signups: signupsSum,
+    churned: churnedSum,
+    efficiency: Math.round(growthRate * 10) / 10,
+    latestNews: `Your ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
     mrrSparkline: sparkline,
     datasetCount: datasets.length,
   };
@@ -360,6 +429,77 @@ export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
   );
 
   return results.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
+};
+
+export const getDatasetFilenames = async (): Promise<string[]> => {
+  const headers = await getAuthHeader();
+  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
+  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+  return datasets.map((d) => d.filename);
+};
+
+export interface SavedAlertRow {
+  id: string;
+  company_id: string;
+  created_by: string;
+  name: string;
+  metric: "dataset_delta" | "mrr_delta";
+  dataset_filter: string;
+  operator: "above" | "below";
+  threshold: number;
+  color: string;
+  active: boolean;
+  last_checked: string | null;
+  last_status: "triggered" | "safe" | "unchecked";
+  triggered_value: number | null;
+  triggered_source: string | null;
+  ai_insight: string | null;
+  created_at: string;
+}
+
+export const getSavedAlerts = async (): Promise<SavedAlertRow[]> => {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return [];
+  const { data, error } = await supabase
+    .from("saved_alerts")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data;
+};
+
+export const createSavedAlert = async (
+  alert: Omit<SavedAlertRow, "id" | "company_id" | "created_by" | "created_at">,
+): Promise<SavedAlertRow | null> => {
+  const companyId = await getCurrentCompanyId();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!companyId || !user) return null;
+  const { data, error } = await supabase
+    .from("saved_alerts")
+    .insert({ ...alert, company_id: companyId, created_by: user.id })
+    .select()
+    .single();
+  if (error || !data) return null;
+  return data;
+};
+
+export const updateSavedAlert = async (
+  id: string,
+  patch: Partial<SavedAlertRow>,
+): Promise<boolean> => {
+  const { error } = await supabase
+    .from("saved_alerts")
+    .update(patch)
+    .eq("id", id);
+  return !error;
+};
+
+export const deleteSavedAlert = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from("saved_alerts").delete().eq("id", id);
+  return !error;
 };
 
 export interface RiskItem {
@@ -758,8 +898,8 @@ export const getBucketedRevenue = async (range?: string) => {
 
 // ─── getAnalyticsByCategory — real, wired to getDashboardStats ────────────
 export const getAnalyticsByCategory = async (slug: string) => {
-  const stats = await getDashboardStats();
-  const revenueTrend = await getRevenueData();
+  const stats = await getAggregateDashboardStats();
+  const revenueTrend = await getAggregateRevenueChart();
 
   switch (slug) {
     case "total-revenue":

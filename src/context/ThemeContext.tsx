@@ -8,23 +8,31 @@ import {
   ReactNode,
 } from "react";
 
+type Theme = "light" | "dark";
+
 interface ThemeContextType {
   compactMode: boolean;
   setCompactMode: (v: boolean) => void;
+  theme: Theme;
+  setTheme: (v: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [compactMode, setCompactState] = useState(false);
+  const [theme, setThemeState] = useState<Theme>("light");
 
   // Load from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("insightforge_theme");
       if (saved) {
-        const { compactMode } = JSON.parse(saved);
-        if (typeof compactMode === "boolean") setCompactState(compactMode);
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.compactMode === "boolean")
+          setCompactState(parsed.compactMode);
+        if (parsed.theme === "light" || parsed.theme === "dark")
+          setThemeState(parsed.theme);
       }
     } catch {
       /* ignore */
@@ -41,7 +49,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [compactMode]);
 
-  const persist = (updates: Partial<{ compactMode: boolean }>) => {
+  // Apply theme to root
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "dark") {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const persist = (
+    updates: Partial<{ compactMode: boolean; theme: Theme }>,
+  ) => {
     try {
       const current = JSON.parse(
         localStorage.getItem("insightforge_theme") || "{}",
@@ -60,8 +80,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     persist({ compactMode: v });
   };
 
+  const setTheme = (v: Theme) => {
+    setThemeState(v);
+    persist({ theme: v });
+  };
+
   return (
-    <ThemeContext.Provider value={{ compactMode, setCompactMode }}>
+    <ThemeContext.Provider
+      value={{ compactMode, setCompactMode, theme, setTheme }}
+    >
       {children}
     </ThemeContext.Provider>
   );

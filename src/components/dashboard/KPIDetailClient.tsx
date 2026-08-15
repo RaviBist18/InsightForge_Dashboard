@@ -1400,6 +1400,7 @@ function SummaryView({
   usersHistData,
   role,
   persona,
+  onBack,
 }: {
   slug: string;
   cfg: (typeof SLUG_CONFIG)[string];
@@ -1412,6 +1413,7 @@ function SummaryView({
   usersHistData: NamedValuePoint[];
   role: UserRole;
   persona: AIPersona;
+  onBack?: () => void;
 }) {
   if (!cfg) return null;
 
@@ -1420,6 +1422,15 @@ function SummaryView({
 
   return (
     <div className="space-y-4">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="p-2 rounded-lg transition-colors hover:opacity-70"
+          style={{ color: "var(--accent)" }}
+        >
+          <ArrowLeft size={16} />
+        </button>
+      )}
       <div className="flex items-center gap-4">
         <div
           className="p-3 rounded-xl border"
@@ -1677,6 +1688,7 @@ export const KPIDetailClient: React.FC<KPIDetailClientProps> = ({
         usersHistData={usersHistData}
         role={role}
         persona={persona}
+        onBack={onBack}
       />
     );
   }

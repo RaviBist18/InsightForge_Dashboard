@@ -18,9 +18,10 @@ import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import {
   DashboardStats,
-  getAggregateDashboardStats,
+  getMyDatasetStats,
   getDatasetMovers,
 } from "@/lib/data";
+import Link from "next/link";
 import {
   Building2,
   Target,
@@ -34,6 +35,7 @@ import {
   Activity,
   Archive,
   Flame,
+  Plus,
 } from "lucide-react";
 import { CEOBriefing } from "@/components/CEOBriefing";
 
@@ -248,13 +250,15 @@ export default function WorkspaceClient({
   // ── LIVE METRICS ──
   const [mrr, setMrr] = useState(initialMrr);
   const [churn, setChurn] = useState(initialChurn);
+  const [totalProfit, setTotalProfit] = useState(0);
+  const [profitMargin, setProfitMargin] = useState(0);
   const [efficiency, setEfficiency] = useState(0);
   const [latestNews, setLatestNews] = useState("Market stable");
   const [sectionALabel, setSectionALabel] = useState("Risks");
   const [sectionAItems, setSectionAItems] = useState<string[]>([]);
   const [sectionBLabel, setSectionBLabel] = useState("Opportunities");
   const [sectionBItems, setSectionBItems] = useState<string[]>([]);
-  const [signups] = useState(initialSignups);
+  const [signups, setSignups] = useState(initialSignups);
   const [mrrSparkline, setMrrSparkline] = useState<
     { month: string; mrr: number }[]
   >([]);
@@ -280,7 +284,11 @@ export default function WorkspaceClient({
   const [sealLabel, setSealLabel] = useState("");
   const [sealing, setSealing] = useState(false);
   const [sealSuccess, setSealSuccess] = useState(false);
-
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(
+    null,
+  );
   const [simLoading, setSimLoading] = useState(false);
 
   // ── CUSTOMIZER ──
@@ -317,7 +325,7 @@ export default function WorkspaceClient({
     async function fetchMetrics() {
       setMetricsLoading(true);
       try {
-        const stats = await getAggregateDashboardStats();
+        const stats = await getMyDatasetStats();
 
         if (stats.datasetCount === 0) {
           setMrrSparkline(generateMockSparkline(initialMrr));
@@ -328,9 +336,12 @@ export default function WorkspaceClient({
         const sparkline = stats.mrrSparkline || [];
         setMrrSparkline(sparkline);
         setMrr(stats.totalRevenue);
+        setTotalProfit(stats.totalProfit);
+        setProfitMargin(stats.profitMargin);
         setCurrentMonthOrders(stats.totalOrders);
         setCurrentMonthUsers(stats.activeUsers);
         setChurn(stats.churnRate);
+        setSignups(stats.signups);
         setEfficiency(stats.efficiency);
         setLatestNews(stats.latestNews);
 
@@ -492,6 +503,55 @@ export default function WorkspaceClient({
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const deleteSnapshots = async (ids: string[]) => {
+    if (ids.length === 0 || isReadOnly) return;
+    setDeleting(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: "delete-snapshots", ids }),
+      });
+      const data = await res.json();
+      if (data.deletedIds) {
+        setSnapshots((prev) =>
+          prev.filter((s) => !data.deletedIds.includes(s.id)),
+        );
+        setSelectedIds(new Set());
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteOne = (id: string) => setPendingDeleteIds([id]);
+  const deleteSelected = () => setPendingDeleteIds(Array.from(selectedIds));
+  const deleteAll = () => setPendingDeleteIds(snapshots.map((s) => s.id));
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteIds) return;
+    await deleteSnapshots(pendingDeleteIds);
+    setPendingDeleteIds(null);
+  };
+
   // ── SAVE SETTINGS ─────────────────────────────────────────────────────────
   const saveSettings = async () => {
     if (isReadOnly) return;
@@ -528,12 +588,14 @@ export default function WorkspaceClient({
 
   const liveStats: DashboardStats = {
     totalRevenue: mrr,
-    totalProfit: Math.round(mrr * 0.4),
-    profitMargin: 40,
+    totalProfit,
+    profitMargin,
     totalOrders: currentMonthOrders,
     activeUsers: currentMonthUsers,
     churnRate: churn,
-    efficiency: 78.5,
+    signups,
+    churned: 0,
+    efficiency,
     latestNews: "Telemetry integrated.",
     mrrSparkline: mrrSparkline,
   };
@@ -582,7 +644,7 @@ export default function WorkspaceClient({
                   className="text-2xl font-bold tracking-tight"
                   style={{ color: accent }}
                 >
-                  {isAdmin ? "Workspace" : "My Workspace"}
+                  My Workspace
                 </h1>
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center flex-wrap gap-1.5">
                   <span>
@@ -598,51 +660,22 @@ export default function WorkspaceClient({
                       {companyName}
                     </span>
                   )}
-                  {!isAdmin && (
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
-                      style={{ background: `${accent}20`, color: accent }}
-                    >
-                      MEMBER VIEW
-                    </span>
-                  )}
+                  <span
+                    className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+                    style={{ background: `${accent}20`, color: accent }}
+                  >
+                    {isAdmin ? "ADMIN VIEW" : "MEMBER VIEW"}
+                  </span>
                 </p>
               </div>
             </div>
-            {/* Live Tickers — admin only */}
-            {isAdmin && (
-              <div className="hidden md:flex items-center gap-4">
-                {tickers.map((t) => (
-                  <div
-                    key={t.symbol}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded"
-                    style={{
-                      background: "rgba(0,0,0,0.03)",
-                      border: "1px solid rgba(0,0,0,0.06)",
-                    }}
-                  >
-                    <span className="text-xs text-[var(--text-secondary)] font-bold">
-                      {t.symbol}
-                    </span>
-                    <span className="text-xs text-[var(--text-primary)] font-mono">
-                      {t.price != null ? `$${t.price.toFixed(2)}` : "—"}
-                    </span>
-                    {t.change != null && (
-                      <span
-                        className="text-xs font-bold"
-                        style={{
-                          color:
-                            t.change >= 0 ? "var(--success)" : "var(--danger)",
-                        }}
-                      >
-                        {t.change >= 0 ? "+" : ""}
-                        {t.change.toFixed(2)}%
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <Link
+              href="/dashboard/datasets"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-medium text-white transition-colors"
+              style={{ background: accent }}
+            >
+              <Plus size={14} /> Upload Dataset
+            </Link>
           </div>
           <div
             className="h-px w-full mt-4"
@@ -693,201 +726,20 @@ export default function WorkspaceClient({
                     activeTab === slug ? ("pulse" as any) : (slug as any),
                   )
                 }
-                revenueChangePct={isAdmin ? mrrTrend : undefined}
-                metricsLoading={isAdmin ? metricsLoading : false}
-                estimatedSlugs={
-                  isAdmin ? ["total-profit", "profit-margin"] : undefined
-                }
-                allowedSlugs={
-                  isAdmin
-                    ? [
-                        "total-revenue",
-                        "total-profit",
-                        "profit-margin",
-                        "total-orders",
-                        "active-users",
-                        "churn-rate",
-                      ]
-                    : ["total-revenue", "total-profit", "profit-margin"]
-                }
+                revenueChangePct={mrrTrend}
+                metricsLoading={metricsLoading}
+                estimatedSlugs={["total-profit", "profit-margin"]}
+                allowedSlugs={[
+                  "total-revenue",
+                  "total-profit",
+                  "profit-margin",
+                ]}
               />
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Internal Revenue Panel */}
-                {isAdmin && (
-                  <div
-                    className="rounded-xl p-5"
-                    style={{
-                      background: "rgba(0,0,0,0.02)",
-                      border: `1px solid ${accent}30`,
-                      boxShadow: `0 0 30px ${accent}08`,
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] uppercase tracking-widest mb-1">
-                          {isAdmin
-                            ? "Internal Revenue"
-                            : "Your Revenue Contribution"}
-                        </p>
-                        {metricsLoading ? (
-                          <motion.div
-                            className="h-9 w-40 rounded"
-                            animate={{ opacity: [0.3, 0.7, 0.3] }}
-                            transition={{ duration: 1.5, repeat: Infinity }}
-                            style={{ background: "rgba(0,0,0,0.06)" }}
-                          />
-                        ) : (
-                          <p className="text-3xl font-bold text-[var(--text-primary)]">
-                            ${mrr.toLocaleString()}
-                            <span className="text-sm text-[var(--text-secondary)] ml-2 font-normal">
-                              /mo
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-[var(--text-secondary)]">
-                          Churn
-                        </p>
-                        <p
-                          className="text-lg font-bold"
-                          style={{
-                            color:
-                              churn < 3 ? "var(--success)" : "var(--danger)",
-                          }}
-                        >
-                          {churn}%
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="h-40">
-                      {metricsLoading ? (
-                        <div className="h-full flex items-end gap-1 px-2">
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <motion.div
-                              key={i}
-                              className="flex-1 rounded-t"
-                              animate={{ opacity: [0.2, 0.5, 0.2] }}
-                              transition={{
-                                duration: 1.2,
-                                repeat: Infinity,
-                                delay: i * 0.1,
-                              }}
-                              style={{
-                                height: `${30 + ((i * 37) % 60)}%`,
-                                background: `${accent}30`,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={mrrSparkline}>
-                            <defs>
-                              <linearGradient
-                                id="colorRevenue"
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                              >
-                                <stop
-                                  offset="5%"
-                                  stopColor="var(--accent)"
-                                  stopOpacity={0.3}
-                                />
-                                <stop
-                                  offset="95%"
-                                  stopColor="var(--accent)"
-                                  stopOpacity={0}
-                                />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid
-                              strokeDasharray="3 3"
-                              vertical={false}
-                              stroke="var(--border)"
-                            />
-                            <XAxis
-                              dataKey="month"
-                              tick={{ fontSize: 9, fill: "var(--text-muted)" }}
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <YAxis hide />
-                            <Tooltip
-                              contentStyle={{
-                                background: "var(--bg-surface)",
-                                border: `1px solid ${accent}40`,
-                                borderRadius: 6,
-                                fontSize: 11,
-                                color: "var(--text-primary)",
-                              }}
-                              formatter={(v: number) => [
-                                `$${v.toLocaleString()}`,
-                                "Revenue",
-                              ]}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="mrr"
-                              stroke="var(--accent)"
-                              strokeWidth={3}
-                              fill="url(#colorRevenue)"
-                              dot={{
-                                r: 3,
-                                fill: "var(--accent)",
-                                strokeWidth: 0,
-                              }}
-                              activeDot={{
-                                r: 6,
-                                strokeWidth: 0,
-                                fill: "var(--accent)",
-                              }}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mt-3">
-                      {[
-                        {
-                          label: isAdmin ? "New Signups" : "Your Signups",
-                          value: isAdmin ? signups : 1,
-                          color: "var(--success)",
-                        },
-                        {
-                          label: "Subscribers",
-                          value: isAdmin ? Math.round(mrr / 49) : 1,
-                          color: accent,
-                        },
-                      ].map((m) => (
-                        <div
-                          key={m.label}
-                          className="p-3 rounded-lg"
-                          style={{ background: "rgba(0,0,0,0.03)" }}
-                        >
-                          <p className="text-xs text-[var(--text-secondary)] mb-1">
-                            {m.label}
-                          </p>
-                          <p
-                            className="text-xl font-bold"
-                            style={{ color: m.color }}
-                          >
-                            {m.value}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Why Feed Panel */}
                 <div
-                  className={`rounded-xl p-5 flex flex-col ${!isAdmin ? "lg:col-span-2" : ""}`}
+                  className="rounded-xl p-5 flex flex-col lg:col-span-2"
                   style={{
                     background: "rgba(0,0,0,0.02)",
                     border: "1px solid rgba(0,0,0,0.06)",
@@ -1324,6 +1176,309 @@ export default function WorkspaceClient({
                   </button>
                 )}
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* ── SNAPSHOT ARCHIVE ─────────────────────────────────────────── */}
+        {activeTab === "archives" && (
+          <motion.div
+            key="archives"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+          >
+            {/* Seal form */}
+            <div
+              className="rounded-lg p-5 mb-6"
+              style={{
+                background: "rgba(0,0,0,0.02)",
+                border: `1px solid ${accent}30`,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Archive size={16} style={{ color: accent }} />
+                <span className="text-sm font-bold">
+                  Seal a Decision Snapshot
+                </span>
+              </div>
+              <p
+                className="text-xs mb-4"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Save today's numbers so you can look back later.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={sealLabel}
+                  onChange={(e) => setSealLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSeal()}
+                  placeholder="Preserve today's numbers for future comparison"
+                  disabled={isReadOnly || sealing}
+                  className="flex-1 px-3 py-2.5 rounded text-sm outline-none transition-all"
+                  style={{
+                    background: "var(--card-bg, #fff)",
+                    border: "1px solid rgba(0,0,0,0.1)",
+                  }}
+                />
+                <button
+                  onClick={handleSeal}
+                  disabled={!sealLabel.trim() || isReadOnly || sealing}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded text-xs font-bold whitespace-nowrap transition-all"
+                  style={{
+                    background: accent,
+                    color: "#fff",
+                    opacity:
+                      !sealLabel.trim() || isReadOnly || sealing ? 0.4 : 1,
+                  }}
+                >
+                  {sealing ? (
+                    "Sealing..."
+                  ) : sealSuccess ? (
+                    <>✓ Sealed</>
+                  ) : (
+                    <>
+                      <Archive size={13} /> Seal Snapshot
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Bulk actions */}
+            {snapshots.length > 0 && (
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} selected`
+                    : `${snapshots.length} snapshot${snapshots.length > 1 ? "s" : ""}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  {selectedIds.size > 0 && (
+                    <button
+                      onClick={deleteSelected}
+                      disabled={deleting || isReadOnly}
+                      className="px-3 py-1.5 rounded text-xs font-bold"
+                      style={{
+                        background: "rgba(220,38,38,0.1)",
+                        color: "#dc2626",
+                        opacity: deleting ? 0.5 : 1,
+                      }}
+                    >
+                      Delete Selected ({selectedIds.size})
+                    </button>
+                  )}
+                  <button
+                    onClick={deleteAll}
+                    disabled={deleting || isReadOnly}
+                    className="px-3 py-1.5 rounded text-xs font-bold"
+                    style={{
+                      background: "rgba(220,38,38,0.1)",
+                      color: "#dc2626",
+                      opacity: deleting ? 0.5 : 1,
+                    }}
+                  >
+                    Delete All
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* List */}
+            {snapshots.length === 0 ? (
+              <div
+                className="text-xs font-bold text-center py-16"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                No snapshots sealed yet — your decision history will appear
+                here.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {snapshots.map((snap) => (
+                  <div
+                    key={snap.id}
+                    className="rounded-lg p-4 transition-all hover:shadow-sm"
+                    style={{
+                      background: "var(--card-bg, #fff)",
+                      border: "1px solid rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(snap.id)}
+                          onChange={() => toggleSelect(snap.id)}
+                          className="mr-1"
+                        />
+                        <div
+                          className="flex items-center justify-center rounded"
+                          style={{
+                            width: 28,
+                            height: 28,
+                            background: `${accent}15`,
+                            color: accent,
+                          }}
+                        >
+                          <Archive size={14} />
+                        </div>
+                        <span className="text-sm font-bold">{snap.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-[11px] font-medium whitespace-nowrap"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          {new Date(snap.created_at).toLocaleDateString(
+                            undefined,
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            },
+                          )}{" "}
+                          ·{" "}
+                          {new Date(snap.created_at).toLocaleTimeString(
+                            undefined,
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                        <button
+                          onClick={() => deleteOne(snap.id)}
+                          disabled={deleting || isReadOnly}
+                          className="text-[11px] font-bold px-2 py-1 rounded"
+                          style={{ color: "#dc2626" }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div
+                        className="rounded p-2.5"
+                        style={{ background: "rgba(0,0,0,0.025)" }}
+                      >
+                        <div
+                          className="text-[10px] font-bold uppercase tracking-wide mb-0.5"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          MRR
+                        </div>
+                        <div className="text-sm font-bold">
+                          ${snap.mrr.toLocaleString()}
+                        </div>
+                      </div>
+                      <div
+                        className="rounded p-2.5"
+                        style={{ background: "rgba(0,0,0,0.025)" }}
+                      >
+                        <div
+                          className="text-[10px] font-bold uppercase tracking-wide mb-0.5"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          Churn
+                        </div>
+                        <div className="text-sm font-bold">{snap.churn}%</div>
+                      </div>
+                      <div
+                        className="rounded p-2.5"
+                        style={{ background: "rgba(0,0,0,0.025)" }}
+                      >
+                        <div
+                          className="text-[10px] font-bold uppercase tracking-wide mb-0.5"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          Signups
+                        </div>
+                        <div className="text-sm font-bold">{snap.signups}</div>
+                      </div>
+                    </div>
+
+                    <div
+                      className="flex items-center gap-1.5 text-[10px] font-mono"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      <span
+                        className="px-1.5 py-0.5 rounded"
+                        style={{ background: "rgba(0,0,0,0.04)" }}
+                      >
+                        SEALED
+                      </span>
+                      <span className="truncate">{snap.hash}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+        {/* Delete confirm modal */}
+        <AnimatePresence>
+          {pendingDeleteIds && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+              style={{ background: "rgba(0,0,0,0.5)" }}
+              onClick={() => !deleting && setPendingDeleteIds(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-xl p-6 max-w-sm w-full"
+                style={{
+                  background: "#fff",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+                }}
+              >
+                <h3 className="text-base font-bold text-[var(--text-primary)] mb-2">
+                  {pendingDeleteIds.length === snapshots.length
+                    ? "Delete all snapshots?"
+                    : pendingDeleteIds.length === 1
+                      ? "Delete snapshot?"
+                      : `Delete ${pendingDeleteIds.length} snapshots?`}
+                </h3>
+                <p
+                  className="text-sm mb-5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  This can't be undone. The sealed record
+                  {pendingDeleteIds.length > 1 ? "s" : ""} will be permanently
+                  removed.
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => setPendingDeleteIds(null)}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-lg text-sm font-medium"
+                    style={{
+                      background: "rgba(0,0,0,0.06)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-lg text-sm font-bold text-white"
+                    style={{
+                      background: "#dc2626",
+                      opacity: deleting ? 0.6 : 1,
+                    }}
+                  >
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

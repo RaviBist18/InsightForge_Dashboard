@@ -81,8 +81,11 @@ def health():
 
 
 COLUMN_PATTERNS = {
+    "signup_date": r"signup.?date|sign.?up.?date|joined.?date|registration.?date",
+    "churn_date": r"churn.?date|cancel.?date|cancelled.?date|churned.?date",
     "date": r"date|dt$|_dt$|timestamp|created_at|order_date",
     "revenue": r"revenue|amount|amt|price|total|income",
+    "cost": r"cost|expense|cogs|cost.?of.?goods",
     "sales": r"sales|units.?sold|revenue.?sales",
     "customer_id": r"customer.?id|cust.?id|client.?id|user.?id",
     "email": r"email|e.?mail",
@@ -233,6 +236,9 @@ def engineer_features(df: pd.DataFrame, columns: list[dict]) -> dict:
     customer_col = next(
         (c["name"] for c in columns if c["role"] == "customer_id"), None
     )
+    signup_col = next((c["name"] for c in columns if c["role"] == "signup_date"), None)
+    churn_col = next((c["name"] for c in columns if c["role"] == "churn_date"), None)
+    cost_col = next((c["name"] for c in columns if c["role"] == "cost"), None)
 
     if date_col:
         try:
@@ -478,6 +484,9 @@ async def get_dataset_kpis(
     customer_col = next(
         (c["name"] for c in columns if c["role"] == "customer_id"), None
     )
+    signup_col = next((c["name"] for c in columns if c["role"] == "signup_date"), None)
+    churn_col = next((c["name"] for c in columns if c["role"] == "churn_date"), None)
+    cost_col = next((c["name"] for c in columns if c["role"] == "cost"), None)
 
     df = apply_dynamic_filters(df, columns, region, product, None, None)
     kpis = {"row_count": len(df)}
@@ -501,6 +510,35 @@ async def get_dataset_kpis(
                 "customer_id": str(top.index[0]),
                 "order_count": int(top.iloc[0]),
             }
+
+    if signup_col:
+        parsed_signup = pd.to_datetime(df[signup_col], errors="coerce")
+        kpis["signups"] = int(parsed_signup.notna().sum())
+
+    if churn_col:
+        parsed_churn = pd.to_datetime(df[churn_col], errors="coerce")
+        churned = int(parsed_churn.notna().sum())
+        kpis["churned"] = churned
+        kpis["churn_rate"] = (
+            round(churned / kpis["signups"] * 100, 2) if kpis.get("signups") else 0.0
+        )
+
+    total_cost = 0.0
+    if cost_col and pd.api.types.is_numeric_dtype(df[cost_col]):
+        total_cost = float(df[cost_col].sum())
+    kpis["total_cost"] = round(total_cost, 2)
+
+    if "total_revenue" in kpis:
+        total_profit = kpis["total_revenue"] - total_cost
+        kpis["total_profit"] = round(total_profit, 2)
+        kpis["profit_margin"] = (
+            round(total_profit / kpis["total_revenue"] * 100, 2)
+            if kpis["total_revenue"]
+            else 0.0
+        )
+    else:
+        kpis["total_profit"] = 0.0
+        kpis["profit_margin"] = 0.0
 
     revenue_series = []
     if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
@@ -1902,16 +1940,18 @@ async def get_inventory_analytics(
 
 
 @app.get("/datasets")
-async def list_datasets(authorization: str = Header(None)):
-    company_id, _ = get_company_id(authorization)
+async def list_datasets(authorization: str = Header(None), mine: bool = False):
+    company_id, user_id = get_company_id(authorization)
 
-    result = (
+    query = (
         supabase.table("datasets")
         .select("id, filename, row_count, column_schema, created_at")
         .eq("company_id", company_id)
-        .order("created_at", desc=True)
-        .execute()
     )
+    if mine:
+        query = query.eq("uploaded_by", user_id)
+
+    result = query.order("created_at", desc=True).execute()
     return result.data or []
 
 

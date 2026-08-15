@@ -28,6 +28,42 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  getSavedAlerts,
+  createSavedAlert,
+  updateSavedAlert,
+  deleteSavedAlert,
+  type SavedAlertRow,
+} from "@/lib/data";
+
+function rowToAlert(r: SavedAlertRow): SavedAlert {
+  return {
+    id: r.id,
+    name: r.name,
+    metric: r.metric,
+    datasetFilter: r.dataset_filter,
+    operator: r.operator,
+    threshold: r.threshold,
+    createdAt: new Date(r.created_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    color: r.color,
+    active: r.active,
+    lastChecked: r.last_checked
+      ? new Date(r.last_checked).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null,
+    lastStatus: r.last_status,
+    triggeredValue: r.triggered_value,
+    triggeredSource: r.triggered_source,
+    aiInsight: r.ai_insight,
+    selectedForCompare: false,
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -830,17 +866,18 @@ export default function SavedViewsPage() {
   }, []);
 
   useEffect(() => {
-    const stored = loadLS<SavedAlert[]>(STORAGE_KEY, []);
-    if (stored.length) {
-      setViews(stored);
-      runCheckAll(stored);
-    }
+    getSavedAlerts().then((rows) => {
+      const mapped = rows.map(rowToAlert);
+      if (mapped.length) {
+        setViews(mapped);
+        runCheckAll(mapped);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persist = (updated: SavedAlert[]) => {
     setViews(updated);
-    saveLS(STORAGE_KEY, updated);
   };
 
   const runCheckAll = async (list: SavedAlert[]) => {
@@ -849,7 +886,7 @@ export default function SavedViewsPage() {
       list.map(async (a) => {
         if (!a.active) return a;
         const { status, value, source } = await checkAlert(a);
-        return {
+        const updated = {
           ...a,
           lastStatus: status,
           triggeredValue: value,
@@ -862,6 +899,15 @@ export default function SavedViewsPage() {
                   minute: "2-digit",
                 }),
         };
+        updateSavedAlert(a.id, {
+          last_status: status,
+          triggered_value: value,
+          triggered_source: source,
+          ...(status !== "unchecked" && {
+            last_checked: new Date().toISOString(),
+          }),
+        });
+        return updated;
       }),
     );
     persist(results);
@@ -894,19 +940,23 @@ export default function SavedViewsPage() {
       selectedForCompare: false,
     };
     const checked = await checkAlert(alert);
-    const finalAlert: SavedAlert = {
-      ...alert,
-      lastStatus: checked.status,
-      triggeredValue: checked.value,
-      triggeredSource: checked.source,
-      lastChecked:
-        checked.status === "unchecked"
-          ? null
-          : new Date().toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-    };
+    const row = await createSavedAlert({
+      name: alert.name,
+      metric: alert.metric,
+      dataset_filter: alert.datasetFilter,
+      operator: alert.operator,
+      threshold: alert.threshold,
+      color: alert.color,
+      active: true,
+      last_checked:
+        checked.status === "unchecked" ? null : new Date().toISOString(),
+      last_status: checked.status,
+      triggered_value: checked.value,
+      triggered_source: checked.source,
+      ai_insight: null,
+    });
+    if (!row) return;
+    const finalAlert = rowToAlert(row);
     persist([finalAlert, ...views]);
     setSavedId(finalAlert.id);
     setTimeout(() => setSavedId(null), 2000);
@@ -940,6 +990,7 @@ export default function SavedViewsPage() {
         context,
         efficiency,
       );
+      await updateSavedAlert(id, { ai_insight: briefing });
       persist(
         views.map((x) => (x.id === id ? { ...x, aiInsight: briefing } : x)),
       );
@@ -956,14 +1007,33 @@ export default function SavedViewsPage() {
       );
     }
   };
-  const handleDelete = (id: string) =>
+  const handleDelete = async (id: string) => {
+    await deleteSavedAlert(id);
     persist(views.filter((v) => v.id !== id));
-  const handleTogglePause = (id: string) =>
-    persist(views.map((v) => (v.id === id ? { ...v, active: !v.active } : v)));
+  };
+  const handleTogglePause = async (id: string) => {
+    const v = views.find((x) => x.id === id);
+    if (!v) return;
+    await updateSavedAlert(id, { active: !v.active });
+    persist(views.map((x) => (x.id === id ? { ...x, active: !x.active } : x)));
+  };
   const handleCheckOne = async (id: string) => {
     const v = views.find((x) => x.id === id);
     if (!v) return;
     const { status, value, source } = await checkAlert(v);
+    const lastChecked =
+      status === "unchecked"
+        ? v.lastChecked
+        : new Date().toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+    await updateSavedAlert(id, {
+      last_status: status,
+      triggered_value: value,
+      triggered_source: source,
+      ...(status !== "unchecked" && { last_checked: new Date().toISOString() }),
+    });
     persist(
       views.map((x) =>
         x.id === id
@@ -972,13 +1042,7 @@ export default function SavedViewsPage() {
               lastStatus: status,
               triggeredValue: value,
               triggeredSource: source,
-              lastChecked:
-                status === "unchecked"
-                  ? x.lastChecked
-                  : new Date().toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }),
+              lastChecked,
             }
           : x,
       ),

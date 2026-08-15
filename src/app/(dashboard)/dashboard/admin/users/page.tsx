@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
   Shield,
+  ShieldCheck,
+  User as UserIcon,
   Search,
   RefreshCw,
   Loader2,
@@ -13,19 +15,20 @@ import {
   AlertCircle,
   X,
   ChevronDown,
-  Eye,
   Lock,
   AlertTriangle,
   UserPlus,
   Copy,
   Check,
+  Building2,
+  Info,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { RoleGuard } from "@/components/common/RoleGuard";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────
 
 interface UserRecord {
   id: string;
@@ -33,7 +36,44 @@ interface UserRecord {
   role: "admin" | "co-admin" | "user";
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const ROLE_STYLE: Record<
+  UserRecord["role"],
+  {
+    ring: string;
+    badgeBg: string;
+    badgeBorder: string;
+    badgeText: string;
+    icon: any;
+    label: string;
+  }
+> = {
+  admin: {
+    ring: "var(--accent)",
+    badgeBg: "var(--accent-subtle)",
+    badgeBorder: "var(--accent)",
+    badgeText: "var(--accent)",
+    icon: ShieldCheck,
+    label: "Admin",
+  },
+  "co-admin": {
+    ring: "#b45309",
+    badgeBg: "rgba(180,83,9,0.08)",
+    badgeBorder: "#b45309",
+    badgeText: "#b45309",
+    icon: Shield,
+    label: "Co-Admin",
+  },
+  user: {
+    ring: "var(--border)",
+    badgeBg: "var(--bg-primary)",
+    badgeBorder: "var(--border)",
+    badgeText: "var(--text-secondary)",
+    icon: UserIcon,
+    label: "Member",
+  },
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -57,8 +97,6 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
     </motion.div>
   );
 }
-
-// ─── Read-Only Bar ────────────────────────────────────────────────────────────
 
 function ReadOnlyBar() {
   return (
@@ -321,9 +359,9 @@ function InviteModal({
   );
 }
 
-// ─── User Row ─────────────────────────────────────────────────────────────────
+// ─── User Card ─────────────────────────────────────────────────────────────
 
-function UserRow({
+function UserCard({
   user,
   index,
   currentUserId,
@@ -331,7 +369,6 @@ function UserRow({
   isReadOnly,
   updatingId,
   onRoleChange,
-  onViewPortfolio,
 }: {
   user: UserRecord;
   index: number;
@@ -340,128 +377,74 @@ function UserRow({
   isReadOnly: boolean;
   updatingId: string | null;
   onRoleChange: (id: string, role: "admin" | "co-admin" | "user") => void;
-  onViewPortfolio: (id: string) => void;
 }) {
   const isCurrentUser = user.id === currentUserId;
   const isUpdating = updatingId === user.id;
+  const style = ROLE_STYLE[user.role] ?? ROLE_STYLE.user;
+  const RoleIcon = style.icon;
 
   return (
     <motion.div
       key={user.id}
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ delay: index * 0.03 }}
-      className="flex items-center gap-4 flex-wrap px-5 py-4 border-b last:border-0"
-      style={{ borderColor: "var(--border)" }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ delay: index * 0.04, duration: 0.25 }}
+      whileHover={{ y: -2 }}
+      className="rounded-2xl p-5 flex flex-col gap-4"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+      }}
     >
-      <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center text-[13px] font-semibold text-white flex-shrink-0"
-        style={{ background: "var(--accent)" }}
-      >
-        {(user.full_name || "U")[0].toUpperCase()}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p
-            className="text-[13px] font-medium truncate"
-            style={{ color: "var(--text-primary)" }}
-          >
-            {user.full_name || "Unnamed User"}
-          </p>
-          {isCurrentUser && (
-            <span
-              className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-              style={{
-                background: "var(--accent-subtle)",
-                color: "var(--accent)",
-              }}
-            >
-              You
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium"
+      <div className="flex items-center gap-4">
+        <div
+          className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-semibold text-white flex-shrink-0"
           style={{
-            background:
-              user.role === "admin"
-                ? "var(--accent-subtle)"
-                : "var(--bg-primary)",
-            borderColor:
-              user.role === "admin" ? "var(--accent)" : "var(--border)",
-            color:
-              user.role === "admin" ? "var(--accent)" : "var(--text-secondary)",
+            background: "var(--accent)",
+            boxShadow: `0 0 0 2px var(--bg-surface), 0 0 0 3.5px ${style.ring}`,
           }}
         >
-          <Shield size={11} /> {user.role}
-        </span>
-
-        <div className="relative">
-          <select
-            value={user.role}
-            onChange={(e) =>
-              onRoleChange(
-                user.id,
-                e.target.value as "admin" | "co-admin" | "user",
-              )
-            }
-            disabled={isUpdating || isCurrentUser || isReadOnly}
-            className={cn(
-              "appearance-none px-3 py-1.5 pr-7 rounded-xl border text-[12px] font-medium focus:outline-none cursor-pointer transition-all",
-              (isUpdating || isCurrentUser || isReadOnly) &&
-                "opacity-50 cursor-not-allowed",
+          {(user.full_name || "U")[0].toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p
+              className="text-[14px] font-semibold truncate"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {user.full_name || "Unnamed User"}
+            </p>
+            {isCurrentUser && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                style={{
+                  background: "var(--accent-subtle)",
+                  color: "var(--accent)",
+                }}
+              >
+                You
+              </span>
             )}
+          </div>
+          <span
+            className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium"
             style={{
-              background: "var(--bg-surface)",
-              borderColor: "var(--border)",
-              color: "var(--text-primary)",
+              background: style.badgeBg,
+              borderColor: style.badgeBorder,
+              color: style.badgeText,
             }}
           >
-            <option value="user">User</option>
-            <option value="co-admin">Co-Admin</option>
-            {currentUserRole === "admin" && (
-              <option value="admin">Admin</option>
-            )}
-          </select>
-          <ChevronDown
-            size={11}
-            className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ color: "var(--text-muted)" }}
-          />
+            <RoleIcon size={11} /> {style.label}
+          </span>
         </div>
-
-        {isUpdating && (
-          <Loader2
-            size={14}
-            className="animate-spin"
-            style={{ color: "var(--accent)" }}
-          />
-        )}
       </div>
-
-      <motion.button
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-        onClick={() => onViewPortfolio(user.id)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all flex-shrink-0"
-        style={{
-          background: "var(--accent-subtle)",
-          borderColor: "var(--accent)",
-          color: "var(--accent)",
-        }}
-      >
-        <Eye size={12} /> View
-      </motion.button>
     </motion.div>
   );
 }
 
-// ─── Main Content ─────────────────────────────────────────────────────────────
+// ─── Main Content ─────────────────────────────────────────────────────────
 
 function AdminUsersContent() {
   const router = useRouter();
@@ -476,6 +459,8 @@ function AdminUsersContent() {
   const [currentUserRole, setCurrentUserRole] = useState<
     "admin" | "co-admin" | "user"
   >("user");
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [showRoleInfo, setShowRoleInfo] = useState(false);
   const [toast, setToast] = useState<{
     msg: string;
     type: "success" | "error";
@@ -492,7 +477,6 @@ function AdminUsersContent() {
       requester_email: string | null;
     }[]
   >([]);
-  const [loadingRequests, setLoadingRequests] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const showToast = (msg: string, type: "success" | "error") => {
@@ -517,6 +501,13 @@ function AdminUsersContent() {
         setCurrentUserRole(
           (myProfile?.role as "admin" | "co-admin" | "user") || "user",
         );
+
+        const { data: membership } = await supabase
+          .from("memberships")
+          .select("companies(name)")
+          .eq("user_id", user.id)
+          .single();
+        setCompanyName((membership as any)?.companies?.name ?? null);
       }
 
       const { data, error } = await supabase
@@ -526,13 +517,13 @@ function AdminUsersContent() {
 
       if (error) throw error;
 
-      const merged: UserRecord[] = (data || []).map((profile: any) => ({
-        id: profile.id,
-        full_name: profile.full_name,
-        role: profile.role || "user",
-      }));
-
-      setUsers(merged);
+      setUsers(
+        (data || []).map((profile: any) => ({
+          id: profile.id,
+          full_name: profile.full_name,
+          role: profile.role || "user",
+        })),
+      );
     } catch {
       showToast("Failed to load users", "error");
     } finally {
@@ -541,7 +532,6 @@ function AdminUsersContent() {
   };
 
   const fetchPendingRequests = async () => {
-    setLoadingRequests(true);
     try {
       const {
         data: { user },
@@ -572,10 +562,7 @@ function AdminUsersContent() {
 
       setPendingRequests(result.requests);
     } catch (err: any) {
-      console.error("fetchPendingRequests error:", err);
       showToast(err.message || "Failed to load join requests", "error");
-    } finally {
-      setLoadingRequests(false);
     }
   };
 
@@ -659,16 +646,17 @@ function AdminUsersContent() {
     router.push(`/?readonly=true&userId=${userId}`);
   };
 
-  const filtered = users.filter((u) => {
-    return (
+  const filtered = users.filter(
+    (u) =>
       (u.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.role.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  });
+      u.role.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const stats = {
     total: users.length,
     admins: users.filter((u) => u.role === "admin").length,
+    coAdmins: users.filter((u) => u.role === "co-admin").length,
+    members: users.filter((u) => u.role === "user").length,
   };
 
   return (
@@ -680,26 +668,54 @@ function AdminUsersContent() {
           className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
+          <Link href="/" className="hover:underline cursor-pointer">
+            Dashboard
+          </Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>User Management</span>
         </div>
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1
-              className="text-2xl font-semibold"
-              style={{ color: "var(--text-primary)" }}
-            >
-              User Management
-            </h1>
+            <div className="flex items-center gap-2.5 mb-1">
+              <h1
+                className="text-2xl font-semibold tracking-tight"
+                style={{ color: "var(--text-primary)" }}
+              >
+                User Management
+              </h1>
+              {companyName && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-bold uppercase tracking-wide"
+                  style={{ background: "var(--accent)", color: "white" }}
+                >
+                  <Building2 size={12} /> {companyName}
+                </span>
+              )}
+            </div>
             <p
-              className="text-[13px] mt-1"
+              className="text-[13px]"
               style={{ color: "var(--text-secondary)" }}
             >
-              View accounts and manage role access
+              {stats.total} {stats.total === 1 ? "person has" : "people have"}{" "}
+              access — manage roles below
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <motion.button
+              onClick={() => setShowRoleInfo((v) => !v)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-[13px] font-medium transition-all"
+              style={{
+                background: showRoleInfo
+                  ? "var(--accent-subtle)"
+                  : "var(--bg-surface)",
+                borderColor: showRoleInfo ? "var(--accent)" : "var(--border)",
+                color: showRoleInfo ? "var(--accent)" : "var(--text-secondary)",
+              }}
+            >
+              <Info size={14} />
+            </motion.button>
             <motion.button
               onClick={() => setShowInvite(true)}
               whileHover={{ scale: 1.02 }}
@@ -728,6 +744,61 @@ function AdminUsersContent() {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showRoleInfo && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pb-1">
+              {[
+                {
+                  role: "admin" as const,
+                  desc: "Full control — manages billing, invites teammates, changes anyone's role, sees all company data.",
+                },
+                {
+                  role: "co-admin" as const,
+                  desc: "Trusted operator — can invite and manage members, but can't grant admin access or touch billing.",
+                },
+                {
+                  role: "user" as const,
+                  desc: "Standard access — views company dashboards and their own workspace, can't manage other accounts.",
+                },
+              ].map(({ role, desc }) => {
+                const style = ROLE_STYLE[role];
+                const RoleIcon = style.icon;
+                return (
+                  <div
+                    key={role}
+                    className="rounded-xl p-4"
+                    style={{
+                      background: style.badgeBg,
+                      border: `1px solid ${style.badgeBorder}`,
+                    }}
+                  >
+                    <div
+                      className="flex items-center gap-1.5 mb-1.5 text-[12px] font-bold"
+                      style={{ color: style.badgeText }}
+                    >
+                      <RoleIcon size={13} /> {style.label}
+                    </div>
+                    <p
+                      className="text-[12px] leading-relaxed"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      {desc}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {pendingRequests.length > 0 && (
         <div
@@ -821,37 +892,52 @@ function AdminUsersContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 max-w-md">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
-            label: "Total Users",
+            label: "Total",
             value: stats.total,
-            icon: <Users size={14} />,
+            icon: Users,
+            color: "var(--text-primary)",
           },
-          { label: "Admins", value: stats.admins, icon: <Shield size={14} /> },
-        ].map(({ label, value, icon }) => (
+          {
+            label: "Admins",
+            value: stats.admins,
+            icon: ShieldCheck,
+            color: "var(--accent)",
+          },
+          {
+            label: "Co-Admins",
+            value: stats.coAdmins,
+            icon: Shield,
+            color: "#b45309",
+          },
+          {
+            label: "Members",
+            value: stats.members,
+            icon: UserIcon,
+            color: "var(--text-secondary)",
+          },
+        ].map(({ label, value, icon: Icon, color }) => (
           <div
             key={label}
-            className="rounded-xl border p-4"
+            className="rounded-2xl p-4"
             style={{
               background: "var(--bg-surface)",
-              borderColor: "var(--border)",
+              border: "1px solid var(--border)",
             }}
           >
-            <div
-              className="flex items-center gap-1.5 mb-2"
-              style={{ color: "var(--accent)" }}
-            >
-              {icon}
+            <div className="flex items-center gap-1.5 mb-2" style={{ color }}>
+              <Icon size={13} />
               <span
-                className="text-[11px] font-medium"
-                style={{ color: "var(--text-secondary)" }}
+                className="text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: "var(--text-muted)" }}
               >
                 {label}
               </span>
             </div>
             <p
-              className="text-2xl font-semibold"
+              className="text-2xl font-bold"
               style={{ color: "var(--text-primary)" }}
             >
               {value}
@@ -887,65 +973,50 @@ function AdminUsersContent() {
         )}
       </div>
 
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          background: "var(--bg-surface)",
-          borderColor: "var(--border)",
-        }}
-      >
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2
+            className="w-6 h-6 animate-spin"
+            style={{ color: "var(--accent)" }}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div
-          className="px-5 py-3 border-b"
-          style={{ borderColor: "var(--border)" }}
+          className="rounded-2xl py-20 text-center"
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+          }}
         >
-          <span
-            className="text-[12px] font-medium"
+          <Users
+            className="w-8 h-8 mx-auto mb-2"
+            style={{ color: "var(--text-muted)" }}
+          />
+          <p
+            className="text-sm font-medium"
             style={{ color: "var(--text-secondary)" }}
           >
-            {filtered.length} user{filtered.length !== 1 ? "s" : ""}
-          </span>
+            No users found
+          </p>
         </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2
-              className="w-6 h-6 animate-spin"
-              style={{ color: "var(--accent)" }}
-            />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-16 text-center">
-            <Users
-              className="w-8 h-8 mx-auto mb-2"
-              style={{ color: "var(--text-muted)" }}
-            />
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              No users found
-            </p>
-          </div>
-        ) : (
-          <div>
-            <AnimatePresence>
-              {filtered.map((user, i) => (
-                <UserRow
-                  key={user.id}
-                  user={user}
-                  index={i}
-                  currentUserId={currentUserId}
-                  currentUserRole={currentUserRole}
-                  isReadOnly={isReadOnly}
-                  updatingId={updatingId}
-                  onRoleChange={handleRoleChange}
-                  onViewPortfolio={handleViewPortfolio}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {filtered.map((user, i) => (
+              <UserCard
+                key={user.id}
+                user={user}
+                index={i}
+                currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
+                isReadOnly={isReadOnly}
+                updatingId={updatingId}
+                onRoleChange={handleRoleChange}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
       <AnimatePresence>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
@@ -963,7 +1034,7 @@ function AdminUsersContent() {
   );
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// ─── Export ─────────────────────────────────────────────────────────────
 
 export default function AdminUsersPage() {
   return (

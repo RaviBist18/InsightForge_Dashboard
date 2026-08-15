@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Save } from "lucide-react";
+import { Save, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
 interface AppearanceTabProps {
@@ -9,7 +9,7 @@ interface AppearanceTabProps {
 }
 
 export function AppearanceTab({ showToast }: AppearanceTabProps) {
-  const { compactMode, setCompactMode } = useTheme();
+  const { compactMode, setCompactMode, theme, setTheme } = useTheme();
 
   const handleSave = () => {
     showToast("Appearance settings saved!", "success");
@@ -23,6 +23,58 @@ export function AppearanceTab({ showToast }: AppearanceTabProps) {
       >
         Appearance
       </h2>
+
+      {/* ── Theme ── */}
+      <div
+        className="flex items-center justify-between py-4 rounded-xl px-4"
+        style={{
+          background: "var(--bg-primary)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <div>
+          <p
+            className="text-[13px] font-medium"
+            style={{ color: "var(--text-primary)" }}
+          >
+            Theme
+          </p>
+          <p
+            className="text-[12px] mt-0.5"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            Switch between light and dark mode
+          </p>
+        </div>
+        <div
+          className="flex items-center gap-1 p-1 rounded-lg"
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <button
+            onClick={() => setTheme("light")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors"
+            style={{
+              background: theme === "light" ? "var(--accent)" : "transparent",
+              color: theme === "light" ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            <Sun size={13} /> Light
+          </button>
+          <button
+            onClick={() => setTheme("dark")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors"
+            style={{
+              background: theme === "dark" ? "var(--accent)" : "transparent",
+              color: theme === "dark" ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            <Moon size={13} /> Dark
+          </button>
+        </div>
+      </div>
 
       {/* ── Compact Mode ── */}
       <div

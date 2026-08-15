@@ -6,9 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
   Lock,
-  Bell,
   Palette,
-  Brain,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -17,10 +15,6 @@ import {
   Save,
   Trash2,
   Shield,
-  TrendingUp,
-  Zap,
-  Globe,
-  Activity,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -29,52 +23,15 @@ import { AppearanceTab } from "@/components/dashboard/AppearanceTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "security" | "notifications" | "appearance" | "ai";
-
-type AIPersona = "aggressive" | "balanced" | "defensive";
-
-interface NotifSettings {
-  emailAlerts: boolean;
-  weeklyReport: boolean;
-  churnAlerts: boolean;
-  revenueAlerts: boolean;
-  revenueThreshold: number;
-  churnThreshold: number;
-}
-
-interface AISettings {
-  persona: AIPersona;
-  tokensUsed: number;
-  tokenLimit: number;
-  alphaVantageWeight: number;
-  newsApiWeight: number;
-  supabaseWeight: number;
-}
+type Tab = "profile" | "security" | "appearance";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "profile", label: "Profile", icon: User },
   { id: "security", label: "Security", icon: Lock },
-  { id: "notifications", label: "Alerts", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "ai", label: "AI Strategy", icon: Brain },
 ];
-
-const PERSONA_META: Record<AIPersona, { label: string; desc: string }> = {
-  aggressive: {
-    label: "Aggressive",
-    desc: "Blunt, boardroom-direct. Zero hedging. High conviction calls.",
-  },
-  balanced: {
-    label: "Balanced",
-    desc: "Structured analysis. Pros/cons surfaced. Moderate confidence.",
-  },
-  defensive: {
-    label: "Defensive",
-    desc: "Risk-first framing. Downside emphasis. Capital preservation mode.",
-  },
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +73,105 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
         <AlertCircle size={15} />
       )}
       {msg}
+    </motion.div>
+  );
+}
+function DeleteAccountModal({
+  email,
+  confirmText,
+  setConfirmText,
+  deleting,
+  onConfirm,
+  onCancel,
+}: {
+  email: string;
+  confirmText: string;
+  setConfirmText: (v: string) => void;
+  deleting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.97 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl p-6"
+        style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--danger)",
+        }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <AlertCircle size={16} style={{ color: "var(--danger)" }} />
+          <h3
+            className="text-[14px] font-semibold"
+            style={{ color: "var(--text-primary)" }}
+          >
+            Delete account
+          </h3>
+        </div>
+        <p
+          className="text-[13px] mb-4"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          This permanently deletes your account and all data. This cannot be
+          undone. To confirm, type{" "}
+          <span
+            className="font-semibold"
+            style={{ color: "var(--text-primary)" }}
+          >
+            {email}
+          </span>{" "}
+          below.
+        </p>
+        <input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={email}
+          autoFocus
+          className="w-full px-4 py-2.5 rounded-xl text-[13px] focus:outline-none mb-4"
+          style={{
+            background: "var(--danger-bg)",
+            border: "1px solid var(--danger)",
+            color: "var(--text-primary)",
+          }}
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl text-[12px] font-medium transition-colors"
+            style={{
+              background: "var(--bg-primary)",
+              border: "1px solid var(--border)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={confirmText !== email || deleting}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold disabled:opacity-40 transition-colors"
+            style={{ background: "var(--danger)", color: "white" }}
+          >
+            {deleting ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              "Delete permanently"
+            )}
+          </button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -356,7 +412,6 @@ function ProfileTab({
 // ─── Tab: Security ────────────────────────────────────────────────────────────
 
 function SecurityTab({
-  isAdmin,
   newPw,
   setNewPw,
   confirmPw,
@@ -365,12 +420,8 @@ function SecurityTab({
   setShowPw,
   savingPw,
   onChangePw,
-  deleteConfirm,
-  setDeleteConfirm,
-  deletingAccount,
   onDelete,
 }: {
-  isAdmin: boolean;
   newPw: string;
   setNewPw: (v: string) => void;
   confirmPw: string;
@@ -379,9 +430,6 @@ function SecurityTab({
   setShowPw: (v: boolean) => void;
   savingPw: boolean;
   onChangePw: () => void;
-  deleteConfirm: string;
-  setDeleteConfirm: (v: string) => void;
-  deletingAccount: boolean;
   onDelete: () => void;
 }) {
   return (
@@ -449,438 +497,28 @@ function SecurityTab({
       </motion.button>
 
       {/* Danger Zone */}
-      {isAdmin && (
-        <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-          <SectionTitle>Danger Zone</SectionTitle>
-          <p
-            className="text-[13px] mb-3"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Type{" "}
-            <span
-              className="font-semibold"
-              style={{ color: "var(--text-primary)" }}
-            >
-              DELETE
-            </span>{" "}
-            to permanently delete your account and all associated data.
-          </p>
-          <div className="flex gap-2">
-            <input
-              value={deleteConfirm}
-              onChange={(e) => setDeleteConfirm(e.target.value)}
-              placeholder="Type DELETE"
-              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] focus:outline-none transition-all"
-              style={{
-                background: "var(--danger-bg)",
-                border: "1px solid var(--danger)",
-                color: "var(--text-primary)",
-              }}
-            />
-            <button
-              onClick={onDelete}
-              disabled={deleteConfirm !== "DELETE" || deletingAccount}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[12px] font-medium disabled:opacity-40 transition-colors"
-              style={{
-                background: "var(--danger-bg)",
-                border: "1px solid var(--danger)",
-                color: "var(--danger)",
-              }}
-            >
-              {deletingAccount ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Trash2 size={13} />
-              )}{" "}
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Tab: Notifications ───────────────────────────────────────────────────────
-
-function NotificationsTab({ onSave }: { onSave: (msg: string) => void }) {
-  const [settings, setSettings] = useState<NotifSettings>(() =>
-    loadLS("insightforge_notif", {
-      emailAlerts: true,
-      weeklyReport: true,
-      churnAlerts: false,
-      revenueAlerts: true,
-      revenueThreshold: 10,
-      churnThreshold: 2,
-    }),
-  );
-
-  const toggle = (key: keyof NotifSettings) => {
-    if (typeof settings[key] === "boolean") {
-      const updated = { ...settings, [key]: !settings[key] };
-      setSettings(updated);
-      saveLS("insightforge_notif", updated);
-    }
-  };
-
-  const setSlider = (key: keyof NotifSettings, val: number) => {
-    const updated = { ...settings, [key]: val };
-    setSettings(updated);
-    saveLS("insightforge_notif", updated);
-  };
-
-  return (
-    <div className="p-6 space-y-6">
-      <SectionTitle>Alert Channels</SectionTitle>
-      <div className="space-y-1">
-        {[
-          {
-            key: "emailAlerts",
-            label: "Email Alerts",
-            desc: "Receive important alerts via email",
-          },
-          {
-            key: "weeklyReport",
-            label: "Weekly Report",
-            desc: "Executive summary every Monday",
-          },
-          {
-            key: "churnAlerts",
-            label: "Churn Alerts",
-            desc: "Triggered when churn rate spikes",
-          },
-          {
-            key: "revenueAlerts",
-            label: "Revenue Alerts",
-            desc: "Triggered on significant MRR changes",
-          },
-        ].map((n) => (
-          <div
-            key={n.key}
-            className="flex items-center justify-between gap-4 py-3.5"
-            style={{ borderBottom: "1px solid var(--border)" }}
-          >
-            <div>
-              <p
-                className="text-[13px] font-medium"
-                style={{ color: "var(--text-primary)" }}
-              >
-                {n.label}
-              </p>
-              <p
-                className="text-[12px] mt-0.5"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                {n.desc}
-              </p>
-            </div>
-            <Toggle
-              checked={settings[n.key as keyof NotifSettings] as boolean}
-              onChange={() => toggle(n.key as keyof NotifSettings)}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Market-relative thresholds */}
-      <div className="pt-2">
-        <SectionTitle>Alert Thresholds</SectionTitle>
-        <div
-          className="space-y-5 rounded-xl p-4"
+      <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+        <SectionTitle>Danger Zone</SectionTitle>
+        <p
+          className="text-[13px] mb-3"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          Permanently delete your account and all associated data. This cannot
+          be undone.
+        </p>
+        <button
+          onClick={onDelete}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[12px] font-medium transition-colors"
           style={{
-            background: "var(--bg-primary)",
-            border: "1px solid var(--border)",
+            background: "var(--danger-bg)",
+            border: "1px solid var(--danger)",
+            color: "var(--danger)",
           }}
         >
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp size={13} style={{ color: "var(--accent)" }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--accent)" }}
-              >
-                Revenue Alert Trigger
-              </span>
-            </div>
-            <SliderInput
-              label="Alert when MRR changes by"
-              value={settings.revenueThreshold}
-              min={1}
-              max={50}
-              unit="%"
-              onChange={(v) => setSlider("revenueThreshold", v)}
-            />
-            <p
-              className="text-[11px] mt-1.5"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Alert fires when MRR delta ≥ {settings.revenueThreshold}% vs.
-              prior period
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <AlertCircle size={13} style={{ color: "var(--danger)" }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--danger)" }}
-              >
-                Churn Alert Trigger
-              </span>
-            </div>
-            <SliderInput
-              label="Alert when churn exceeds"
-              value={settings.churnThreshold}
-              min={1}
-              max={20}
-              unit="%"
-              onChange={(v) => setSlider("churnThreshold", v)}
-            />
-            <p
-              className="text-[11px] mt-1.5"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Alert fires when monthly churn ≥ {settings.churnThreshold}%
-            </p>
-          </div>
-        </div>
+          <Trash2 size={13} />
+          Delete Account
+        </button>
       </div>
-
-      <motion.button
-        onClick={() => onSave("Alert preferences saved!")}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
-        style={{ background: "var(--accent)" }}
-      >
-        <Save size={13} /> Save Alerts
-      </motion.button>
-    </div>
-  );
-}
-
-// ─── Tab: AI Strategy ─────────────────────────────────────────────────────────
-
-function AIStrategyTab({ onSave }: { onSave: (msg: string) => void }) {
-  const [settings, setSettings] = useState<AISettings>(() =>
-    loadLS("insightforge_ai_settings", {
-      persona: "aggressive" as AIPersona,
-      tokensUsed: 2847,
-      tokenLimit: 10000,
-      alphaVantageWeight: 70,
-      newsApiWeight: 50,
-      supabaseWeight: 90,
-    }),
-  );
-
-  const tokenPct = Math.min(
-    100,
-    (settings.tokensUsed / settings.tokenLimit) * 100,
-  );
-  const tokenColor =
-    tokenPct > 85
-      ? "var(--danger)"
-      : tokenPct > 60
-        ? "var(--warning)"
-        : "var(--success)";
-
-  const setPersona = (p: AIPersona) => {
-    const updated = { ...settings, persona: p };
-    setSettings(updated);
-    saveLS("insightforge_ai_settings", updated);
-  };
-
-  const setWeight = (key: keyof AISettings, val: number) => {
-    const updated = { ...settings, [key]: val };
-    setSettings(updated);
-    saveLS("insightforge_ai_settings", updated);
-  };
-
-  return (
-    <div className="p-6 space-y-6">
-      <SectionTitle>AI Persona Mode</SectionTitle>
-
-      {/* Persona toggle */}
-      <div className="grid grid-cols-3 gap-2">
-        {(Object.keys(PERSONA_META) as AIPersona[]).map((p) => {
-          const m = PERSONA_META[p];
-          const active = settings.persona === p;
-          return (
-            <motion.button
-              key={p}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setPersona(p)}
-              className="p-3 rounded-xl text-left transition-all"
-              style={{
-                background: active
-                  ? "var(--accent-subtle)"
-                  : "var(--bg-primary)",
-                border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-              }}
-            >
-              <div
-                className="text-[11px] font-semibold uppercase tracking-wide mb-1.5"
-                style={{
-                  color: active ? "var(--accent)" : "var(--text-muted)",
-                }}
-              >
-                {m.label}
-              </div>
-              <p
-                className="text-[11px] leading-snug"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                {m.desc}
-              </p>
-            </motion.button>
-          );
-        })}
-      </div>
-
-      {/* Token usage */}
-      <div className="pt-2">
-        <SectionTitle>Token Usage</SectionTitle>
-        <div
-          className="rounded-xl p-4"
-          style={{
-            background: "var(--bg-primary)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Zap size={13} style={{ color: tokenColor }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: tokenColor }}
-              >
-                {tokenPct > 85
-                  ? "Critical"
-                  : tokenPct > 60
-                    ? "Warning"
-                    : "Nominal"}
-              </span>
-            </div>
-            <span
-              className="text-[12px]"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              {settings.tokensUsed.toLocaleString()} /{" "}
-              {settings.tokenLimit.toLocaleString()} tokens
-            </span>
-          </div>
-          <div
-            className="h-2 rounded-full overflow-hidden mb-2"
-            style={{ background: "var(--border)" }}
-          >
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: tokenColor }}
-              initial={{ width: 0 }}
-              animate={{ width: `${tokenPct}%` }}
-              transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span
-              className="text-[11px]"
-              style={{ color: "var(--text-muted)" }}
-            >
-              ${(settings.tokensUsed * 0.0000015).toFixed(4)} used this month
-            </span>
-            <span
-              className="text-[11px]"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Resets 2026-06-01
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Signal Weighting */}
-      <div className="pt-2">
-        <SectionTitle>Signal Weighting</SectionTitle>
-        <div
-          className="rounded-xl p-4 space-y-5"
-          style={{
-            background: "var(--bg-primary)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <p
-            className="text-[12px] -mt-1"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Controls how much each source influences AI strategic briefings.
-          </p>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp size={12} style={{ color: "var(--success)" }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--success)" }}
-              >
-                Alpha Vantage — Market Signal
-              </span>
-            </div>
-            <SliderInput
-              label="Market data influence"
-              value={settings.alphaVantageWeight}
-              min={0}
-              max={100}
-              onChange={(v) => setWeight("alphaVantageWeight", v)}
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Globe size={12} style={{ color: "var(--warning)" }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--warning)" }}
-              >
-                NewsAPI — Sentiment Signal
-              </span>
-            </div>
-            <SliderInput
-              label="News sentiment influence"
-              value={settings.newsApiWeight}
-              min={0}
-              max={100}
-              onChange={(v) => setWeight("newsApiWeight", v)}
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Activity size={12} style={{ color: "var(--accent)" }} />
-              <span
-                className="text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--accent)" }}
-              >
-                Supabase — Internal Signal
-              </span>
-            </div>
-            <SliderInput
-              label="Internal metrics influence"
-              value={settings.supabaseWeight}
-              min={0}
-              max={100}
-              onChange={(v) => setWeight("supabaseWeight", v)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <motion.button
-        onClick={() => onSave("AI strategy settings saved!")}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
-        style={{ background: "var(--accent)" }}
-      >
-        <Save size={13} /> Save AI Strategy
-      </motion.button>
     </div>
   );
 }
@@ -910,7 +548,7 @@ export default function SettingsPage() {
   const [savingPw, setSavingPw] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
-
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -990,16 +628,33 @@ export default function SettingsPage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirm !== "DELETE") return;
+    if (deleteConfirm !== email) return;
     setDeletingAccount(true);
     try {
-      await supabase.auth.signOut();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete account");
+
       showToast("Account deleted. Redirecting...", "success");
       setTimeout(() => {
         window.location.href = "/auth";
       }, 1500);
-    } catch {
-      showToast("Failed to delete account", "error");
+    } catch (err: unknown) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to delete account",
+        "error",
+      );
     } finally {
       setDeletingAccount(false);
     }
@@ -1015,8 +670,7 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "ai");
+  const visibleTabs = TABS;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -1026,7 +680,9 @@ export default function SettingsPage() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
+          <Link href="/" className="hover:underline cursor-pointer">
+            Dashboard
+          </Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Settings</span>
         </div>
@@ -1111,7 +767,6 @@ export default function SettingsPage() {
               )}
               {tab === "security" && (
                 <SecurityTab
-                  isAdmin={isAdmin}
                   newPw={newPw}
                   setNewPw={setNewPw}
                   confirmPw={confirmPw}
@@ -1120,19 +775,10 @@ export default function SettingsPage() {
                   setShowPw={setShowPw}
                   savingPw={savingPw}
                   onChangePw={handleChangePassword}
-                  deleteConfirm={deleteConfirm}
-                  setDeleteConfirm={setDeleteConfirm}
-                  deletingAccount={deletingAccount}
-                  onDelete={handleDeleteAccount}
+                  onDelete={() => setShowDeleteModal(true)}
                 />
               )}
-              {tab === "notifications" && (
-                <NotificationsTab onSave={(msg) => showToast(msg, "success")} />
-              )}
               {tab === "appearance" && <AppearanceTab showToast={showToast} />}
-              {tab === "ai" && (
-                <AIStrategyTab onSave={(msg) => showToast(msg, "success")} />
-              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -1140,6 +786,22 @@ export default function SettingsPage() {
 
       <AnimatePresence>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDeleteModal && (
+          <DeleteAccountModal
+            email={email}
+            confirmText={deleteConfirm}
+            setConfirmText={setDeleteConfirm}
+            deleting={deletingAccount}
+            onConfirm={handleDeleteAccount}
+            onCancel={() => {
+              setShowDeleteModal(false);
+              setDeleteConfirm("");
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

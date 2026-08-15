@@ -185,6 +185,40 @@ Persona: ${persona}`;
   }
 }
 
+// ── DELETE SNAPSHOTS ──────────────────────────────────────────────────────────
+async function handleDeleteSnapshots(body: { ids: string[] }, userId: string) {
+  try {
+    const { ids } = body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: "No ids provided" }, { status: 400 });
+    }
+
+    // scoped to user_id — can only delete your own snapshots, even with service-role client
+    const { data, error } = await supabaseAdmin
+      .from("forensic_snapshots")
+      .delete()
+      .in("id", ids)
+      .eq("user_id", userId)
+      .select("id");
+
+    if (error) {
+      console.error("SNAPSHOT_DELETE_ERROR:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ deletedIds: (data ?? []).map((d) => d.id) });
+  } catch (err: any) {
+    logger.error("workspace snapshot delete failed", {
+      error: err.message,
+      stack: err.stack,
+    });
+    return NextResponse.json(
+      { error: err.message ?? "Unknown error" },
+      { status: 500 },
+    );
+  }
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -217,6 +251,28 @@ export async function POST(req: NextRequest) {
         );
       }
       return handleSealSnapshot(body, user.id);
+    }
+    case "delete-snapshots": {
+      // same auth pattern as seal-snapshot — verify caller server-side
+      const authHeader = req.headers.get("authorization");
+      const token = authHeader?.replace("Bearer ", "");
+      if (!token) {
+        return NextResponse.json(
+          { error: "Not authenticated" },
+          { status: 401 },
+        );
+      }
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !user) {
+        return NextResponse.json(
+          { error: "Not authenticated" },
+          { status: 401 },
+        );
+      }
+      return handleDeleteSnapshots(body, user.id);
     }
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });

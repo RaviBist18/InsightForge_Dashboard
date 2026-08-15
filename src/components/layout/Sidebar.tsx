@@ -8,8 +8,6 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   LayoutDashboard,
-  Database,
-  FileText,
   Bookmark,
   Settings,
   UserCog,
@@ -22,13 +20,12 @@ import {
   HelpCircle,
   Zap,
   Archive,
-  Flame,
-  Map,
   Target,
   TrendingUp,
   TrendingDown,
   Minus,
   SlidersHorizontal,
+  Users,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "../../lib/utils";
@@ -49,12 +46,10 @@ const getInitials = (nameOrEmail: string) => {
 const ADMIN_NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Overview", href: "/" },
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
-  { icon: Database, label: "Data Sources", href: "/dashboard/data-sources" },
-  { icon: FileText, label: "Reports", href: "/dashboard/reports" },
   { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: UserCog, label: "User Management", href: "/dashboard/admin/users" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
 ];
 
@@ -63,16 +58,15 @@ const USER_NAV_ITEMS = [
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
+  { icon: Users, label: "Team", href: "/dashboard/team" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: Briefcase, label: "Workspace", href: "/dashboard/workspace" },
 ];
 
 const WAR_ROOM_SHORTCUTS = [
   { label: "Live Metrics", icon: Zap, tab: "pulse" as const },
-  { label: "Data Archive", icon: Archive, tab: "archives" as const },
-  { label: "Scenario Planner", icon: Flame, tab: "forge" as const },
-  { label: "Asset Directory", icon: Map, tab: "entities" as const },
-  { label: "Executive Summary", icon: Target, tab: "customizer" as const },
+  { label: "Snapshot Archive", icon: Archive, tab: "archives" as const },
+  { label: "CEO Briefing", icon: Target, tab: "customizer" as const },
 ];
 
 interface SidebarProps {
@@ -91,6 +85,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { role, name, email, loading: roleLoading } = useUserRole();
   const {
     activeTab,
@@ -277,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <p
                   className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{ color: "var(--accent)" }}
                 >
                   Business Health
                 </p>
@@ -379,7 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{ color: "var(--accent)" }}
                 >
                   Workspace
                 </motion.p>
@@ -550,13 +546,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className="flex flex-col items-start overflow-hidden flex-1 min-w-0"
                   >
                     <span
-                      className="text-[12px] font-semibold truncate w-full"
+                      className="text-[12px] font-semibold truncate w-full text-left"
                       style={{ color: "var(--text-primary)" }}
                     >
                       {name}
                     </span>
                     <span
-                      className="text-[9px] font-semibold uppercase tracking-widest"
+                      className="text-[9px] font-semibold uppercase tracking-widest text-left"
                       style={{ color: "var(--text-muted)" }}
                     >
                       {isAdmin ? "Administrator" : "Member"}
@@ -577,33 +573,85 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={() => {
-              setCollapsed(!collapsed);
-              setShowUserMenu(false);
-            }}
-            className="hidden lg:flex w-full items-center justify-center gap-2 p-2 mt-1 rounded-xl transition-colors text-[11px] font-medium"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {collapsed ? (
-              <ChevronRight size={16} />
-            ) : (
-              <>
-                <ChevronLeft size={14} />
-                <span>Collapse</span>
-              </>
-            )}
-          </button>
-
           {(!collapsed || mobileOpen) && (
-            <a
-              href="mailto:support@insightforge.com"
-              className="flex items-center gap-2 px-2 py-2 mt-1 text-[12px] font-medium transition-colors"
-              style={{ color: "var(--text-muted)" }}
+            <button
+              onClick={() => setShowHelpModal(true)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 mt-2 rounded-xl text-[12px] font-semibold transition-colors text-left hover:brightness-110"
+              style={{
+                color: "var(--accent)",
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--border)",
+              }}
             >
               <HelpCircle size={14} />
               <span>Help Center</span>
-            </a>
+            </button>
+          )}
+
+          {showHelpModal && (
+            <div
+              className="fixed inset-0 flex items-center justify-center z-50"
+              style={{ background: "rgba(0,0,0,0.4)" }}
+              onClick={() => setShowHelpModal(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm mx-4 p-5 rounded-2xl"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <h3
+                  className="text-[15px] font-semibold mb-2"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  Help Center
+                </h3>
+                <p
+                  className="text-[13px] mb-4"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Need help? Reach out to our support team.
+                </p>
+                <div
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl mb-4"
+                  style={{
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <span
+                    className="text-[13px]"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    ravibist103@gmail.com
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText("support@insightforge.com");
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="text-[12px] font-medium px-2.5 py-1 rounded-lg transition-colors"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="w-full py-2.5 rounded-xl text-[13px] font-medium"
+                  style={{
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </motion.aside>

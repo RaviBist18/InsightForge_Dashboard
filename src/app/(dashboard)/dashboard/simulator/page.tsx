@@ -232,7 +232,7 @@ export default function SimulatorPage() {
       <div>
         <p
           className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-          style={{ color: "var(--text-muted)" }}
+          style={{ color: "var(--accent)" }}
         >
           Try a scenario
         </p>
@@ -346,7 +346,7 @@ export default function SimulatorPage() {
         <div className="flex items-center justify-between">
           <p
             className="text-[10px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--text-muted)" }}
+            style={{ color: "var(--accent)" }}
           >
             Projected impact
           </p>

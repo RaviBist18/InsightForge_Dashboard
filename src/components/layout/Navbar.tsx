@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Bell,
   Menu,
   X,
   Loader2,
-  CheckCircle2,
-  Download,
   Shield,
   Building2,
+  RefreshCw,
 } from "lucide-react";
 import {
   loadAlerts,
@@ -21,7 +20,6 @@ import {
   type SavedAlert,
 } from "@/lib/alertCenter";
 import { getAggregateRisks, type AggregateRiskResult } from "@/lib/data";
-import { TRANSACTIONS } from "@/data/mockData";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -51,17 +49,26 @@ export const Navbar: React.FC<{
   const [searchQuery, setSearchQuery] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [exportState, setExportState] = useState<
-    "idle" | "generating" | "done"
-  >("idle");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [alerts, setAlerts] = useState<SavedAlert[]>([]);
+  const [dropdownView, setDropdownView] = useState<"profile" | "switch">(
+    "profile",
+  );
+  const [savedAccounts, setSavedAccounts] = useState<string[]>([]);
+  const [newAccountEmail, setNewAccountEmail] = useState("");
 
   useEffect(() => {
     setAlerts(loadAlerts());
     const handler = () => setAlerts(loadAlerts());
     window.addEventListener(ALERTS_UPDATED_EVENT, handler);
     return () => window.removeEventListener(ALERTS_UPDATED_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("if_saved_accounts");
+      if (raw) setSavedAccounts(JSON.parse(raw));
+    } catch {}
   }, []);
 
   const triggeredAlerts = getTriggeredAlerts(alerts);
@@ -88,36 +95,26 @@ export const Navbar: React.FC<{
     if (pathname !== "/") router.push("/");
   };
 
-  const handleExport = useCallback(() => {
-    if (!isAdmin) return; // Guard — users can't export
-    setExportState("generating");
-    setTimeout(() => {
-      const csv =
-        "Date,Entity,Amount,Status\n" +
-        TRANSACTIONS.map(
-          (tx) => `"${tx.date}","${tx.customer}","${tx.amount}","${tx.status}"`,
-        ).join("\n");
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `insightforge_mrr_export_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      setExportState("done");
-      setTimeout(() => setExportState("idle"), 2500);
-    }, 800);
-  }, [isAdmin]);
-
   const markAllRead = () =>
     setAlerts(
       triggeredAlerts.reduce((acc, a) => markAlertRead(acc, a.id), alerts),
     );
+
+  const handleAddAccount = () => {
+    const email = newAccountEmail.trim();
+    if (!email || savedAccounts.includes(email)) return;
+    const updated = [...savedAccounts, email];
+    setSavedAccounts(updated);
+    localStorage.setItem("if_saved_accounts", JSON.stringify(updated));
+    setNewAccountEmail("");
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
         setShowNotifications(false);
         setShowProfile(false);
+        setDropdownView("profile");
       }
     };
     document.addEventListener("mousedown", handler);
@@ -226,67 +223,6 @@ export const Navbar: React.FC<{
                 {companyName}
               </span>
             </div>
-          )}
-
-          {/* Export CSV — Admin only */}
-          {isAdmin && (
-            <motion.button
-              onClick={handleExport}
-              disabled={exportState !== "idle"}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              className={cn(
-                "hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[11px] font-medium transition-colors duration-200",
-              )}
-              style={{
-                background:
-                  exportState === "done"
-                    ? "var(--success-bg)"
-                    : "var(--bg-primary)",
-                borderColor:
-                  exportState === "done" ? "var(--success)" : "var(--border)",
-                color:
-                  exportState === "done"
-                    ? "var(--success)"
-                    : "var(--text-secondary)",
-              }}
-            >
-              <AnimatePresence mode="wait">
-                {exportState === "idle" && (
-                  <motion.span
-                    key="idle"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <Download size={11} /> Export CSV
-                  </motion.span>
-                )}
-                {exportState === "generating" && (
-                  <motion.span
-                    key="gen"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <Loader2 size={11} className="animate-spin" /> Generating...
-                  </motion.span>
-                )}
-                {exportState === "done" && (
-                  <motion.span
-                    key="done"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 size={11} /> Downloaded!
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </motion.button>
           )}
 
           {/* Notifications */}
@@ -495,59 +431,137 @@ export const Navbar: React.FC<{
                     border: "1px solid var(--border)",
                   }}
                 >
-                  {/* Avatar + name header */}
-                  <div
-                    className="px-4 py-4 border-b"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <div className="flex items-center gap-3 mb-3">
+                  {dropdownView === "profile" ? (
+                    <>
                       <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-semibold text-white flex-shrink-0"
-                        style={{ background: "var(--accent)" }}
+                        className="px-4 py-4 border-b"
+                        style={{ borderColor: "var(--border)" }}
                       >
-                        {getInitials(name)}
+                        <div className="flex items-center gap-3 mb-3">
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-semibold text-white flex-shrink-0"
+                            style={{ background: "var(--accent)" }}
+                          >
+                            {getInitials(name)}
+                          </div>
+                          <div className="overflow-hidden min-w-0">
+                            <p
+                              className="text-[13px] font-semibold truncate leading-tight"
+                              style={{ color: "var(--text-primary)" }}
+                            >
+                              {name}
+                            </p>
+                            <p
+                              className="text-[12px] truncate mt-0.5"
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {email}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-widest"
+                          style={{
+                            background: "var(--accent-subtle)",
+                            color: "var(--accent)",
+                            border: "1px solid var(--border)",
+                          }}
+                        >
+                          <Shield size={9} />
+                          {isAdmin ? "Administrator" : "Member"}
+                        </div>
                       </div>
-                      <div className="overflow-hidden min-w-0">
+
+                      <button
+                        onClick={() => setDropdownView("switch")}
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] font-medium border-b transition-colors"
+                        style={{
+                          color: "var(--text-secondary)",
+                          borderColor: "var(--border)",
+                        }}
+                      >
+                        <RefreshCw size={13} />
+                        Switch account
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          setIsLoggingOut(true);
+                          await supabase.auth.signOut();
+                          window.location.href = "/auth";
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-3.5 text-[13px] font-medium transition-colors"
+                        style={{ color: "var(--danger)" }}
+                      >
+                        <LogOut size={13} />
+                        Sign out
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className="px-4 py-3 border-b flex items-center justify-between"
+                        style={{ borderColor: "var(--border)" }}
+                      >
                         <p
-                          className="text-[13px] font-semibold truncate leading-tight"
+                          className="text-[12px] font-semibold"
                           style={{ color: "var(--text-primary)" }}
                         >
-                          {name}
+                          Switch account
                         </p>
-                        <p
-                          className="text-[12px] truncate mt-0.5"
+                        <button
+                          onClick={() => setDropdownView("profile")}
                           style={{ color: "var(--text-muted)" }}
                         >
-                          {email}
-                        </p>
+                          <X size={14} />
+                        </button>
                       </div>
-                    </div>
-                    <div
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-widest"
-                      style={{
-                        background: "var(--accent-subtle)",
-                        color: "var(--accent)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <Shield size={9} />
-                      {isAdmin ? "Administrator" : "Member"}
-                    </div>
-                  </div>
 
-                  {/* Sign out */}
-                  <button
-                    onClick={async () => {
-                      setIsLoggingOut(true);
-                      await supabase.auth.signOut();
-                      window.location.href = "/auth";
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3.5 text-[13px] font-medium transition-colors"
-                    style={{ color: "var(--danger)" }}
-                  >
-                    <LogOut size={13} />
-                    Sign out
-                  </button>
+                      <div className="px-4 py-3 space-y-2">
+                        {savedAccounts.map((acc) => (
+                          <a
+                            key={acc}
+                            href={`/auth?email=${encodeURIComponent(acc)}`}
+                            className="block w-full px-3 py-2.5 rounded-xl text-[12px] font-medium truncate transition-colors"
+                            style={{
+                              background: "var(--bg-primary)",
+                              border: "1px solid var(--border)",
+                              color: "var(--text-primary)",
+                            }}
+                          >
+                            {acc}
+                          </a>
+                        ))}
+
+                        <input
+                          type="email"
+                          value={newAccountEmail}
+                          onChange={(e) => setNewAccountEmail(e.target.value)}
+                          placeholder="Add account email"
+                          className="w-full px-3 py-2.5 rounded-xl text-[12px] focus:outline-none"
+                          style={{
+                            background: "var(--bg-primary)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text-primary)",
+                          }}
+                        />
+
+                        <button
+                          onClick={handleAddAccount}
+                          disabled={!newAccountEmail.trim()}
+                          className="w-full py-2.5 rounded-xl text-[12px] font-semibold transition-colors"
+                          style={{
+                            background: newAccountEmail.trim()
+                              ? "var(--accent)"
+                              : "var(--border)",
+                            color: "white",
+                          }}
+                        >
+                          + Add account
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

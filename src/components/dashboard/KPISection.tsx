@@ -171,12 +171,6 @@ export const KPISection: React.FC<KPISectionProps> = ({
       rawValue: stats.totalRevenue,
       displayValue: `$${stats.totalRevenue}`,
       icon: DollarSign,
-      ...(!metricsLoading && revenueChangePct !== undefined
-        ? {
-            change: revenueChangePct,
-            trend: revenueChangePct >= 0 ? ("up" as const) : ("down" as const),
-          }
-        : {}),
     },
     {
       title: estimatedSlugs?.includes("total-profit")

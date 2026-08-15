@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
-
+import Link from "next/link";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
@@ -66,7 +66,7 @@ export function DashboardShell({
           )}
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
-            <div className="max-w-[1600px] mx-auto p-4 md:p-8">
+            <div className="max-w-[1600px] mx-auto p-4 md:p-8 min-h-full flex flex-col">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={pathname}
@@ -74,9 +74,9 @@ export function DashboardShell({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
-                  className="page-content"
+                  className="page-content flex-1 flex flex-col"
                 >
-                  {children}
+                  <div className="flex-1">{children}</div>
 
                   <footer
                     className="mt-16 pb-8 border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-4"
@@ -89,18 +89,27 @@ export function DashboardShell({
                       &copy; 2026 InsightForge. All rights reserved.
                     </p>
                     <div
-                      className="flex gap-6 text-[12px]"
+                      className="flex gap-6 text-[12px] mr-18"
                       style={{ color: "var(--text-muted)" }}
                     >
-                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                      <Link
+                        href="/privacy"
+                        className="transition-colors hover:text-[color:var(--accent)]"
+                      >
                         Privacy
-                      </button>
-                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                      </Link>
+                      <Link
+                        href="/terms"
+                        className="transition-colors hover:text-[color:var(--accent)]"
+                      >
                         Terms
-                      </button>
-                      <button className="transition-colors cursor-pointer text-left hover:text-[color:var(--accent)]">
+                      </Link>
+                      <Link
+                        href="/status"
+                        className="transition-colors hover:text-[color:var(--accent)]"
+                      >
                         Status
-                      </button>
+                      </Link>
                     </div>
                   </footer>
                 </motion.div>

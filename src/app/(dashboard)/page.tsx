@@ -21,6 +21,7 @@ import {
   getAggregateOpportunities,
   getAggregateRisks,
   getAIRecommendations,
+  getDatasetFilenames,
   type Recommendation,
 } from "@/lib/data";
 import Link from "next/link";
@@ -39,6 +40,7 @@ export default function Home() {
   // 1. State Management
   const [stats, setStats] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>([]);
+  const [datasetNames, setDatasetNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
@@ -60,18 +62,20 @@ export default function Home() {
   // 2. Fetch Initial Data
   useEffect(() => {
     async function initDashboard() {
-      const [st, rev, cid, userResult, opp] = await Promise.all([
+      const [st, rev, cid, userResult, opp, names] = await Promise.all([
         getAggregateDashboardStats(),
         getAggregateRevenueChart(),
         getCurrentCompanyId(),
         supabase.auth.getUser(),
         getAggregateOpportunities(),
+        getDatasetFilenames(),
       ]);
       setCompanyId(cid);
       setUserId(userResult.data.user?.id);
       setStats(st);
       setRevenueData(rev);
       setOpportunities(opp.opportunities);
+      setDatasetNames(names);
 
       const riskData = await getAggregateRisks();
       const recs = await getAIRecommendations(
@@ -136,20 +140,6 @@ export default function Home() {
         </div>
 
         <div className="pb-1 px-4 flex items-center gap-3">
-          {/* Back button when a KPI panel is open */}
-          {isKPIActive && (
-            <button
-              onClick={() => setLocalTab(null)}
-              className="px-4 py-2 rounded-xl text-[12px] font-medium transition-colors"
-              style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              ← Dashboard
-            </button>
-          )}
           <Link
             href="/dashboard/datasets"
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-medium text-white transition-colors"
@@ -165,35 +155,54 @@ export default function Home() {
 
         {/* KPI cards — always visible, clicking sets localTab */}
         {/* FIX: no category/range props — KPISection only accepts { stats } */}
-        <KPISection
-          stats={stats}
-          activeSlug={localTab}
-          onCardClick={(slug) => setLocalTab(localTab === slug ? null : slug)}
-          estimatedSlugs={["total-profit", "profit-margin"]}
-          allowedSlugs={[
-            "total-revenue",
-            "total-profit",
-            "profit-margin",
-            "total-orders",
-            "active-users",
-            "churn-rate",
-          ]}
-        />
-
-        {/* range filter — sits right-aligned under Churn Rate card */}
-        <div className="flex justify-end">
-          <RangeSwitcher />
+        <div id="kpi-cards-section">
+          <KPISection
+            stats={stats}
+            activeSlug={localTab}
+            onCardClick={(slug) => setLocalTab(localTab === slug ? null : slug)}
+            estimatedSlugs={["total-profit", "profit-margin"]}
+            allowedSlugs={[
+              "total-revenue",
+              "total-profit",
+              "profit-margin",
+              "total-orders",
+              "active-users",
+              "churn-rate",
+            ]}
+          />
         </div>
 
+        {/* range filter — sits right-aligned under Churn Rate card, hidden in KPI detail view */}
+        {!isKPIActive && (
+          <div className="flex justify-end">
+            <RangeSwitcher />
+          </div>
+        )}
+
         {/* AnimatePresence router: main dashboard â†” summary KPI panel */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence
+          mode="wait"
+          onExitComplete={() => {
+            if (localTab === null) {
+              document
+                .getElementById("kpi-cards-section")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }}
+        >
           {isKPIActive ? (
             <motion.div
               key={localTab}
+              id="kpi-detail-section"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+              onAnimationComplete={() => {
+                document
+                  .getElementById("kpi-detail-section")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
             >
               <KPIDetailClient
                 slug={localTab}
@@ -241,7 +250,7 @@ export default function Home() {
 
                   <OpportunitiesPanel opportunities={opportunities} />
                   <RecommendationsPanel recommendations={recommendations} />
-                  <AIChat dashboardStats={stats} />
+                  <AIChat dashboardStats={stats} datasetNames={datasetNames} />
                 </div>
               )}
             </motion.div>

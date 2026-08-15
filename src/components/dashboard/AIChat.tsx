@@ -24,9 +24,23 @@ interface Message {
 
 interface AIChatProps {
   dashboardStats: DashboardStats & { datasetCount: number };
+  datasetNames?: string[];
 }
 
-function buildSystemContext(stats: AIChatProps["dashboardStats"]): string {
+function buildSystemContext(
+  stats: AIChatProps["dashboardStats"],
+  datasetNames: string[] = [],
+): string {
+  const WEBSITE_KNOWLEDGE = `
+WEBSITE FEATURES (answer how-to/feature questions from this, even with no live data):
+- Datasets page: upload CSV/Excel files, view column detection, clean data (remove duplicates, fill nulls); select multiple datasets to bulk-delete.
+- Live Metrics (Workspace): real-time KPI cards — Revenue, Profit, Margin, Orders, Users, Churn — all computed from uploaded datasets.
+- Snapshot Archive: seal a labeled point-in-time record of current metrics (MRR, churn, signups); records are permanent once sealed, can be deleted individually, in bulk, or all at once.
+- CEO Briefing: choose a persona (Risk Defensive / Balanced / Growth Aggressive) to get an AI-written strategic summary based on live risks and opportunities.
+- KPI detail pages: click any KPI card for a deeper breakdown — chart, trend, and (where available) AI explanation.
+- Simulation: model hypothetical changes (e.g. marketing spend, pricing) and see projected revenue/profit impact using industry-standard elasticity estimates.
+`.trim();
+
   const profitLine =
     stats.totalProfit > 0
       ? `Profit: $${stats.totalProfit.toLocaleString()}`
@@ -42,11 +56,16 @@ ACT AS: InsightForge Lead Strategic Consultant. Boardroom-direct, no fluff.
 CORE LOGIC:
 1. Only reference the LIVE DASHBOARD DATA below — never invent numbers not listed here.
 2. If a metric is marked "not available," say so plainly and explain why. Do not guess or estimate a number for it.
+2b. Only state a feature exists on a specific page/section if it's explicitly listed under that section in WEBSITE FEATURES below. If unsure, say "I'm not sure that's available — check the [page] page directly" rather than guessing.
 3. Use direct action verbs when giving advice — Cut, Push, Squeeze, Protect, Accelerate.
 4. Banned words: overall, stable, healthy, monitor, slightly.
 
+${WEBSITE_KNOWLEDGE}
+
 LIVE DASHBOARD DATA:
-- Datasets connected: ${stats.datasetCount}
+- Datasets connected: ${stats.datasetCount}${
+    datasetNames.length > 0 ? ` (${datasetNames.join(", ")})` : ""
+  }
 - Revenue (this period): $${stats.totalRevenue.toLocaleString()}
 - ${profitLine}
 - Orders: ${stats.totalOrders}
@@ -87,7 +106,7 @@ const MIN_WIDTH = 300;
 const MIN_HEIGHT = 360;
 const MAX_HEIGHT = 700;
 
-export function AIChat({ dashboardStats }: AIChatProps) {
+export function AIChat({ dashboardStats, datasetNames = [] }: AIChatProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -106,7 +125,7 @@ export function AIChat({ dashboardStats }: AIChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const systemContext = buildSystemContext(dashboardStats);
+  const systemContext = buildSystemContext(dashboardStats, datasetNames);
   const suggested = buildSuggestedQuestions(dashboardStats);
 
   // ── Drag + resize state ──
@@ -597,28 +616,29 @@ export function AIChat({ dashboardStats }: AIChatProps) {
                     >
                       {msg.content}
                     </div>
-                    {msg.role === "assistant" && msg.id !== "0" && (
-                      <button
-                        onClick={() => copyMessage(msg)}
-                        className="self-start flex items-center gap-1 text-[10px] transition-colors"
-                        style={{
-                          color:
-                            copiedId === msg.id
-                              ? "var(--success)"
-                              : "var(--text-muted)",
-                        }}
-                      >
-                        {copiedId === msg.id ? (
-                          <>
-                            <Check size={10} /> Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={10} /> Copy
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => copyMessage(msg)}
+                      className={cn(
+                        "flex items-center gap-1 text-[10px] transition-colors",
+                        msg.role === "user" ? "self-end" : "self-start",
+                      )}
+                      style={{
+                        color:
+                          copiedId === msg.id
+                            ? "var(--success)"
+                            : "var(--text-muted)",
+                      }}
+                    >
+                      {copiedId === msg.id ? (
+                        <>
+                          <Check size={10} /> Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={10} /> Copy
+                        </>
+                      )}
+                    </button>
                   </div>
                 </motion.div>
               ))}
