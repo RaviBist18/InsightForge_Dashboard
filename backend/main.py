@@ -11,7 +11,7 @@ import jwt
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from fastapi import FastAPI, UploadFile, File, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Request
 from pydantic import BaseModel
 from typing import Dict
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +19,24 @@ from supabase import create_client, Client
 from jwt import PyJWKClient
 import re
 
-app = FastAPI(title="InsightForge Backend")
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN"),
+    traces_sample_rate=0.1,
+    environment="production" if os.environ.get("RENDER") else "development",
+)
+
+app = FastAPI(title="python-fastapi")
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -288,7 +305,9 @@ def engineer_features(df: pd.DataFrame, columns: list[dict]) -> dict:
 
 
 @app.post("/upload")
+@limiter.limit("10/minute")
 async def upload(
+    request: Request,
     file: UploadFile = File(...),
     authorization: str = Header(None),
 ):
@@ -379,13 +398,25 @@ async def upload(
     }
 
 
+ALLOWED_CLEAN_ACTIONS = {"remove_duplicates", "fill_nulls"}
+
+
 @app.post("/datasets/{dataset_id}/clean")
+@limiter.limit("10/minute")
 async def clean_dataset(
+    request: Request,
     dataset_id: str,
     actions: list[str],
     authorization: str = Header(None),
 ):
     company_id, _ = get_company_id(authorization)
+
+    invalid = set(actions) - ALLOWED_CLEAN_ACTIONS
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action(s): {sorted(invalid)}. Allowed: {sorted(ALLOWED_CLEAN_ACTIONS)}",
+        )
 
     result = (
         supabase.table("datasets")
@@ -2024,7 +2055,10 @@ ELASTICITY = {
 
 
 @app.post("/simulate")
-async def simulate(payload: SimulateRequest):
+async def simulate(payload: SimulateRequest, authorization: str = Header(None)):
+    get_company_id(
+        authorization
+    )  # verify caller is authenticated; doesn't need company_id itself
     base = payload.baseline
     revenue = base.revenue
     orders = base.orders
