@@ -1,16 +1,16 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: NextRequest) {
   // Skip middleware for auth routes
-  if (request.nextUrl.pathname.startsWith('/auth')) {
-    return NextResponse.next()
+  if (request.nextUrl.pathname.startsWith("/auth")) {
+    return NextResponse.next();
   }
 
   const response = NextResponse.next({
     request: { headers: request.headers },
-  })
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,28 +18,30 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-            response.cookies.set(name, value, options)
-          })
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options);
+          });
         },
       },
-    }
-  )
+    },
+  );
 
   // Refresh session
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname === '/') {
-    return NextResponse.redirect(new URL('/auth', request.url))
+  if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
+    return NextResponse.redirect(new URL("/auth", request.url));
   }
 
-  return response
+  return response;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
-}
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};

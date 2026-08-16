@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? "/";
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/`);
+    return NextResponse.redirect(`${origin}/dashboard`);
   }
 
   const cookieStore = await cookies();

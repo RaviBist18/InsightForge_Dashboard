@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const VERCEL_URL = "https://insight-forge-dashboard.vercel.app";
 
@@ -230,7 +231,7 @@ export default function AuthPage() {
           password,
         });
         if (error) throw error;
-        router.push("/");
+        router.push("/dashboard");
         router.refresh();
       } else {
         const inviteToken =
@@ -250,7 +251,7 @@ export default function AuthPage() {
         });
         if (error) throw error;
         if (data.session) {
-          router.push("/");
+          router.push("/dashboard");
           router.refresh();
         } else {
           setSuccessMsg(
@@ -302,18 +303,23 @@ export default function AuthPage() {
           <div className="p-8">
             {/* Logo */}
             <div className="flex flex-col items-center mb-8">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center font-semibold text-white text-base mb-3"
-                style={{ background: "var(--accent)" }}
+              <Link
+                href="/"
+                className="flex flex-col items-center cursor-pointer"
               >
-                IF
-              </div>
-              <h1
-                className="text-[19px] font-semibold tracking-tight"
-                style={{ color: "var(--text-primary)" }}
-              >
-                InsightForge
-              </h1>
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center font-semibold text-white text-base mb-3"
+                  style={{ background: "var(--accent)" }}
+                >
+                  IF
+                </div>
+                <h1
+                  className="text-[19px] font-semibold tracking-tight"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  InsightForge
+                </h1>
+              </Link>
               <p
                 className="text-[13px] mt-1"
                 style={{ color: "var(--text-secondary)" }}
