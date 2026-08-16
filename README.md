@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.png" alt="InsightForge logo" width="140" />
+<img src="logo.png" alt="InsightForge logo" width="140" />
 
 # InsightForge
 
