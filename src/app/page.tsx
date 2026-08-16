@@ -377,8 +377,12 @@ export default function LandingPage() {
             "Next.js 16",
             "TypeScript",
             "Tailwind CSS v4",
+            "Framer Motion",
+            "Recharts",
             "Supabase",
+            "Google OAuth",
             "Groq + Llama 3.1",
+            "Pandas",
             "Vercel",
           ].map((t) => (
             <span
