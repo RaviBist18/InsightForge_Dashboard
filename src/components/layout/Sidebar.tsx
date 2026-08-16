@@ -44,7 +44,7 @@ const getInitials = (nameOrEmail: string) => {
 };
 
 const ADMIN_NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
@@ -54,7 +54,7 @@ const ADMIN_NAV_ITEMS = [
 ];
 
 const USER_NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Overview", href: "/" },
+  { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: UploadCloud, label: "Datasets", href: "/dashboard/datasets" },
   { icon: SlidersHorizontal, label: "Simulator", href: "/dashboard/simulator" },
   { icon: Bookmark, label: "Saved Views", href: "/dashboard/saved-views" },
