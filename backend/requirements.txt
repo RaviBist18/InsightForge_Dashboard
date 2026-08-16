@@ -10,3 +10,4 @@ PyJWT==2.8.0
 python-multipart==0.0.9
 slowapi==0.1.10
 sentry-sdk==2.68.0
+cryptography==42.0.5
