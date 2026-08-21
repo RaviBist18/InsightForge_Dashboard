@@ -24,7 +24,7 @@ export function DashboardShell({
   return (
     <ThemeProvider>
       <div
-        className="flex h-screen font-sans overflow-hidden selection:bg-[var(--accent-subtle)] selection:text-[var(--accent)] relative"
+        className="flex h-dvh font-sans overflow-hidden selection:bg-[var(--accent-subtle)] selection:text-[var(--accent)] relative"
         style={{ background: "var(--bg-primary)" }}
       >
         <Sidebar
@@ -34,7 +34,7 @@ export function DashboardShell({
           setMobileOpen={setIsMobileMenuOpen}
         />
 
-        <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <main className="flex-1 min-h-0 flex flex-col h-dvh overflow-hidden">
           <Navbar
             onMenuClick={() => setIsMobileMenuOpen(true)}
             companyName={companyName}
@@ -65,8 +65,8 @@ export function DashboardShell({
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
-            <div className="max-w-[1600px] mx-auto p-4 md:p-8 min-h-full flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
+            <div className="max-w-[1600px] mx-auto p-4 md:p-8 flex flex-col flex-1 min-h-0">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={pathname}
@@ -74,12 +74,12 @@ export function DashboardShell({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
-                  className="page-content flex-1 flex flex-col"
+                  className="page-content flex-1 flex flex-col min-h-0"
                 >
-                  <div className="flex-1">{children}</div>
+                  <div>{children}</div>
 
                   <footer
-                    className="mt-16 pb-8 border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-4"
+                    className="mt-auto pb-8 border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-4"
                     style={{ borderColor: "var(--border)" }}
                   >
                     <p
@@ -89,7 +89,7 @@ export function DashboardShell({
                       &copy; 2026 InsightForge. All rights reserved.
                     </p>
                     <div
-                      className="flex gap-6 text-[12px] mr-18"
+                      className="flex gap-6 text-[12px]"
                       style={{ color: "var(--text-muted)" }}
                     >
                       <Link
