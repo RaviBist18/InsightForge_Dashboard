@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   UploadCloud,
   Loader2,
@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useSearchParams } from "next/navigation";
 import {
   LineChart,
   Line,
@@ -47,6 +48,16 @@ interface EngineeredFeature {
   type: string;
   top_5?: { customer_id: string; order_count: number }[];
 }
+interface BusinessInsights {
+  top_signup_day?: { day: string; percentage: number } | null;
+  churn_rate?: {
+    churned_count: number;
+    total_count: number;
+    percentage: number;
+  } | null;
+  revenue_concentration?: { top_n: number; percentage: number } | null;
+  avg_revenue_per_customer?: { value: number } | null;
+}
 interface UploadResult {
   id: string;
   filename: string;
@@ -65,6 +76,7 @@ interface UploadResult {
     }
   >;
   engineered_features: EngineeredFeature[];
+  business_insights?: BusinessInsights;
 }
 
 interface KPIData {
@@ -252,7 +264,25 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 export default function DatasetsPage() {
+  const searchParams = useSearchParams();
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const tryStageFile = (f: File | undefined | null) => {
+    if (!f) return;
+    if (!/\.(csv|xlsx|xls)$/i.test(f.name)) {
+      setError(
+        `"${f.name}" isn't a supported file type — only CSV or Excel (.csv, .xlsx, .xls) files can be uploaded.`,
+      );
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      errorTimeoutRef.current = setTimeout(() => setError(null), 3000);
+      return;
+    }
+    setError(null);
+    if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    setFile(f);
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -354,6 +384,18 @@ export default function DatasetsPage() {
     }
   }, [loadDatasets]);
 
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.files;
+      if (items && items.length > 0) {
+        tryStageFile(items[0]);
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleSection = (key: string) => {
     setVisibleSections((prev) => {
       const next = { ...prev, [key]: !prev[key] };
@@ -409,6 +451,7 @@ export default function DatasetsPage() {
         duplicate_rows_preview: data.analysis.duplicate_rows_preview,
         outliers_by_column: data.analysis.outliers_by_column,
         engineered_features: data.analysis.engineered_features || [],
+        business_insights: data.analysis.business_insights,
       });
       loadKpis(id);
       loadCustomerAnalytics(id);
@@ -428,6 +471,14 @@ export default function DatasetsPage() {
       setViewingId(null);
     }
   };
+
+  useEffect(() => {
+    const datasetId = searchParams.get("dataset");
+    if (datasetId) {
+      handleViewDataset(datasetId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -852,10 +903,23 @@ export default function DatasetsPage() {
 
       {/* Upload bar */}
       <div
-        className="flex items-center gap-3 mb-8 p-4 rounded-2xl"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          tryStageFile(e.dataTransfer.files?.[0]);
+        }}
+        className="flex items-center gap-3 mb-8 p-4 rounded-2xl transition-colors"
         style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
+          background: isDragging ? "var(--accent-subtle)" : "var(--bg-surface)",
+          border: `1px dashed ${isDragging ? "var(--accent)" : "var(--border)"}`,
         }}
       >
         <label
@@ -871,7 +935,7 @@ export default function DatasetsPage() {
           <input
             type="file"
             accept=".csv,.xlsx,.xls"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => tryStageFile(e.target.files?.[0])}
             className="hidden"
           />
         </label>
@@ -897,13 +961,19 @@ export default function DatasetsPage() {
             border: "1px solid var(--danger)",
           }}
         >
-          <AlertCircle size={14} />
-          {error}
+          <AlertCircle size={14} className="shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="shrink-0 p-0.5 rounded-full transition-colors hover:bg-black/5"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
       {/* Saved datasets list */}
-      {!viewingId && (
+      {!viewingId && !result && (
         <div className="mb-10">
           {datasets.length > 5 && (
             <div className="relative mb-3">
@@ -1398,7 +1468,6 @@ export default function DatasetsPage() {
                     value={kpis.avg_order_value.toLocaleString(undefined, {
                       maximumFractionDigits: 0,
                     })}
-                    color="#2563eb"
                   />
                 )}
                 {kpis.unique_customers !== undefined && (
@@ -1406,7 +1475,6 @@ export default function DatasetsPage() {
                     icon={<Users size={14} />}
                     label="Unique Customers"
                     value={kpis.unique_customers.toString()}
-                    color="#9333ea"
                   />
                 )}
                 {kpis.date_range_start && kpis.date_range_end && (
@@ -1414,7 +1482,6 @@ export default function DatasetsPage() {
                     icon={<Calendar size={14} />}
                     label="Date Range"
                     value={`${kpis.date_range_start} → ${kpis.date_range_end}`}
-                    color="#0891b2"
                     small
                   />
                 )}
@@ -1713,11 +1780,8 @@ export default function DatasetsPage() {
               {customerAnalytics.top_by_revenue &&
                 customerAnalytics.top_by_revenue.length > 0 && (
                   <div
-                    className="rounded-2xl overflow-hidden"
-                    style={{
-                      border: "1px solid var(--border)",
-                      borderLeft: "3px solid #9333ea",
-                    }}
+                    className="rounded-2xl overflow-x-auto"
+                    style={{ border: "1px solid var(--border)" }}
                   >
                     <table className="w-full text-[13px]">
                       <thead>
@@ -1819,10 +1883,9 @@ export default function DatasetsPage() {
               {churnPrediction.customers &&
                 churnPrediction.customers.length > 0 && (
                   <div
-                    className="rounded-2xl overflow-hidden"
+                    className="rounded-2xl overflow-x-auto"
                     style={{
                       border: "1px solid var(--border)",
-                      borderLeft: "3px solid #dc2626",
                     }}
                   >
                     <table className="w-full text-[13px]">
@@ -1956,10 +2019,9 @@ export default function DatasetsPage() {
               </div>
               {clvData.customers && clvData.customers.length > 0 && (
                 <div
-                  className="rounded-2xl overflow-hidden"
+                  className="rounded-2xl overflow-x-auto"
                   style={{
                     border: "1px solid var(--border)",
-                    borderLeft: "3px solid #ca8a04",
                   }}
                 >
                   <table className="w-full text-[13px]">
@@ -2044,10 +2106,9 @@ export default function DatasetsPage() {
               {salesAnalytics.by_product &&
                 salesAnalytics.by_product.length > 0 && (
                   <div
-                    className="rounded-2xl overflow-hidden mb-3"
+                    className="rounded-2xl overflow-x-auto mb-3"
                     style={{
                       border: "1px solid var(--border)",
-                      borderLeft: "3px solid #059669",
                     }}
                   >
                     <table
@@ -2081,10 +2142,9 @@ export default function DatasetsPage() {
               {salesAnalytics.by_region &&
                 salesAnalytics.by_region.length > 0 && (
                   <div
-                    className="rounded-2xl overflow-hidden mb-3"
+                    className="rounded-2xl overflow-x-auto mb-3"
                     style={{
                       border: "1px solid var(--border)",
-                      borderLeft: "3px solid #059669",
                     }}
                   >
                     <table
@@ -2512,7 +2572,7 @@ export default function DatasetsPage() {
               {inventoryAnalytics.latest_by_product &&
                 inventoryAnalytics.latest_by_product.length > 0 && (
                   <div
-                    className="rounded-2xl overflow-hidden"
+                    className="rounded-2xl overflow-x-auto"
                     style={{
                       border: "1px solid var(--border)",
                       borderLeft: "3px solid #475569",
@@ -2608,9 +2668,6 @@ export default function DatasetsPage() {
                       className="rounded-2xl p-4"
                       style={{
                         border: "1px solid var(--border)",
-                        borderLeft: p.will_run_low
-                          ? "3px solid #d97706"
-                          : "3px solid #475569",
                       }}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -2654,130 +2711,89 @@ export default function DatasetsPage() {
               </div>
             )}
 
-          {/* Columns */}
-          <SectionHeader label="Columns" color="#64748b" />
-          <div
-            className="rounded-2xl overflow-hidden mb-6"
-            style={{ border: "1px solid var(--border)" }}
-          >
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr style={{ background: "var(--bg-primary)" }}>
-                  <Th>Name</Th>
-                  <Th>Type</Th>
-                  <Th>Missing</Th>
-                  <Th>Detected Role</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.columns.map((col) => (
-                  <tr
-                    key={col.name}
-                    style={{ borderTop: "1px solid var(--border)" }}
-                  >
-                    <td
-                      className="px-3 py-2.5 font-medium"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      {col.name}
-                    </td>
-                    <td
-                      className="px-3 py-2.5 font-mono text-[12px]"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      {col.dtype}
-                    </td>
-                    <td
-                      className="px-3 py-2.5"
-                      style={{
-                        color:
-                          col.null_count > 0
-                            ? "var(--warning, #d97706)"
-                            : "var(--text-secondary)",
-                      }}
-                    >
-                      {col.null_count}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {col.role === "unknown" ? (
-                        <span style={{ color: "#94a3b8" }}>—</span>
-                      ) : (
-                        <span
-                          className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
-                          style={roleBadgeStyle(col.role)}
-                        >
-                          {col.role}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Engineered Features */}
-          {result.engineered_features?.length > 0 && (
-            <div className="mb-6">
-              <SectionHeader
-                label="Engineered Features"
-                icon={<Sparkles size={12} />}
-                color="#2563eb"
-              />
-              <div
-                className="rounded-2xl overflow-hidden"
-                style={{
-                  border: "1px solid var(--border)",
-                  borderLeft: "3px solid #2563eb",
-                }}
-              >
-                {result.engineered_features.map((f, i) => (
-                  <div
-                    key={i}
-                    className="px-4 py-3 text-[13px]"
-                    style={{
-                      borderTop: i > 0 ? "1px solid var(--border)" : "none",
-                    }}
-                  >
-                    <div className="flex items-baseline gap-2">
-                      <span
-                        className="font-semibold"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {f.name}
-                      </span>
-                      <span
-                        className="text-[11px]"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        derived from <code>{f.source_column}</code>
-                      </span>
-                    </div>
-                    {f.top_5 && (
-                      <div
-                        className="mt-1.5 text-[12px]"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        Top customers:{" "}
-                        {f.top_5.map((t, j) => (
-                          <span
-                            key={t.customer_id}
-                            className="px-1.5 py-0.5 rounded text-[11px] font-medium mr-1"
-                            style={{
-                              background: "var(--bg-primary)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            {t.customer_id} · {t.order_count}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+          {/* Business Insights */}
+          {result.business_insights &&
+            (result.business_insights.top_signup_day ||
+              result.business_insights.churn_rate ||
+              result.business_insights.revenue_concentration ||
+              result.business_insights.avg_revenue_per_customer) && (
+              <div className="mb-6">
+                <SectionHeader
+                  label="Business Insights"
+                  icon={<Sparkles size={12} />}
+                  color="#2563eb"
+                />
+                <div className="grid gap-2">
+                  {result.business_insights.top_signup_day && (
+                    <InsightCard
+                      icon={<Calendar size={14} />}
+                      text={
+                        <>
+                          Most signups happen on{" "}
+                          <strong>
+                            {result.business_insights.top_signup_day.day}
+                          </strong>{" "}
+                          ({result.business_insights.top_signup_day.percentage}
+                          %) — consider timing campaigns around this.
+                        </>
+                      }
+                    />
+                  )}
+                  {result.business_insights.churn_rate && (
+                    <InsightCard
+                      icon={<AlertCircle size={14} />}
+                      text={
+                        <>
+                          <strong>
+                            {result.business_insights.churn_rate.churned_count}
+                          </strong>{" "}
+                          of {result.business_insights.churn_rate.total_count}{" "}
+                          customers have churned (
+                          <strong>
+                            {result.business_insights.churn_rate.percentage}%
+                          </strong>
+                          ) — keep an eye on retention.
+                        </>
+                      }
+                    />
+                  )}
+                  {result.business_insights.revenue_concentration && (
+                    <InsightCard
+                      icon={<Users size={14} />}
+                      text={
+                        <>
+                          Your top{" "}
+                          {result.business_insights.revenue_concentration.top_n}{" "}
+                          customers account for{" "}
+                          <strong>
+                            {
+                              result.business_insights.revenue_concentration
+                                .percentage
+                            }
+                            %
+                          </strong>{" "}
+                          of total revenue — a concentration risk if any churn.
+                        </>
+                      }
+                    />
+                  )}
+                  {result.business_insights.avg_revenue_per_customer && (
+                    <InsightCard
+                      icon={<DollarSign size={14} />}
+                      text={
+                        <>
+                          Average revenue per customer is{" "}
+                          <strong>
+                            {result.business_insights.avg_revenue_per_customer.value.toLocaleString()}
+                          </strong>
+                          .
+                        </>
+                      }
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Duplicates */}
           {result.duplicate_count > 0 && (
@@ -2803,10 +2819,9 @@ export default function DatasetsPage() {
                 </button>
               </div>
               <div
-                className="rounded-2xl overflow-hidden"
+                className="rounded-2xl overflow-x-auto"
                 style={{
                   border: "1px solid var(--border)",
-                  borderLeft: "3px solid var(--danger, #dc2626)",
                 }}
               >
                 <table className="w-full text-[13px]">
@@ -2847,10 +2862,9 @@ export default function DatasetsPage() {
                 color="var(--warning, #d97706)"
               />
               <div
-                className="rounded-2xl overflow-hidden"
+                className="rounded-2xl overflow-x-auto"
                 style={{
                   border: "1px solid var(--border)",
-                  borderLeft: "3px solid var(--warning, #d97706)",
                 }}
               >
                 <table className="w-full text-[13px]">
@@ -3137,13 +3151,13 @@ function KpiCard({
   icon,
   label,
   value,
-  color,
+  color = "var(--text-muted)",
   small = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  color: string;
+  color?: string;
   small?: boolean;
 }) {
   return (
@@ -3170,6 +3184,30 @@ function KpiCard({
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function InsightCard({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-start gap-2.5 px-4 py-3 rounded-2xl text-[13px]"
+      style={{
+        border: "1px solid var(--border)",
+        background: "var(--bg-surface)",
+        color: "var(--text-secondary)",
+      }}
+    >
+      <span className="mt-0.5 shrink-0" style={{ color: "#2563eb" }}>
+        {icon}
+      </span>
+      <span>{text}</span>
     </div>
   );
 }

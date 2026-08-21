@@ -876,6 +876,22 @@ export default function SavedViewsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const viewId = searchParams.get("view");
+    if (!viewId || views.length === 0) return;
+    const el = document.getElementById(`saved-view-${viewId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.outline = "2px solid var(--accent)";
+      el.style.outlineOffset = "2px";
+      setTimeout(() => {
+        el.style.outline = "";
+        el.style.outlineOffset = "";
+      }, 2000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
+
   const persist = (updated: SavedAlert[]) => {
     setViews(updated);
   };
@@ -1092,7 +1108,7 @@ export default function SavedViewsPage() {
           className="flex items-center gap-2 text-xs font-medium mb-3"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">
+          <Link href="/dashboard" className="hover:underline cursor-pointer">
             Dashboard
           </Link>
           <span className="opacity-40">/</span>
@@ -1254,17 +1270,18 @@ export default function SavedViewsPage() {
               ? views.filter((v) => v.aiInsight)
               : views
           ).map((view) => (
-            <ViewCard
-              key={view.id}
-              view={view}
-              savedId={savedId}
-              onCheck={handleCheckOne}
-              onDelete={handleDelete}
-              onTogglePause={handleTogglePause}
-              onToggleCompare={handleToggleCompare}
-              onShare={setShareTarget}
-              onGenerateInsight={handleGenerateInsight}
-            />
+            <div key={view.id} id={`saved-view-${view.id}`}>
+              <ViewCard
+                view={view}
+                savedId={savedId}
+                onCheck={handleCheckOne}
+                onDelete={handleDelete}
+                onTogglePause={handleTogglePause}
+                onToggleCompare={handleToggleCompare}
+                onShare={setShareTarget}
+                onGenerateInsight={handleGenerateInsight}
+              />
+            </div>
           ))}
         </AnimatePresence>
         {views.length === 0 && (

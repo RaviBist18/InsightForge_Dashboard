@@ -26,7 +26,7 @@ export function AppearanceTab({ showToast }: AppearanceTabProps) {
 
       {/* ── Theme ── */}
       <div
-        className="flex items-center justify-between py-4 rounded-xl px-4"
+        className="flex items-center justify-between gap-3 flex-wrap py-4 rounded-xl px-4"
         style={{
           background: "var(--bg-primary)",
           border: "1px solid var(--border)",
@@ -47,7 +47,7 @@ export function AppearanceTab({ showToast }: AppearanceTabProps) {
           </p>
         </div>
         <div
-          className="flex items-center gap-1 p-1 rounded-lg"
+          className="flex items-center gap-1 p-1 rounded-lg flex-shrink-0"
           style={{
             background: "var(--bg-surface)",
             border: "1px solid var(--border)",
@@ -78,13 +78,13 @@ export function AppearanceTab({ showToast }: AppearanceTabProps) {
 
       {/* ── Compact Mode ── */}
       <div
-        className="flex items-center justify-between py-4 rounded-xl px-4"
+        className="flex items-center justify-between gap-3 flex-wrap py-4 rounded-xl px-4"
         style={{
           background: "var(--bg-primary)",
           border: "1px solid var(--border)",
         }}
       >
-        <div>
+        <div className="min-w-0">
           <p
             className="text-[13px] font-medium"
             style={{ color: "var(--text-primary)" }}

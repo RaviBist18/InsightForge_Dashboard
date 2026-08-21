@@ -24,7 +24,7 @@ export default async function InsightPage({
   return (
     <div className="max-w-4xl mx-auto">
       <Link
-        href="/"
+        href="/dashboard"
         className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors text-xs font-bold uppercase tracking-widest mb-8 group"
       >
         <ChevronLeft

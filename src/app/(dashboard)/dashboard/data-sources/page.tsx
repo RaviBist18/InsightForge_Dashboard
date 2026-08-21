@@ -834,7 +834,10 @@ function DataSourcesContent() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <NextLink href="/" className="hover:underline cursor-pointer">
+          <NextLink
+            href="/dashboard"
+            className="hover:underline cursor-pointer"
+          >
             Dashboard
           </NextLink>
           <span className="opacity-40">/</span>

@@ -646,11 +646,31 @@ function AdminUsersContent() {
     router.push(`/?readonly=true&userId=${userId}`);
   };
 
-  const filtered = users.filter(
-    (u) =>
-      (u.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.role.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const ROLE_RANK: Record<UserRecord["role"], number> = {
+    admin: 0,
+    "co-admin": 1,
+    user: 2,
+  };
+
+  const filtered = users
+    .filter(
+      (u) =>
+        (u.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.role.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+    .sort((a, b) => {
+      // 1) role rank: admin, then co-admin, then member
+      const roleDiff = ROLE_RANK[a.role] - ROLE_RANK[b.role];
+      if (roleDiff !== 0) return roleDiff;
+
+      // 2) within same role, logged-in user goes first
+      const aIsCurrent = a.id === currentUserId;
+      const bIsCurrent = b.id === currentUserId;
+      if (aIsCurrent !== bIsCurrent) return aIsCurrent ? -1 : 1;
+
+      // 3) rest alphabetically by name
+      return (a.full_name || "").localeCompare(b.full_name || "");
+    });
 
   const stats = {
     total: users.length,
@@ -668,7 +688,7 @@ function AdminUsersContent() {
           className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">
+          <Link href="/dashboard" className="hover:underline cursor-pointer">
             Dashboard
           </Link>
           <span className="opacity-40">/</span>

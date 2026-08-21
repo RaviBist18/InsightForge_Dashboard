@@ -1,4 +1,4 @@
-﻿from dotenv import load_dotenv
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -101,7 +101,7 @@ COLUMN_PATTERNS = {
     "signup_date": r"signup.?date|sign.?up.?date|joined.?date|registration.?date",
     "churn_date": r"churn.?date|cancel.?date|cancelled.?date|churned.?date",
     "date": r"date|dt$|_dt$|timestamp|created_at|order_date",
-    "revenue": r"revenue|amount|amt|price|total|income",
+    "revenue": r"revenue|amount|amt|price|total|income|mrr|arr",
     "cost": r"cost|expense|cogs|cost.?of.?goods",
     "sales": r"sales|units.?sold|revenue.?sales",
     "customer_id": r"customer.?id|cust.?id|client.?id|user.?id",
@@ -304,6 +304,68 @@ def engineer_features(df: pd.DataFrame, columns: list[dict]) -> dict:
     return {"features_added": features_added}
 
 
+def compute_business_insights(df: pd.DataFrame, columns: list[dict]) -> dict:
+    """Plain-language business takeaways derived from detected columns.
+    Each key is None if the required source column isn't present."""
+    insights = {
+        "top_signup_day": None,
+        "churn_rate": None,
+        "revenue_concentration": None,
+        "avg_revenue_per_customer": None,
+    }
+
+    signup_col = next((c["name"] for c in columns if c["role"] == "signup_date"), None)
+    churn_col = next((c["name"] for c in columns if c["role"] == "churn_date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+
+    # 1. Top signup day
+    if signup_col:
+        parsed = pd.to_datetime(df[signup_col], errors="coerce").dropna()
+        if len(parsed) > 0:
+            day_counts = parsed.dt.day_name().value_counts()
+            if len(day_counts) > 0:
+                top_day = day_counts.index[0]
+                pct = round(float(day_counts.iloc[0]) / len(parsed) * 100, 1)
+                insights["top_signup_day"] = {"day": top_day, "percentage": pct}
+
+    # 2. Churn rate
+    if churn_col:
+        total = len(df)
+        churned = int(df[churn_col].notna().sum())
+        if total > 0:
+            insights["churn_rate"] = {
+                "churned_count": churned,
+                "total_count": total,
+                "percentage": round(churned / total * 100, 1),
+            }
+
+    # 3. Revenue/MRR concentration (top 5 customers)
+    if revenue_col and customer_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        by_customer = (
+            df.groupby(customer_col)[revenue_col].sum().sort_values(ascending=False)
+        )
+        total_revenue = float(by_customer.sum())
+        if total_revenue > 0 and len(by_customer) > 0:
+            top_n = min(5, len(by_customer))
+            top_sum = float(by_customer.head(top_n).sum())
+            insights["revenue_concentration"] = {
+                "top_n": top_n,
+                "percentage": round(top_sum / total_revenue * 100, 1),
+            }
+
+    # 4. Avg revenue/MRR per customer
+    if revenue_col and customer_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        unique_customers = df[customer_col].nunique()
+        if unique_customers > 0:
+            avg = float(df[revenue_col].sum()) / unique_customers
+            insights["avg_revenue_per_customer"] = {"value": round(avg, 2)}
+
+    return insights
+
+
 @app.post("/upload")
 @limiter.limit("10/minute")
 async def upload(
@@ -336,6 +398,9 @@ async def upload(
     analysis_result["engineered_features"] = engineer_features(
         df, analysis_result["columns"]
     )["features_added"]
+    analysis_result["business_insights"] = compute_business_insights(
+        df, analysis_result["columns"]
+    )
     columns = analysis_result["columns"]
     duplicate_count = analysis_result["duplicate_count"]
     duplicate_rows_preview = analysis_result["duplicate_rows_preview"]
@@ -362,6 +427,7 @@ async def upload(
         "duplicate_rows_preview": duplicate_rows_preview,
         "outliers_by_column": outliers_by_column,
         "engineered_features": analysis_result["engineered_features"],
+        "business_insights": analysis_result["business_insights"],
     }
 
     insert_result = (
@@ -395,6 +461,7 @@ async def upload(
         "duplicate_rows_preview": duplicate_rows_preview,
         "outliers_by_column": outliers_by_column,
         "engineered_features": analysis_result["engineered_features"],
+        "business_insights": analysis_result["business_insights"],
     }
 
 
@@ -454,6 +521,7 @@ async def clean_dataset(
     analysis["engineered_features"] = engineer_features(df, analysis["columns"])[
         "features_added"
     ]
+    analysis["business_insights"] = compute_business_insights(df, analysis["columns"])
 
     # overwrite storage with cleaned file — CSV only for v1 simplicity
     cleaned_bytes = df.to_csv(index=False).encode("utf-8")
@@ -1272,6 +1340,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
     customer_col = next(
         (c["name"] for c in columns if c["role"] == "customer_id"), None
     )
+    cost_col = next((c["name"] for c in columns if c["role"] == "cost"), None)
 
     file_bytes = supabase.storage.from_("datasets").download(storage_path)
     if filename.lower().endswith(".csv"):
@@ -1361,6 +1430,43 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                         "category": "Customer",
                         "severity": "medium",
                         "message": f"{high_risk_count} customer(s) at high risk of churn based on order recency.",
+                    }
+                )
+
+    has_trend_risk = any(r["category"] in ("Revenue", "Sales") for r in risks)
+    if not has_trend_risk:
+        if (
+            revenue_col
+            and product_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_product = df.groupby(product_col)[revenue_col].sum().sort_values()
+            if len(by_product) >= 2:
+                worst, worst_val = by_product.index[0], float(by_product.iloc[0])
+                avg_val = float(by_product.mean())
+                if avg_val > 0 and worst_val < avg_val * 0.5:
+                    risks.append(
+                        {
+                            "category": "Revenue",
+                            "severity": "medium",
+                            "message": f"{worst} is underperforming — revenue (${round(worst_val,2)}) is less than half the average across products (${round(avg_val,2)}).",
+                        }
+                    )
+        if (
+            revenue_col
+            and cost_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+            and pd.api.types.is_numeric_dtype(df[cost_col])
+        ):
+            total_rev, total_cost = float(df[revenue_col].sum()), float(
+                df[cost_col].sum()
+            )
+            if total_cost > total_rev:
+                risks.append(
+                    {
+                        "category": "Revenue",
+                        "severity": "high",
+                        "message": f"Total costs (${round(total_cost,2)}) exceed total revenue (${round(total_rev,2)}) — operating at a loss.",
                     }
                 )
 
@@ -1511,6 +1617,52 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         "message": f"Customer base grew {growth_pct}% in the latest period ({second_unique} vs {first_unique} unique customers). Consider expanding marketing reach.",
                     }
                 )
+
+    has_trend_opp = any(
+        o["category"] in ("Revenue", "Sales", "Product") for o in opportunities
+    )
+    if not has_trend_opp:
+        if (
+            revenue_col
+            and product_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_product = (
+                df.groupby(product_col)[revenue_col].sum().sort_values(ascending=False)
+            )
+            if len(by_product) >= 1:
+                top, top_val = by_product.index[0], float(by_product.iloc[0])
+                total = float(by_product.sum())
+                share = round(top_val / total * 100, 1) if total else 0
+                opportunities.append(
+                    {
+                        "category": "Product",
+                        "impact": "high" if share > 40 else "medium",
+                        "message": f"{top} is your top revenue driver (${round(top_val,2)}, {share}% of total). Consider doubling down on marketing or stock for it.",
+                    }
+                )
+        if (
+            customer_col
+            and revenue_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_cust = (
+                df.groupby(customer_col)[revenue_col].sum().sort_values(ascending=False)
+            )
+            if len(by_cust) >= 3:
+                top3_share = (
+                    round(by_cust.head(3).sum() / by_cust.sum() * 100, 1)
+                    if by_cust.sum()
+                    else 0
+                )
+                if top3_share > 30:
+                    opportunities.append(
+                        {
+                            "category": "Customer",
+                            "impact": "medium",
+                            "message": f"Top 3 customers account for {top3_share}% of revenue. Consider a loyalty program to deepen these relationships.",
+                        }
+                    )
 
     del df, file_bytes
 

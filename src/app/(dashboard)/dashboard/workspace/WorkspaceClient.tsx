@@ -631,6 +631,16 @@ export default function WorkspaceClient({
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
+          <div
+            className="flex items-center gap-2 text-[12px] mb-2"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <Link href="/dashboard" className="hover:underline cursor-pointer">
+              Dashboard
+            </Link>
+            <span className="opacity-40">/</span>
+            <span style={{ color: "var(--accent)" }}>Workspace</span>
+          </div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
               <div
@@ -1207,7 +1217,7 @@ export default function WorkspaceClient({
               >
                 Save today's numbers so you can look back later.
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="text"
                   value={sealLabel}
@@ -1215,7 +1225,7 @@ export default function WorkspaceClient({
                   onKeyDown={(e) => e.key === "Enter" && handleSeal()}
                   placeholder="Preserve today's numbers for future comparison"
                   disabled={isReadOnly || sealing}
-                  className="flex-1 px-3 py-2.5 rounded text-sm outline-none transition-all"
+                  className="flex-1 min-w-0 px-3 py-2.5 rounded text-sm outline-none transition-all"
                   style={{
                     background: "var(--card-bg, #fff)",
                     border: "1px solid rgba(0,0,0,0.1)",
@@ -1224,7 +1234,7 @@ export default function WorkspaceClient({
                 <button
                   onClick={handleSeal}
                   disabled={!sealLabel.trim() || isReadOnly || sealing}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded text-xs font-bold whitespace-nowrap transition-all"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded text-xs font-bold whitespace-nowrap transition-all w-full sm:w-auto"
                   style={{
                     background: accent,
                     color: "#fff",

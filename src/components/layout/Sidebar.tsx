@@ -217,7 +217,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center gap-3 px-4 py-5 border-b"
           style={{ borderColor: "var(--border)" }}
         >
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/dashboard" className="flex items-center gap-3 group">
             <div
               className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold text-white transition-colors"
               style={{ background: "var(--accent)" }}

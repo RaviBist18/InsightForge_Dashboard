@@ -754,7 +754,9 @@ function ReportsContent() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">Dashboard</Link>
+          <Link href="/dashboard" className="hover:underline cursor-pointer">
+            Dashboard
+          </Link>
           <span className="opacity-40">/</span>
           <span style={{ color: "var(--accent)" }}>Reports</span>
         </div>

@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { LogOut } from "lucide-react";
+import { SearchPalette } from "./SearchPalette";
 
 const getInitials = (nameOrEmail: string) => {
   if (!nameOrEmail) return "??";
@@ -46,7 +47,6 @@ export const Navbar: React.FC<{
   const { role, name, email, loading: roleLoading } = useUserRole();
   const isAdmin = role === "admin";
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -74,15 +74,6 @@ export const Navbar: React.FC<{
   const triggeredAlerts = getTriggeredAlerts(alerts);
   const unreadCount = getUnreadTriggeredAlerts(alerts).length;
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("globalSearch", { detail: searchQuery.toLowerCase() }),
-      );
-    }, 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
-
   const [riskData, setRiskData] = useState<AggregateRiskResult | null>(null);
 
   useEffect(() => {
@@ -90,10 +81,6 @@ export const Navbar: React.FC<{
       .then(setRiskData)
       .catch(() => {});
   }, []);
-
-  const handleSearchFocus = () => {
-    if (pathname !== "/") router.push("/");
-  };
 
   const markAllRead = () =>
     setAlerts(
@@ -161,44 +148,7 @@ export const Navbar: React.FC<{
           >
             <Menu size={18} />
           </button>
-          <div className="relative group flex-1">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors"
-              style={{
-                color: searchQuery ? "var(--accent)" : "var(--text-muted)",
-              }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={handleSearchFocus}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setSearchQuery("");
-              }}
-              placeholder="Search metrics, users, or reports..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl text-[13px] focus:outline-none transition-colors"
-              style={{
-                background: "var(--bg-primary)",
-                border: `1px solid ${searchQuery ? "var(--accent)" : "var(--border)"}`,
-                color: "var(--text-primary)",
-              }}
-            />
-            <AnimatePresence>
-              {searchQuery && (
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  <X size={12} />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+          <SearchPalette />
         </div>
 
         <div className="flex items-center gap-2">

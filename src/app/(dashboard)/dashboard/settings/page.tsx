@@ -680,7 +680,7 @@ export default function SettingsPage() {
           className="flex items-center gap-2 text-[12px] mb-2"
           style={{ color: "var(--text-muted)" }}
         >
-          <Link href="/" className="hover:underline cursor-pointer">
+          <Link href="/dashboard" className="hover:underline cursor-pointer">
             Dashboard
           </Link>
           <span className="opacity-40">/</span>
@@ -714,14 +714,14 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-5">
-        {/* Sidebar */}
-        <div className="w-44 flex-shrink-0 space-y-1">
+      <div className="flex flex-col md:flex-row gap-5">
+        {/* Sidebar — horizontal scrollable tabs on mobile, vertical column on desktop */}
+        <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 md:w-44 md:flex-shrink-0 pb-1 md:pb-0">
           {visibleTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all text-left"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all text-left whitespace-nowrap flex-shrink-0 md:flex-shrink md:w-full"
               style={{
                 background:
                   tab === t.id ? "var(--accent-subtle)" : "transparent",

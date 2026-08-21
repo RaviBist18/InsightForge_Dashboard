@@ -349,7 +349,7 @@ export default function CategoryPage({
       <header className="mb-8 px-2">
         <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">
           <Link
-            href="/"
+            href="/dashboard"
             className="hover:text-[var(--text-primary)] transition-colors"
           >
             Dashboard
