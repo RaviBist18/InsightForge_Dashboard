@@ -79,7 +79,7 @@ async function getAIInsight(
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-20b",
         messages: [
           {
             role: "system",

@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   Section B = ${sectionBLabelMap[persona] || "Opportunities"}: list growth levers or concrete actions to take.`,
         },
       ],
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-20b",
       temperature: 0.3, // Lowered for more consistent, sharp output
       top_p: 0.8,
       max_completion_tokens: 200, // Raised for JSON structure (summary + risks + opportunities)

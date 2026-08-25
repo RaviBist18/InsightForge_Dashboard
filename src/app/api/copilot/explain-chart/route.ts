@@ -46,7 +46,7 @@ RULES:
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "openai/gpt-oss-20b",
           messages: [{ role: "system", content: systemPrompt }],
           max_tokens: 300,
           temperature: 0.3,

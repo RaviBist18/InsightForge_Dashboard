@@ -14,7 +14,7 @@ const supabaseAdmin = createClient(
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY!;
-const MODEL = "llama-3.1-8b-instant";
+const MODEL = "openai/gpt-oss-20b";
 
 async function groq(
   system: string,

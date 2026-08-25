@@ -46,7 +46,7 @@ Rules:
           content: `Current risks:\n${riskSummary || "None"}\n\nCurrent opportunities:\n${oppSummary || "None"}`,
         },
       ],
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-20b",
       temperature: 0.3,
       top_p: 0.8,
       max_completion_tokens: 300,
