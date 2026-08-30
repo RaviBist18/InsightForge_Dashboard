@@ -3,13 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 import { joinRequestApproveSchema, parseOrError } from "@/lib/validations";
 import { logger } from "@/lib/logger";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
     if (!token) {
@@ -53,7 +56,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // verify caller is admin/co-admin of THIS company — server-enforced, not RLS-trusted
     const { data: membership, error: memErr } = await supabaseAdmin
       .from("memberships")
       .select("role")
@@ -82,7 +84,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, status: "rejected" });
     }
 
-    // approve: insert membership + update profiles.role for consistency + mark resolved
     const { error: insertErr } = await supabaseAdmin
       .from("memberships")
       .insert({

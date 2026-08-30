@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
     if (!token) {
@@ -31,7 +34,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // verify caller is actually admin/co-admin of THIS company
     const { data: membership, error: memErr } = await supabaseAdmin
       .from("memberships")
       .select("role")

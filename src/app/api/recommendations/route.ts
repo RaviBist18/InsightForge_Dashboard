@@ -1,10 +1,13 @@
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+function getGroq() {
+  return new Groq({ apiKey: process.env.GROQ_API_KEY });
+}
 
 export async function POST(req: Request) {
   try {
+    const groq = getGroq();
     const { risks, opportunities } = await req.json();
 
     if (

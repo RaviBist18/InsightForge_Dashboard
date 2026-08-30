@@ -1,7 +1,9 @@
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+function getGroq() {
+  return new Groq({ apiKey: process.env.GROQ_API_KEY });
+}
 
 const sectionALabelMap: Record<string, string> = {
   defensive: "Risks",
@@ -16,6 +18,7 @@ const sectionBLabelMap: Record<string, string> = {
 
 export async function POST(req: Request) {
   try {
+    const groq = getGroq();
     const { range, category, efficiency, newsHeadline, persona, personaFocus } =
       await req.json();
 
@@ -41,9 +44,9 @@ export async function POST(req: Request) {
         },
       ],
       model: "openai/gpt-oss-20b",
-      temperature: 0.3, // Lowered for more consistent, sharp output
+      temperature: 0.3,
       top_p: 0.8,
-      max_completion_tokens: 200, // Raised for JSON structure (summary + risks + opportunities)
+      max_completion_tokens: 200,
       response_format: { type: "json_object" },
     });
     const raw = completion.choices[0]?.message?.content;
@@ -76,9 +79,6 @@ export async function POST(req: Request) {
         : [],
     });
   } catch (error: any) {
-    // ─── GRACEFUL ERROR HANDLING ───
-
-    // Handle Groq Rate Limits (429)
     if (error.status === 429) {
       console.warn("Groq Rate Limit Hit. Returning cached fallback.");
       return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
           sectionBLabel: "Opportunities",
           sectionBItems: [],
         },
-        { status: 200 }, // Return 200 so the UI doesn't crash
+        { status: 200 },
       );
     }
 

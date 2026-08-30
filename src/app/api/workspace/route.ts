@@ -7,13 +7,14 @@ import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_KEY = process.env.GROQ_API_KEY!;
 const MODEL = "openai/gpt-oss-20b";
 
 async function groq(
@@ -24,7 +25,7 @@ async function groq(
   const res = await fetch(GROQ_API, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${GROQ_KEY}`,
+      Authorization: `Bearer ${process.env.GROQ_API_KEY!}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -126,6 +127,7 @@ async function handleSealSnapshot(
   try {
     if (!userId) throw new Error("userId is missing");
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { label, mrr, churn, signups, marketConditions, persona } = body;
 
     const system = `You are InsightForge's Strategic Archivist.
@@ -149,8 +151,6 @@ Persona: ${persona}`;
       timestamp: Date.now(),
     });
     const hash = crypto.createHash("sha256").update(payload).digest("hex");
-    // service-role client — bypasses RLS. Safe because userId passed in here
-    // is now the verified auth.uid() from the POST handler, not client body input.
     const { data, error } = await supabaseAdmin
       .from("forensic_snapshots")
       .insert({
@@ -188,12 +188,12 @@ Persona: ${persona}`;
 // ── DELETE SNAPSHOTS ──────────────────────────────────────────────────────────
 async function handleDeleteSnapshots(body: { ids: string[] }, userId: string) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { ids } = body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: "No ids provided" }, { status: 400 });
     }
 
-    // scoped to user_id — can only delete your own snapshots, even with service-role client
     const { data, error } = await supabaseAdmin
       .from("forensic_snapshots")
       .delete()
@@ -230,8 +230,7 @@ export async function POST(req: NextRequest) {
     case "score-entities":
       return handleEntityScore(body);
     case "seal-snapshot": {
-      // seal-snapshot writes to the DB — verify the caller's identity
-      // server-side instead of trusting body.userId (client-supplied, spoofable)
+      const supabaseAdmin = getSupabaseAdmin();
       const authHeader = req.headers.get("authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (!token) {
@@ -253,7 +252,7 @@ export async function POST(req: NextRequest) {
       return handleSealSnapshot(body, user.id);
     }
     case "delete-snapshots": {
-      // same auth pattern as seal-snapshot — verify caller server-side
+      const supabaseAdmin = getSupabaseAdmin();
       const authHeader = req.headers.get("authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (!token) {

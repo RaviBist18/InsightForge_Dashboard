@@ -4,21 +4,26 @@ import nodemailer from "nodemailer";
 import { inviteSchema, parseOrError } from "@/lib/validations";
 import { logger } from "@/lib/logger";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+function getTransporter() {
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+}
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
     if (!token) {
@@ -43,7 +48,6 @@ export async function POST(req: Request) {
     }
     const { email, role, companyId, companyName } = data;
 
-    // verify caller is actually admin/co-admin of THIS company
     const { data: membership, error: memErr } = await supabaseAdmin
       .from("memberships")
       .select("role")
@@ -59,7 +63,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
-    // only full admins can invite someone as admin (spec: promote/admin-grant stays admin-only)
     if (role === "admin" && membership.role !== "admin") {
       return NextResponse.json(
         { error: "Only admins can invite new admins" },
@@ -88,6 +91,7 @@ export async function POST(req: Request) {
     const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const link = `${origin}/auth?invite=${invite.token}`;
 
+    const transporter = getTransporter();
     await transporter.sendMail({
       from: `"InsightForge" <${process.env.GMAIL_USER}>`,
       to: email,
