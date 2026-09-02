@@ -120,9 +120,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   useEffect(() => {
-    runCheck(); // check on mount (page load / nav)
-    const poll = setInterval(runCheck, 60000); // 60s catch-all
-    return () => clearInterval(poll);
+    const timeout = setTimeout(runCheck, 5000); // delay first check so it doesn't compete with initial page load
+    const poll = setInterval(runCheck, 300000); // 5 min instead of 60s — still catches alerts, much less background load
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(poll);
+    };
   }, []);
 
   const renderNavItem = (item: {

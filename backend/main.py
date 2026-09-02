@@ -61,6 +61,35 @@ SUPABASE_JWKS_URL = f"{os.environ['SUPABASE_URL']}/auth/v1/.well-known/jwks.json
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 jwks_client = PyJWKClient(SUPABASE_JWKS_URL)
 
+_df_cache: dict[str, pd.DataFrame] = {}
+
+
+def get_cached_df(dataset_id: str, storage_path: str, filename: str) -> pd.DataFrame:
+    if dataset_id in _df_cache:
+        return _df_cache[dataset_id].copy()
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+    _df_cache[dataset_id] = df
+    return df.copy()
+
+
+_df_cache: dict[str, pd.DataFrame] = {}
+
+
+def get_cached_df(dataset_id: str, storage_path: str, filename: str) -> pd.DataFrame:
+    if dataset_id in _df_cache:
+        return _df_cache[dataset_id].copy()
+    file_bytes = supabase.storage.from_("datasets").download(storage_path)
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(file_bytes))
+    else:
+        df = pd.read_excel(io.BytesIO(file_bytes))
+    _df_cache[dataset_id] = df
+    return df.copy()
+
 
 def get_company_id(authorization: str = Header(None)) -> str:
     """Verify the user's Supabase JWT and resolve their company_id via memberships table."""
@@ -369,7 +398,361 @@ def compute_business_insights(df: pd.DataFrame, columns: list[dict]) -> dict:
             avg = float(df[revenue_col].sum()) / unique_customers
             insights["avg_revenue_per_customer"] = {"value": round(avg, 2)}
 
-    return insights
+        return insights
+
+
+def compute_dataset_intelligence(df: pd.DataFrame, columns: list[dict]) -> dict:
+    """Runs the SAME logic as kpis/risk-prediction/opportunity-detection endpoints
+    (unfiltered), once, so results can be stored and served without recomputation.
+    Any change here must mirror the live endpoints exactly to avoid output drift."""
+
+    date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
+    revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
+    customer_col = next(
+        (c["name"] for c in columns if c["role"] == "customer_id"), None
+    )
+    signup_col = next((c["name"] for c in columns if c["role"] == "signup_date"), None)
+    churn_col = next((c["name"] for c in columns if c["role"] == "churn_date"), None)
+    cost_col = next((c["name"] for c in columns if c["role"] == "cost"), None)
+    sales_col = next((c["name"] for c in columns if c["role"] == "sales"), None)
+    quantity_col = next((c["name"] for c in columns if c["role"] == "quantity"), None)
+    inventory_col = next((c["name"] for c in columns if c["role"] == "inventory"), None)
+    product_col = next((c["name"] for c in columns if c["role"] == "product"), None)
+
+    # ── KPIs (mirrors get_dataset_kpis, no filters) ──
+    kpis = {"row_count": len(df)}
+    if revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        kpis["total_revenue"] = round(float(df[revenue_col].sum()), 2)
+        kpis["avg_order_value"] = round(float(df[revenue_col].mean()), 2)
+        kpis["max_order_value"] = round(float(df[revenue_col].max()), 2)
+    if date_col:
+        parsed = pd.to_datetime(df[date_col], errors="coerce").dropna()
+        if len(parsed) > 0:
+            kpis["date_range_start"] = parsed.min().strftime("%Y-%m-%d")
+            kpis["date_range_end"] = parsed.max().strftime("%Y-%m-%d")
+    if customer_col:
+        kpis["unique_customers"] = int(df[customer_col].nunique())
+        top = df[customer_col].value_counts().head(1)
+        if len(top) > 0:
+            kpis["top_customer"] = {
+                "customer_id": str(top.index[0]),
+                "order_count": int(top.iloc[0]),
+            }
+    if signup_col:
+        parsed_signup = pd.to_datetime(df[signup_col], errors="coerce")
+        kpis["signups"] = int(parsed_signup.notna().sum())
+    if churn_col:
+        parsed_churn = pd.to_datetime(df[churn_col], errors="coerce")
+        churned = int(parsed_churn.notna().sum())
+        kpis["churned"] = churned
+        kpis["churn_rate"] = (
+            round(churned / kpis["signups"] * 100, 2) if kpis.get("signups") else 0.0
+        )
+    total_cost = 0.0
+    if cost_col and pd.api.types.is_numeric_dtype(df[cost_col]):
+        total_cost = float(df[cost_col].sum())
+    kpis["total_cost"] = round(total_cost, 2)
+    if "total_revenue" in kpis:
+        total_profit = kpis["total_revenue"] - total_cost
+        kpis["total_profit"] = round(total_profit, 2)
+        kpis["profit_margin"] = (
+            round(total_profit / kpis["total_revenue"] * 100, 2)
+            if kpis["total_revenue"]
+            else 0.0
+        )
+    else:
+        kpis["total_profit"] = 0.0
+        kpis["profit_margin"] = 0.0
+
+    revenue_series = []
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        grouped = temp.groupby(temp[date_col].dt.strftime("%Y-%m-%d"))[
+            revenue_col
+        ].sum()
+        revenue_series = [
+            {"date": d, "revenue": round(float(v), 2)} for d, v in grouped.items()
+        ]
+
+    kpis_response = {"kpis": kpis, "revenue_series": revenue_series}
+
+    # ── Risks (mirrors get_risk_prediction exactly) ──
+    risks = []
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[revenue_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope < 0:
+                risks.append(
+                    {
+                        "category": "Revenue",
+                        "severity": "high" if slope < -50 else "medium",
+                        "message": f"Revenue is trending downward (~{round(slope,2)}/day). Investigate cause before it compounds.",
+                    }
+                )
+    metric_col = sales_col or quantity_col
+    if date_col and metric_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        temp = df[[date_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[metric_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope < 0:
+                risks.append(
+                    {
+                        "category": "Sales",
+                        "severity": "high" if slope < -20 else "medium",
+                        "message": f"Sales volume is declining (~{round(slope,2)}/day trend).",
+                    }
+                )
+    if (
+        inventory_col
+        and product_col
+        and pd.api.types.is_numeric_dtype(df[inventory_col])
+    ):
+        LOW_STOCK_THRESHOLD = 10
+        latest = df.sort_values(date_col) if date_col else df
+        latest = latest.groupby(product_col).last()
+        low_products = latest[latest[inventory_col] < LOW_STOCK_THRESHOLD]
+        for prod, row in low_products.iterrows():
+            risks.append(
+                {
+                    "category": "Inventory",
+                    "severity": "high" if row[inventory_col] < 5 else "medium",
+                    "message": f"{prod} is low on stock ({int(row[inventory_col])} units remaining).",
+                }
+            )
+    if customer_col and date_col:
+        temp = df[[customer_col, date_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        if len(temp) > 0:
+            end_date = temp[date_col].max()
+            last_order = temp.groupby(customer_col)[date_col].max()
+            recency = (end_date - last_order).dt.days
+            max_r = max(recency.max(), 1)
+            high_risk_count = int((recency / max_r > 0.66).sum())
+            if high_risk_count > 0:
+                risks.append(
+                    {
+                        "category": "Customer",
+                        "severity": "medium",
+                        "message": f"{high_risk_count} customer(s) at high risk of churn based on order recency.",
+                    }
+                )
+    has_trend_risk = any(r["category"] in ("Revenue", "Sales") for r in risks)
+    if not has_trend_risk:
+        if (
+            revenue_col
+            and product_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_product = df.groupby(product_col)[revenue_col].sum().sort_values()
+            if len(by_product) >= 2:
+                worst, worst_val = by_product.index[0], float(by_product.iloc[0])
+                avg_val = float(by_product.mean())
+                if avg_val > 0 and worst_val < avg_val * 0.5:
+                    risks.append(
+                        {
+                            "category": "Revenue",
+                            "severity": "medium",
+                            "message": f"{worst} is underperforming — revenue (${round(worst_val,2)}) is less than half the average across products (${round(avg_val,2)}).",
+                        }
+                    )
+        if (
+            revenue_col
+            and cost_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+            and pd.api.types.is_numeric_dtype(df[cost_col])
+        ):
+            total_rev, total_cost2 = float(df[revenue_col].sum()), float(
+                df[cost_col].sum()
+            )
+            if total_cost2 > total_rev:
+                risks.append(
+                    {
+                        "category": "Revenue",
+                        "severity": "high",
+                        "message": f"Total costs (${round(total_cost2,2)}) exceed total revenue (${round(total_rev,2)}) — operating at a loss.",
+                    }
+                )
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    risks.sort(key=lambda r: severity_order.get(r["severity"], 3))
+    high_count = sum(1 for r in risks if r["severity"] == "high")
+    medium_count = sum(1 for r in risks if r["severity"] == "medium")
+    risk_response = {
+        "available": True,
+        "overall_risk_level": (
+            "high" if high_count > 0 else "medium" if medium_count > 0 else "low"
+        ),
+        "risk_count": {"high": high_count, "medium": medium_count},
+        "risks": risks,
+    }
+
+    # ── Opportunities (mirrors get_opportunity_detection exactly) ──
+    opportunities = []
+    if date_col and revenue_col and pd.api.types.is_numeric_dtype(df[revenue_col]):
+        temp = df[[date_col, revenue_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[revenue_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope > 0:
+                opportunities.append(
+                    {
+                        "category": "Revenue",
+                        "impact": "high" if slope > 50 else "medium",
+                        "message": f"Revenue is trending upward (~{round(slope,2)}/day). Consider scaling marketing spend to accelerate growth.",
+                    }
+                )
+    if date_col and metric_col and pd.api.types.is_numeric_dtype(df[metric_col]):
+        temp = df[[date_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        daily = temp.groupby(temp[date_col].dt.date)[metric_col].sum().reset_index()
+        if len(daily) >= 3:
+            daily["idx"] = range(len(daily))
+            model = LinearRegression().fit(
+                daily[["idx"]].values, daily[daily.columns[1]].values
+            )
+            slope = float(model.coef_[0])
+            if slope > 0:
+                opportunities.append(
+                    {
+                        "category": "Sales",
+                        "impact": "high" if slope > 20 else "medium",
+                        "message": f"Sales volume is growing (~{round(slope,2)}/day trend). Demand is rising.",
+                    }
+                )
+    if (
+        product_col
+        and metric_col
+        and date_col
+        and pd.api.types.is_numeric_dtype(df[metric_col])
+    ):
+        temp = df[[date_col, product_col, metric_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        for prod, group in temp.groupby(product_col):
+            daily = (
+                group.groupby(group[date_col].dt.date)[metric_col].sum().reset_index()
+            )
+            if len(daily) >= 3:
+                daily["idx"] = range(len(daily))
+                model = LinearRegression().fit(
+                    daily[["idx"]].values, daily[daily.columns[1]].values
+                )
+                slope = float(model.coef_[0])
+                if slope > 0:
+                    opportunities.append(
+                        {
+                            "category": "Product",
+                            "impact": "high" if slope > 10 else "medium",
+                            "message": f"{prod} shows rising demand (~{round(slope,2)}/day). Consider increasing production/stock.",
+                        }
+                    )
+    if customer_col and date_col:
+        temp = df[[customer_col, date_col]].copy()
+        temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
+        temp = temp.dropna(subset=[date_col])
+        if len(temp) > 0:
+            first_half = temp[temp[date_col] <= temp[date_col].median()]
+            second_half = temp[temp[date_col] > temp[date_col].median()]
+            first_unique = first_half[customer_col].nunique()
+            second_unique = second_half[customer_col].nunique()
+            if first_unique > 0 and second_unique > first_unique:
+                growth_pct = round(
+                    ((second_unique - first_unique) / first_unique) * 100, 1
+                )
+                opportunities.append(
+                    {
+                        "category": "Customer",
+                        "impact": "high" if growth_pct > 30 else "medium",
+                        "message": f"Customer base grew {growth_pct}% in the latest period ({second_unique} vs {first_unique} unique customers). Consider expanding marketing reach.",
+                    }
+                )
+    has_trend_opp = any(
+        o["category"] in ("Revenue", "Sales", "Product") for o in opportunities
+    )
+    if not has_trend_opp:
+        if (
+            revenue_col
+            and product_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_product = (
+                df.groupby(product_col)[revenue_col].sum().sort_values(ascending=False)
+            )
+            if len(by_product) >= 1:
+                top, top_val = by_product.index[0], float(by_product.iloc[0])
+                total = float(by_product.sum())
+                share = round(top_val / total * 100, 1) if total else 0
+                opportunities.append(
+                    {
+                        "category": "Product",
+                        "impact": "high" if share > 40 else "medium",
+                        "message": f"{top} is your top revenue driver (${round(top_val,2)}, {share}% of total). Consider doubling down on marketing or stock for it.",
+                    }
+                )
+        if (
+            customer_col
+            and revenue_col
+            and pd.api.types.is_numeric_dtype(df[revenue_col])
+        ):
+            by_cust = (
+                df.groupby(customer_col)[revenue_col].sum().sort_values(ascending=False)
+            )
+            if len(by_cust) >= 3:
+                top3_share = (
+                    round(by_cust.head(3).sum() / by_cust.sum() * 100, 1)
+                    if by_cust.sum()
+                    else 0
+                )
+                if top3_share > 30:
+                    opportunities.append(
+                        {
+                            "category": "Customer",
+                            "impact": "medium",
+                            "message": f"Top 3 customers account for {top3_share}% of revenue. Consider a loyalty program to deepen these relationships.",
+                        }
+                    )
+    impact_order = {"high": 0, "medium": 1}
+    opportunities.sort(key=lambda o: impact_order.get(o["impact"], 2))
+    high_count2 = sum(1 for o in opportunities if o["impact"] == "high")
+    medium_count2 = sum(1 for o in opportunities if o["impact"] == "medium")
+    opportunity_response = {
+        "available": True,
+        "overall_opportunity_level": (
+            "high" if high_count2 > 0 else "medium" if medium_count2 > 0 else "low"
+        ),
+        "opportunity_count": {"high": high_count2, "medium": medium_count2},
+        "opportunities": opportunities,
+    }
+
+    return {
+        "kpis_response": kpis_response,
+        "risk_response": risk_response,
+        "opportunity_response": opportunity_response,
+    }
 
 
 @app.post("/upload")
@@ -408,6 +791,7 @@ async def upload(
         df, analysis_result["columns"]
     )
     columns = analysis_result["columns"]
+    precomputed = compute_dataset_intelligence(df, columns)
     duplicate_count = analysis_result["duplicate_count"]
     duplicate_rows_preview = analysis_result["duplicate_rows_preview"]
     outliers_by_column = analysis_result["outliers_by_column"]
@@ -448,6 +832,7 @@ async def upload(
                 "column_schema": columns,
                 "storage_path": storage_path,
                 "analysis": analysis,
+                "precomputed": precomputed,
                 "created_at": datetime.utcnow().isoformat(),
             }
         )
@@ -512,6 +897,8 @@ async def clean_dataset(
     else:
         df = pd.read_excel(io.BytesIO(file_bytes))
 
+    _df_cache.pop(dataset_id, None)
+
     if "remove_duplicates" in actions:
         df = df.drop_duplicates(keep="first")
 
@@ -536,11 +923,14 @@ async def clean_dataset(
         storage_path, cleaned_bytes, {"content-type": "text/csv"}
     )
 
+    precomputed = compute_dataset_intelligence(df, analysis["columns"])
+
     supabase.table("datasets").update(
         {
             "row_count": row_count,
             "column_schema": analysis["columns"],
             "analysis": analysis,
+            "precomputed": precomputed,
         }
     ).eq("id", dataset_id).eq("company_id", company_id).execute()
 
@@ -565,7 +955,7 @@ async def get_dataset_kpis(
 
     result = (
         supabase.table("datasets")
-        .select("storage_path, filename, analysis")
+        .select("storage_path, filename, analysis, precomputed")
         .eq("id", dataset_id)
         .eq("company_id", company_id)
         .single()
@@ -574,15 +964,14 @@ async def get_dataset_kpis(
     if not result.data:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
+    if region is None and product is None and result.data.get("precomputed"):
+        return result.data["precomputed"]["kpis_response"]
+
     storage_path = result.data["storage_path"]
     filename = result.data["filename"]
     columns = result.data["analysis"]["columns"]
 
-    file_bytes = supabase.storage.from_("datasets").download(storage_path)
-    if filename.lower().endswith(".csv"):
-        df = pd.read_csv(io.BytesIO(file_bytes))
-    else:
-        df = pd.read_excel(io.BytesIO(file_bytes))
+    df = get_cached_df(dataset_id, storage_path, filename)
 
     date_col = next((c["name"] for c in columns if c["role"] == "date"), None)
     revenue_col = next((c["name"] for c in columns if c["role"] == "revenue"), None)
@@ -657,7 +1046,7 @@ async def get_dataset_kpis(
             {"date": d, "revenue": round(float(v), 2)} for d, v in grouped.items()
         ]
 
-    del df, file_bytes
+    del df
 
     return {"kpis": kpis, "revenue_series": revenue_series}
 
@@ -1324,7 +1713,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
 
     result = (
         supabase.table("datasets")
-        .select("storage_path, filename, analysis")
+        .select("storage_path, filename, analysis, precomputed")
         .eq("id", dataset_id)
         .eq("company_id", company_id)
         .single()
@@ -1332,6 +1721,9 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if result.data.get("precomputed"):
+        return result.data["precomputed"]["risk_response"]
 
     storage_path = result.data["storage_path"]
     filename = result.data["filename"]
@@ -1348,11 +1740,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
     )
     cost_col = next((c["name"] for c in columns if c["role"] == "cost"), None)
 
-    file_bytes = supabase.storage.from_("datasets").download(storage_path)
-    if filename.lower().endswith(".csv"):
-        df = pd.read_csv(io.BytesIO(file_bytes))
-    else:
-        df = pd.read_excel(io.BytesIO(file_bytes))
+    df = get_cached_df(dataset_id, storage_path, filename)
 
     risks = []
 
@@ -1476,7 +1864,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                     }
                 )
 
-    del df, file_bytes
+    del df
 
     severity_order = {"high": 0, "medium": 1, "low": 2}
     risks.sort(key=lambda r: severity_order.get(r["severity"], 3))
@@ -1500,7 +1888,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
 
     result = (
         supabase.table("datasets")
-        .select("storage_path, filename, analysis")
+        .select("storage_path, filename, analysis, precomputed")
         .eq("id", dataset_id)
         .eq("company_id", company_id)
         .single()
@@ -1508,6 +1896,9 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if result.data.get("precomputed"):
+        return result.data["precomputed"]["opportunity_response"]
 
     storage_path = result.data["storage_path"]
     filename = result.data["filename"]
@@ -1522,11 +1913,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
         (c["name"] for c in columns if c["role"] == "customer_id"), None
     )
 
-    file_bytes = supabase.storage.from_("datasets").download(storage_path)
-    if filename.lower().endswith(".csv"):
-        df = pd.read_csv(io.BytesIO(file_bytes))
-    else:
-        df = pd.read_excel(io.BytesIO(file_bytes))
+    df = get_cached_df(dataset_id, storage_path, filename)
 
     opportunities = []
 
@@ -1670,7 +2057,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         }
                     )
 
-    del df, file_bytes
+    del df
 
     impact_order = {"high": 0, "medium": 1}
     opportunities.sort(key=lambda o: impact_order.get(o["impact"], 2))

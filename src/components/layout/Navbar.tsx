@@ -77,9 +77,12 @@ export const Navbar: React.FC<{
   const [riskData, setRiskData] = useState<AggregateRiskResult | null>(null);
 
   useEffect(() => {
-    getAggregateRisks()
-      .then(setRiskData)
-      .catch(() => {});
+    const t = setTimeout(() => {
+      getAggregateRisks()
+        .then(setRiskData)
+        .catch(() => {});
+    }, 3000); // wait until after main dashboard content has loaded
+    return () => clearTimeout(t);
   }, []);
 
   const markAllRead = () =>

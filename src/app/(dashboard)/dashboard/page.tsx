@@ -22,6 +22,7 @@ import {
   getAggregateRisks,
   getAIRecommendations,
   getDatasetFilenames,
+  getCachedDashboardBundle,
   type Recommendation,
 } from "@/lib/data";
 import Link from "next/link";
@@ -62,14 +63,13 @@ export default function Home() {
   // 2. Fetch Initial Data
   useEffect(() => {
     async function initDashboard() {
-      const [st, rev, cid, userResult, opp, names] = await Promise.all([
-        getAggregateDashboardStats(),
-        getAggregateRevenueChart(),
-        getCurrentCompanyId(),
-        supabase.auth.getUser(),
-        getAggregateOpportunities(),
-        getDatasetFilenames(),
-      ]);
+      const { rows, cid, userResult, opp, riskData } =
+        await getCachedDashboardBundle();
+
+      const st = await getAggregateDashboardStats(rows);
+      const rev = await getAggregateRevenueChart("monthly", rows);
+      const names = await getDatasetFilenames(rows);
+
       setCompanyId(cid);
       setUserId(userResult.data.user?.id);
       setStats(st);
@@ -77,14 +77,11 @@ export default function Home() {
       setOpportunities(opp.opportunities);
       setDatasetNames(names);
 
-      const riskData = await getAggregateRisks();
-      const recs = await getAIRecommendations(
-        riskData.risks,
-        opp.opportunities,
-      );
-      setRecommendations(recs);
-
       setLoading(false);
+
+      getAIRecommendations(riskData.risks, opp.opportunities).then(
+        setRecommendations,
+      );
     }
     initDashboard();
   }, []);

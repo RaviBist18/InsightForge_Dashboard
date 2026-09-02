@@ -183,15 +183,58 @@ interface DatasetSummary {
   created_at: string;
 }
 
-export const getAggregateDashboardStats = async (): Promise<
-  DashboardStats & { datasetCount: number }
-> => {
-  const headers = await getAuthHeader();
+let _dashboardBundleCache: { data: any; timestamp: number } | null = null;
+const CACHE_TTL = 60000;
 
+export async function getCachedDashboardBundle() {
+  if (
+    _dashboardBundleCache &&
+    Date.now() - _dashboardBundleCache.timestamp < CACHE_TTL
+  ) {
+    console.log("CACHE HIT — reusing full dashboard bundle");
+    return _dashboardBundleCache.data;
+  }
+  console.log("CACHE MISS — fetching fresh bundle");
+  const rows = await getDatasetsWithKPIs();
+  const [cid, userResult, opp, riskData] = await Promise.all([
+    getCurrentCompanyId(),
+    supabase.auth.getUser(),
+    getAggregateOpportunities(rows),
+    getAggregateRisks(rows),
+  ]);
+  const data = { rows, cid, userResult, opp, riskData };
+  _dashboardBundleCache = { data, timestamp: Date.now() };
+  return data;
+}
+
+export async function getDatasetsWithKPIs(): Promise<
+  { dataset: DatasetSummary; kpis: any; revenue_series: any[] }[]
+> {
+  const headers = await getAuthHeader();
   const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
   const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
 
-  if (datasets.length === 0) {
+  return Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
+        headers,
+      });
+      const data = res.ok ? await res.json() : { kpis: {}, revenue_series: [] };
+      return {
+        dataset: d,
+        kpis: data.kpis ?? {},
+        revenue_series: data.revenue_series ?? [],
+      };
+    }),
+  );
+}
+
+export const getAggregateDashboardStats = async (
+  pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,
+): Promise<DashboardStats & { datasetCount: number }> => {
+  const rows = pre ?? (await getDatasetsWithKPIs());
+
+  if (rows.length === 0) {
     return {
       totalRevenue: 0,
       totalProfit: 0,
@@ -208,15 +251,6 @@ export const getAggregateDashboardStats = async (): Promise<
     };
   }
 
-  const kpiResults = await Promise.all(
-    datasets.map(async (d) => {
-      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
-        headers,
-      });
-      return res.ok ? res.json() : { kpis: {}, revenue_series: [] };
-    }),
-  );
-
   let totalRevenue = 0;
   let totalOrders = 0;
   let uniqueCustomersSum = 0;
@@ -225,7 +259,7 @@ export const getAggregateDashboardStats = async (): Promise<
   let totalCostSum = 0;
   const monthMap: Record<string, number> = {};
 
-  kpiResults.forEach(({ kpis, revenue_series }) => {
+  rows.forEach(({ kpis, revenue_series }) => {
     totalRevenue += kpis.total_revenue ?? 0;
     totalOrders += kpis.row_count ?? 0;
     uniqueCustomersSum += kpis.unique_customers ?? 0;
@@ -276,10 +310,10 @@ export const getAggregateDashboardStats = async (): Promise<
     efficiency: Math.round(growthRate * 10) / 10,
     latestNews:
       sparkline.length >= 2
-        ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`
-        : `Aggregated across ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
+        ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`
+        : `Aggregated across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`,
     mrrSparkline: sparkline,
-    datasetCount: datasets.length,
+    datasetCount: rows.length,
   };
 };
 
@@ -431,11 +465,11 @@ export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
   return results.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
 };
 
-export const getDatasetFilenames = async (): Promise<string[]> => {
-  const headers = await getAuthHeader();
-  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
-  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
-  return datasets.map((d) => d.filename);
+export const getDatasetFilenames = async (
+  pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,
+): Promise<string[]> => {
+  const rows = pre ?? (await getDatasetsWithKPIs());
+  return rows.map((r) => r.dataset.filename);
 };
 
 export interface SavedAlertRow {
@@ -515,14 +549,16 @@ export interface AggregateRiskResult {
   risks: RiskItem[];
 }
 
-export const getAggregateRisks = async (): Promise<AggregateRiskResult> => {
+export const getAggregateRisks = async (
+  pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,
+): Promise<AggregateRiskResult> => {
   const headers = await getAuthHeader();
-  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
-  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
+  const rows = pre ?? (await getDatasetsWithKPIs());
+  const datasets: DatasetSummary[] = rows.map((r) => r.dataset);
   datasets.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  ); // ← add this line
+  );
 
   if (datasets.length === 0) {
     return {
@@ -587,69 +623,68 @@ export interface AggregateOpportunityResult {
   opportunities: OpportunityItem[];
 }
 
-export const getAggregateOpportunities =
-  async (): Promise<AggregateOpportunityResult> => {
-    const headers = await getAuthHeader();
-    const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
-    const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
-    datasets.sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    ); // ← add this line
+export const getAggregateOpportunities = async (
+  pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,
+): Promise<AggregateOpportunityResult> => {
+  const headers = await getAuthHeader();
+  const rows = pre ?? (await getDatasetsWithKPIs());
+  const datasets: DatasetSummary[] = rows.map((r) => r.dataset);
+  datasets.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 
-    if (datasets.length === 0) {
-      return {
-        overallOpportunityLevel: "low",
-        opportunityCount: { high: 0, medium: 0 },
-        opportunities: [],
-      };
-    }
-
-    const results = await Promise.all(
-      datasets.map(async (d) => {
-        const res = await fetch(
-          `${BACKEND_URL}/datasets/${d.id}/opportunity-detection`,
-          { headers },
-        );
-        const data = res.ok
-          ? await res.json()
-          : { available: false, opportunities: [] };
-
-        const opportunities: OpportunityItem[] = (data.opportunities || []).map(
-          (o: {
-            category: string;
-            impact: "high" | "medium";
-            message: string;
-          }) => ({
-            ...o,
-            filename: d.filename,
-          }),
-        );
-        return opportunities;
-      }),
-    );
-
-    const allOpportunities = results.flat();
-
-    const impactOrder = { high: 0, medium: 1 };
-    allOpportunities.sort(
-      (a, b) => impactOrder[a.impact] - impactOrder[b.impact],
-    );
-
-    const highCount = allOpportunities.filter(
-      (o) => o.impact === "high",
-    ).length;
-    const mediumCount = allOpportunities.filter(
-      (o) => o.impact === "medium",
-    ).length;
-
+  if (datasets.length === 0) {
     return {
-      overallOpportunityLevel:
-        highCount > 0 ? "high" : mediumCount > 0 ? "medium" : "low",
-      opportunityCount: { high: highCount, medium: mediumCount },
-      opportunities: allOpportunities,
+      overallOpportunityLevel: "low",
+      opportunityCount: { high: 0, medium: 0 },
+      opportunities: [],
     };
+  }
+
+  const results = await Promise.all(
+    datasets.map(async (d) => {
+      const res = await fetch(
+        `${BACKEND_URL}/datasets/${d.id}/opportunity-detection`,
+        { headers },
+      );
+      const data = res.ok
+        ? await res.json()
+        : { available: false, opportunities: [] };
+
+      const opportunities: OpportunityItem[] = (data.opportunities || []).map(
+        (o: {
+          category: string;
+          impact: "high" | "medium";
+          message: string;
+        }) => ({
+          ...o,
+          filename: d.filename,
+        }),
+      );
+      return opportunities;
+    }),
+  );
+
+  const allOpportunities = results.flat();
+
+  const impactOrder = { high: 0, medium: 1 };
+  allOpportunities.sort(
+    (a, b) => impactOrder[a.impact] - impactOrder[b.impact],
+  );
+
+  const highCount = allOpportunities.filter((o) => o.impact === "high").length;
+  const mediumCount = allOpportunities.filter(
+    (o) => o.impact === "medium",
+  ).length;
+
+  return {
+    overallOpportunityLevel:
+      highCount > 0 ? "high" : mediumCount > 0 ? "medium" : "low",
+    opportunityCount: { high: highCount, medium: mediumCount },
+    opportunities: allOpportunities,
   };
+};
 
 export interface Recommendation {
   priority: "high" | "medium";
@@ -679,19 +714,11 @@ export const getAIRecommendations = async (
   }
 };
 
-export const getAggregateRevenueChart = async (range: string = "monthly") => {
-  const headers = await getAuthHeader();
-  const listRes = await fetch(`${BACKEND_URL}/datasets`, { headers });
-  const datasets: DatasetSummary[] = listRes.ok ? await listRes.json() : [];
-
-  const kpiResults = await Promise.all(
-    datasets.map(async (d) => {
-      const res = await fetch(`${BACKEND_URL}/datasets/${d.id}/kpis`, {
-        headers,
-      });
-      return res.ok ? res.json() : { revenue_series: [] };
-    }),
-  );
+export const getAggregateRevenueChart = async (
+  range: string = "monthly",
+  pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,
+) => {
+  const rows = pre ?? (await getDatasetsWithKPIs());
 
   // bucket key + display label depend on range
   const getBucket = (dateStr: string): { key: string; label: string } => {
@@ -746,7 +773,7 @@ export const getAggregateRevenueChart = async (range: string = "monthly") => {
     string,
     { total: number; label: string; sortKey: number }
   > = {};
-  kpiResults.forEach(({ revenue_series }) => {
+  rows.forEach(({ revenue_series }) => {
     (revenue_series || []).forEach(
       (point: { date: string; revenue: number }) => {
         const { key, label } = getBucket(point.date);

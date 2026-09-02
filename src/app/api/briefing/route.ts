@@ -2,7 +2,11 @@ import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
 function getGroq() {
-  return new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+    timeout: 5000, // fail fast instead of hanging
+    maxRetries: 0, // don't retry — your own code already has a fallback path
+  });
 }
 
 const sectionALabelMap: Record<string, string> = {
@@ -46,7 +50,7 @@ export async function POST(req: Request) {
       model: "openai/gpt-oss-20b",
       temperature: 0.3,
       top_p: 0.8,
-      max_completion_tokens: 200,
+      max_completion_tokens: 400,
       response_format: { type: "json_object" },
     });
     const raw = completion.choices[0]?.message?.content;
