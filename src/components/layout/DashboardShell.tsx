@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
+import Footer from "@/components/footer";
 
 export function DashboardShell({
   children,
@@ -65,8 +66,11 @@ export function DashboardShell({
             </div>
           )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
-            <div className="max-w-[1600px] mx-auto p-4 md:p-8 flex flex-col flex-1 min-h-0">
+          <div
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar grid"
+            style={{ gridTemplateRows: "1fr auto" }}
+          >
+            <div className="max-w-[1600px] mx-auto p-4 md:p-8 w-full">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={pathname}
@@ -74,47 +78,13 @@ export function DashboardShell({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
-                  className="page-content flex-1 flex flex-col min-h-0"
+                  className="page-content"
                 >
                   <div>{children}</div>
-
-                  <footer
-                    className="mt-auto pb-8 border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-4"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <p
-                      className="text-[12px]"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      &copy; 2026 InsightForge. All rights reserved.
-                    </p>
-                    <div
-                      className="flex gap-6 text-[12px]"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      <Link
-                        href="/privacy"
-                        className="transition-colors hover:text-[color:var(--accent)]"
-                      >
-                        Privacy
-                      </Link>
-                      <Link
-                        href="/terms"
-                        className="transition-colors hover:text-[color:var(--accent)]"
-                      >
-                        Terms
-                      </Link>
-                      <Link
-                        href="/status"
-                        className="transition-colors hover:text-[color:var(--accent)]"
-                      >
-                        Status
-                      </Link>
-                    </div>
-                  </footer>
                 </motion.div>
               </AnimatePresence>
             </div>
+            <Footer />
           </div>
         </main>
       </div>

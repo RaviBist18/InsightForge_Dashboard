@@ -493,19 +493,6 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
-
-      {/* FOOTER */}
-      <footer
-        className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs border-t"
-        style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-      >
-        <p>© 2026 InsightForge.</p>
-        <div className="flex gap-5">
-          <Link href="/auth" className="hover:opacity-80">
-            Sign in
-          </Link>
-        </div>
-      </footer>
     </div>
   );
 }

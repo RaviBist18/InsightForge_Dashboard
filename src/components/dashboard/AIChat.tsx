@@ -100,7 +100,7 @@ function buildSuggestedQuestions(
   return questions.slice(0, 4);
 }
 
-const DEFAULT_POS = { right: 24, bottom: 120 };
+const DEFAULT_POS = { right: 24, bottom: 100 };
 const DEFAULT_SIZE = { width: 360, height: 520 };
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 360;
@@ -403,7 +403,7 @@ export function AIChat({ dashboardStats, datasetNames = [] }: AIChatProps) {
         }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
-        className="fixed bottom-14 right-6 z-50 w-[52px] h-[52px] rounded-2xl shadow-lg flex items-center justify-center transition-colors"
+        className="fixed bottom-10 right-6 z-50 w-[52px] h-[52px] rounded-2xl shadow-lg flex items-center justify-center transition-colors"
         style={{ background: "var(--accent)" }}
       >
         <AnimatePresence mode="wait">

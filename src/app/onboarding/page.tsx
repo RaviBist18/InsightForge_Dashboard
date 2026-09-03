@@ -691,13 +691,6 @@ export default function OnboardingPage() {
             </AnimatePresence>
           </div>
         </div>
-
-        <p
-          className="text-center text-[12px] mt-6"
-          style={{ color: "var(--text-muted)" }}
-        >
-          © 2026 InsightForge
-        </p>
       </motion.div>
     </div>
   );

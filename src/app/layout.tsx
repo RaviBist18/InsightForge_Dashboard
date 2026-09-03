@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Geist } from "next/font/google";
+import { Geist } from "next/font/google";
+import ConditionalFooter from "@/components/conditional-footer";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "InsightForge Dashboard",
-  description: "A high-performance enterprise Business Intelligence dashboard featuring real-time analytics, data visualization, and automated insights.",
+  description:
+    "A high-performance enterprise Business Intelligence dashboard featuring real-time analytics, data visualization, and automated insights.",
 };
 
 export default function RootLayout({
@@ -17,8 +19,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className="antialiased min-h-screen bg-[#020617] text-white">
-        {children}
+      <body className="antialiased h-dvh overflow-hidden bg-[#020617] text-white flex flex-col">
+        <main className="flex-1">{children}</main>
+        <ConditionalFooter />
       </body>
     </html>
   );
