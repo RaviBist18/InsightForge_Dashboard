@@ -686,34 +686,6 @@ export const getAggregateOpportunities = async (
   };
 };
 
-export interface Recommendation {
-  priority: "high" | "medium";
-  action: string;
-  basis: string;
-}
-
-export const getAIRecommendations = async (
-  risks: RiskItem[],
-  opportunities: OpportunityItem[],
-): Promise<Recommendation[]> => {
-  if (risks.length === 0 && opportunities.length === 0) return [];
-
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    const res = await fetch(`${baseUrl}/api/recommendations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ risks, opportunities }),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.recommendations) ? data.recommendations : [];
-  } catch {
-    return [];
-  }
-};
-
 export const getAggregateRevenueChart = async (
   range: string = "monthly",
   pre?: Awaited<ReturnType<typeof getDatasetsWithKPIs>>,

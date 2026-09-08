@@ -12,7 +12,6 @@ import { KPIDetailClient } from "@/components/dashboard/KPIDetailClient";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
 import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
-import { RecommendationsPanel } from "@/components/dashboard/RecommendationsPanel";
 
 import {
   getAggregateDashboardStats,
@@ -20,10 +19,8 @@ import {
   getCurrentCompanyId,
   getAggregateOpportunities,
   getAggregateRisks,
-  getAIRecommendations,
   getDatasetFilenames,
   getCachedDashboardBundle,
-  type Recommendation,
 } from "@/lib/data";
 import Link from "next/link";
 
@@ -46,7 +43,7 @@ export default function Home() {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
   const [opportunities, setOpportunities] = useState<any>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+
   // Active KPI tab — null = main dashboard, slug string = detail panel
   const [localTab, setLocalTab] = useState<string | null>(null);
   useWorkspace();
@@ -78,10 +75,6 @@ export default function Home() {
       setDatasetNames(names);
 
       setLoading(false);
-
-      getAIRecommendations(riskData.risks, opp.opportunities).then(
-        setRecommendations,
-      );
     }
     initDashboard();
   }, []);
@@ -246,7 +239,7 @@ export default function Home() {
                   />
 
                   <OpportunitiesPanel opportunities={opportunities} />
-                  <RecommendationsPanel recommendations={recommendations} />
+
                   <AIChat dashboardStats={stats} datasetNames={datasetNames} />
                 </div>
               )}
