@@ -25,7 +25,7 @@ async function groq(
   const res = await fetch(GROQ_API, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY!}`,
+      Authorization: `Bearer ${process.env.GROQ_API_KEY_INTERACTIVE!}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -37,8 +37,20 @@ async function groq(
       ],
     }),
   });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("GROQ_API_ERROR:", res.status, errText);
+    throw new Error(`Groq API failed: ${res.status} ${errText}`);
+  }
+
   const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "AI unavailable";
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    console.error("GROQ_EMPTY_RESPONSE:", JSON.stringify(data));
+    throw new Error("Groq returned no content");
+  }
+  return content;
 }
 
 // ── WHY FEED ──────────────────────────────────────────────────────────────────

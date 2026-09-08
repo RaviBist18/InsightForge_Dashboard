@@ -2,7 +2,7 @@ import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
 function getGroq() {
-  return new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return new Groq({ apiKey: process.env.GROQ_API_KEY_BACKGROUND });
 }
 
 export async function POST(req: Request) {

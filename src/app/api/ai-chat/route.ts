@@ -13,8 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const { message, history, systemPrompt } = data;
-
-    const apiKey = process.env.GROQ_API_KEY_COPILOT || process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY_INTERACTIVE;
     if (!apiKey) {
       return NextResponse.json(
         { reply: "Groq API key not configured.", followups: [] },

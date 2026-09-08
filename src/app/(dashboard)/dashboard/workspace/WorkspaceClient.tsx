@@ -243,6 +243,7 @@ export default function WorkspaceClient({
     mrrTrend,
     setMrrTrend,
     setIsWorkspacePage,
+    metricsVersion,
   } = useWorkspace();
 
   const isAdmin = role === "admin";
@@ -358,7 +359,7 @@ export default function WorkspaceClient({
       }
     }
     fetchMetrics();
-  }, [initialMrr, setMrrTrend]);
+  }, [initialMrr, setMrrTrend, metricsVersion]);
 
   // ── FETCH TICKERS ─────────────────────────────────────────────────────────
   const fetchTickers = useCallback(async () => {

@@ -31,6 +31,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { loadAlerts, runCheckAllAlerts } from "@/lib/alertCenter";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -268,6 +269,7 @@ export default function DatasetsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { refreshMetrics } = useWorkspace(); // ← add here
 
   const tryStageFile = (f: File | undefined | null) => {
     if (!f) return;
@@ -865,6 +867,7 @@ export default function DatasetsPage() {
       setResult(data);
       setViewingId(null);
       loadDatasets();
+      refreshMetrics();
       loadKpis(data.id);
       loadCustomerAnalytics(data.id);
       loadSalesAnalytics(data.id);

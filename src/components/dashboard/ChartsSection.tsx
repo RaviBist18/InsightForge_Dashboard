@@ -22,7 +22,6 @@ import {
   TrendingUp,
   BarChart2,
   Activity,
-  Zap,
   AlertCircle,
   Sparkles,
 } from "lucide-react";
@@ -35,6 +34,7 @@ import {
 } from "@/lib/data";
 
 const COLORS = ["#003366", "#4C7A9E", "#94A3B8", "#C9A66B"];
+const explainCache = new Map<string, string>();
 
 // ─── Tooltips ─────────────────────────────────────────────────────────────
 const CustomAreaTooltip = ({ active, payload, label }: any) => {
@@ -165,6 +165,14 @@ const ChartCard = ({
     if (!explainPayload) return;
     setExplainOpen(true);
     if (explanation) return; // already fetched, just toggling open
+
+    const cacheKey = title + JSON.stringify(explainPayload.data);
+    const cached = explainCache.get(cacheKey);
+    if (cached) {
+      setExplanation(cached);
+      return;
+    }
+
     setExplainLoading(true);
     try {
       const res = await fetch("/api/copilot/explain-chart", {
@@ -177,9 +185,10 @@ const ChartCard = ({
         }),
       });
       const json = await res.json();
-      setExplanation(
-        json.explanation || "Couldn't generate an explanation right now.",
-      );
+      const result =
+        json.explanation || "Couldn't generate an explanation right now.";
+      if (!json.isRateLimited) explainCache.set(cacheKey, result);
+      setExplanation(result);
     } catch {
       setExplanation("Couldn't generate an explanation right now.");
     } finally {
@@ -307,7 +316,7 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
     initialCategoryData || [],
   );
   const [statusChartData, setStatusChartData] = useState<any[]>([]);
-  const [categoryInsight, setCategoryInsight] = useState<string>("");
+
   const [loading, setLoading] = useState(false);
 
   // Real, granularity-aware fetch whenever range changes
@@ -322,29 +331,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
       setRevenueChartData(rev);
       setCategoryChartData(cat);
       setStatusChartData(status);
-
-      // Real AI insight — Groq call on the top real category, not hardcoded text
-      if (cat.length > 0) {
-        const top = [...cat].sort((a: any, b: any) => b.value - a.value)[0];
-        try {
-          const res = await fetch("/api/briefing", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              range,
-              category: top.name,
-              efficiency: 0,
-              newsHeadline: `${top.name} leads category revenue this period`,
-            }),
-          });
-          const json = await res.json();
-          setCategoryInsight(json.briefing || "");
-        } catch {
-          setCategoryInsight("");
-        }
-      } else {
-        setCategoryInsight("");
-      }
     } finally {
       setLoading(false);
     }
@@ -618,46 +604,6 @@ export const ChartsSection: React.FC<ChartsSectionProps> = ({
           data: filteredCategoryData,
           note: `Real revenue totals per transaction category for the selected period.`,
         }}
-        badge={
-          categoryInsight ? (
-            <div className="group relative">
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-medium cursor-help transition-opacity group-hover:opacity-0"
-                style={{
-                  background: "var(--accent-subtle)",
-                  color: "var(--accent)",
-                }}
-              >
-                <Zap size={11} /> AI Insight
-              </div>
-              <div className="absolute inset-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-                <div
-                  className="absolute right-0 top-0 w-64 p-3 rounded-xl shadow-md flex flex-col gap-1.5"
-                  style={{
-                    background: "var(--bg-surface)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <Zap size={11} style={{ color: "var(--accent)" }} />
-                    <p
-                      className="text-[11px] font-medium"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      AI Insight
-                    </p>
-                  </div>
-                  <p
-                    className="text-[12px] leading-relaxed"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {categoryInsight}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null
-        }
       >
         {filteredCategoryData.length === 0 && !loading ? (
           <div

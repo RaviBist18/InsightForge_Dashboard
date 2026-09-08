@@ -68,7 +68,7 @@ async function getAIInsight(
   value: number,
   trend: number,
 ): Promise<string> {
-  const key = process.env.GROQ_API_KEY;
+  const key = process.env.GROQ_API_KEY_BACKGROUND;
   if (!key)
     return `${metric} at ${value} with ${trend > 0 ? "+" : ""}${trend.toFixed(1)}% trend.`;
   try {

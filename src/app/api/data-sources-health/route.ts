@@ -55,14 +55,14 @@ async function pingSupabase(): Promise<SourceHealth> {
 }
 
 async function pingGroq(): Promise<SourceHealth> {
-  const key = process.env.GROQ_API_KEY;
+  const key = process.env.GROQ_API_KEY_BACKGROUND;
   if (!key) {
     return {
       id: "groq",
       status: "error",
       latencyMs: 0,
       recordCount: null,
-      message: "GROQ_API_KEY not set",
+      message: "GROQ_API_KEY_BACKGROUND not set",
       checkedAt: new Date().toISOString(),
     };
   }

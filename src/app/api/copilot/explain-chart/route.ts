@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
 
-    const apiKey = process.env.GROQ_API_KEY_COPILOT || process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY_INTERACTIVE;
     if (!apiKey) {
       return NextResponse.json(
         { explanation: "Groq API key not configured." },
@@ -55,8 +55,31 @@ RULES:
       },
     );
 
-    if (groqRes.status === 429) {
-      logger.warn("Groq rate limit hit on explain-chart");
+    let finalRes = groqRes;
+    if (finalRes.status === 429) {
+      logger.warn("Groq rate limit hit on explain-chart, retrying once");
+      await new Promise((r) => setTimeout(r, 1500));
+      finalRes = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-oss-20b",
+            messages: [{ role: "system", content: systemPrompt }],
+            max_tokens: 300,
+            temperature: 0.3,
+            response_format: { type: "json_object" },
+          }),
+        },
+      );
+    }
+
+    if (finalRes.status === 429) {
+      logger.warn("Groq rate limit hit twice on explain-chart");
       return NextResponse.json(
         {
           explanation:
@@ -67,7 +90,7 @@ RULES:
       );
     }
 
-    const groqData = await groqRes.json();
+    const groqData = await finalRes.json();
     const raw = groqData?.choices?.[0]?.message?.content;
 
     let parsed: { explanation?: string } | null = null;

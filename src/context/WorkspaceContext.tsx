@@ -1,5 +1,11 @@
 "use client";
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useCallback,
+} from "react";
 
 type WorkspaceTab =
   | "pulse"
@@ -35,6 +41,8 @@ interface WorkspaceContextType {
   setMrrTrend: (v: number) => void;
   isWorkspacePage: boolean;
   setIsWorkspacePage: (v: boolean) => void;
+  metricsVersion: number;
+  refreshMetrics: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null);
@@ -46,6 +54,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [snapshotCount, setSnapshotCount] = useState(0);
   const [mrrTrend, setMrrTrend] = useState(0);
   const [isWorkspacePage, setIsWorkspacePage] = useState(false);
+  const [metricsVersion, setMetricsVersion] = useState(0);
+
+  const refreshMetrics = useCallback(() => {
+    setMetricsVersion((v) => v + 1);
+  }, []);
 
   return (
     <WorkspaceContext.Provider
@@ -62,6 +75,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setMrrTrend,
         isWorkspacePage,
         setIsWorkspacePage,
+        metricsVersion,
+        refreshMetrics,
       }}
     >
       {children}
