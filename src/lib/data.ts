@@ -13,12 +13,12 @@ export interface DashboardStats {
   churned: number;
   efficiency: number;
   latestNews: string;
+  hasValidGrowth?: boolean;
   mrrSparkline?: { month: string; mrr: number }[];
   totalAssetValue?: number;
   marketGrowthYield?: number;
   activeNodesCount?: number;
 }
-
 export interface Transaction {
   id: string | number;
   date: string;
@@ -281,13 +281,12 @@ export const getAggregateDashboardStats = async (
   const sparkline = Object.entries(monthMap)
     .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
     .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
-  const growthRate =
-    sparkline.length >= 2
-      ? ((sparkline[sparkline.length - 1].mrr -
-          sparkline[sparkline.length - 2].mrr) /
-          (sparkline[sparkline.length - 2].mrr || 1)) *
-        100
-      : 0;
+  const prevMrr =
+    sparkline.length >= 2 ? sparkline[sparkline.length - 2].mrr : 0;
+  const currMrr =
+    sparkline.length >= 2 ? sparkline[sparkline.length - 1].mrr : 0;
+  const hasValidGrowth = sparkline.length >= 2 && prevMrr > 0;
+  const growthRate = hasValidGrowth ? ((currMrr - prevMrr) / prevMrr) * 100 : 0;
   const totalProfit = totalRevenue - totalCostSum;
   const profitMargin =
     totalRevenue > 0
@@ -308,10 +307,9 @@ export const getAggregateDashboardStats = async (
     signups: signupsSum,
     churned: churnedSum,
     efficiency: Math.round(growthRate * 10) / 10,
-    latestNews:
-      sparkline.length >= 2
-        ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`
-        : `Aggregated across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`,
+    latestNews: hasValidGrowth
+      ? `Revenue ${growthRate >= 0 ? "up" : "down"} ${Math.abs(growthRate).toFixed(1)}% this month across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`
+      : `Aggregated across ${rows.length} dataset${rows.length > 1 ? "s" : ""}.`,
     mrrSparkline: sparkline,
     datasetCount: rows.length,
   };
@@ -380,13 +378,12 @@ export const getMyDatasetStats = async (): Promise<
   const sparkline = Object.entries(monthMap)
     .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
     .map(([month, v]) => ({ month: month.split(" ")[0], mrr: Math.round(v) }));
-  const growthRate =
-    sparkline.length >= 2
-      ? ((sparkline[sparkline.length - 1].mrr -
-          sparkline[sparkline.length - 2].mrr) /
-          (sparkline[sparkline.length - 2].mrr || 1)) *
-        100
-      : 0;
+  const prevMrr =
+    sparkline.length >= 2 ? sparkline[sparkline.length - 2].mrr : 0;
+  const currMrr =
+    sparkline.length >= 2 ? sparkline[sparkline.length - 1].mrr : 0;
+  const hasValidGrowth = sparkline.length >= 2 && prevMrr > 0;
+  const growthRate = hasValidGrowth ? ((currMrr - prevMrr) / prevMrr) * 100 : 0;
 
   const totalProfit = totalRevenue - totalCostSum;
   const profitMargin =
@@ -408,6 +405,7 @@ export const getMyDatasetStats = async (): Promise<
     signups: signupsSum,
     churned: churnedSum,
     efficiency: Math.round(growthRate * 10) / 10,
+    hasValidGrowth,
     latestNews: `Your ${datasets.length} dataset${datasets.length > 1 ? "s" : ""}.`,
     mrrSparkline: sparkline,
     datasetCount: datasets.length,
@@ -419,6 +417,7 @@ export interface DatasetMover {
   revenue: number;
   rowCount: number;
   deltaPct: number; // vs previous month, per-dataset
+  hasValidDelta: boolean;
 }
 
 export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
@@ -446,18 +445,19 @@ export const getDatasetMovers = async (): Promise<DatasetMover[]> => {
       const months = Object.entries(monthMap).sort(
         (a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime(),
       );
-      const deltaPct =
-        months.length >= 2
-          ? ((months[months.length - 1][1] - months[months.length - 2][1]) /
-              (months[months.length - 2][1] || 1)) *
-            100
-          : 0;
+      const prevRev = months.length >= 2 ? months[months.length - 2][1] : 0;
+      const currRev = months.length >= 2 ? months[months.length - 1][1] : 0;
+      const hasValidDelta = months.length >= 2 && prevRev > 0;
+      const deltaPct = hasValidDelta
+        ? ((currRev - prevRev) / prevRev) * 100
+        : 0;
 
       return {
         filename: d.filename,
         revenue: Math.round(data.kpis?.total_revenue ?? 0),
         rowCount: data.kpis?.row_count ?? 0,
         deltaPct: Math.round(deltaPct * 10) / 10,
+        hasValidDelta,
       };
     }),
   );
@@ -541,6 +541,7 @@ export interface RiskItem {
   severity: "high" | "medium";
   message: string;
   filename: string; // which dataset this risk came from
+  value_pct?: number;
 }
 
 export interface AggregateRiskResult {
@@ -583,6 +584,7 @@ export const getAggregateRisks = async (
           category: string;
           severity: "high" | "medium";
           message: string;
+          value_pct?: number;
         }) => ({
           ...r,
           filename: d.filename,
@@ -615,6 +617,7 @@ export interface OpportunityItem {
   impact: "high" | "medium";
   message: string;
   filename: string;
+  value_pct?: number;
 }
 
 export interface AggregateOpportunityResult {
@@ -657,6 +660,7 @@ export const getAggregateOpportunities = async (
           category: string;
           impact: "high" | "medium";
           message: string;
+          value_pct?: number;
         }) => ({
           ...o,
           filename: d.filename,

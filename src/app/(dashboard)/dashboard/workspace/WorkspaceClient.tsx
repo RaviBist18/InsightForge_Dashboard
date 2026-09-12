@@ -20,6 +20,8 @@ import {
   DashboardStats,
   getMyDatasetStats,
   getDatasetMovers,
+  getAggregateRisks,
+  getAggregateOpportunities,
 } from "@/lib/data";
 import Link from "next/link";
 import {
@@ -405,18 +407,41 @@ export default function WorkspaceClient({
     setFeedLoading(true);
     setFeedError(false);
     try {
-      const movers = await getDatasetMovers();
+      const [movers, riskData, oppData] = await Promise.all([
+        getDatasetMovers(),
+        getAggregateRisks(),
+        getAggregateOpportunities(),
+      ]);
+
+      const hasSignal =
+        movers.length > 0 ||
+        riskData.risks.length > 0 ||
+        oppData.opportunities.length > 0;
+
+      if (!hasSignal) {
+        setWhyFeed([]);
+        setFeedLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "why-feed",
           movers,
+          risks: riskData.risks,
+          opportunities: oppData.opportunities,
           mrr: mrrRef.current,
           churn: churnRef.current,
           persona: personaRef.current,
         }),
       });
+      if (!res.ok) {
+        setFeedError(true);
+        return;
+      }
+
       const data = await res.json();
       if (data.feed?.length) {
         const hasError = data.feed.some((f: WhyFeedItem) =>
@@ -427,7 +452,7 @@ export default function WorkspaceClient({
           setWhyFeed([]);
         } else setWhyFeed(data.feed);
       } else {
-        setFeedError(true);
+        setWhyFeed([]);
       }
     } catch {
       setFeedError(true);
@@ -781,7 +806,7 @@ export default function WorkspaceClient({
                     </button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto max-h-[420px] space-y-3 pr-1 custom-scroll">
+                  <div className="flex-1 space-y-3 pr-1">
                     {feedLoading && <FeedSkeleton accent={accent} />}
                     {!feedLoading && feedError && (
                       <motion.div
@@ -834,32 +859,20 @@ export default function WorkspaceClient({
                             className="p-4 rounded-lg"
                             style={{
                               background: "rgba(0,0,0,0.025)",
-                              border: `1px solid ${color}25`,
-                              borderLeft: `3px solid ${color}`,
+                              border: "1px solid rgba(0,0,0,0.06)",
+                              borderLeft: `3px solid ${accent}`,
                             }}
                           >
-                            <div className="flex items-start justify-between gap-3 mb-2">
-                              <div className="flex items-start gap-2 min-w-0">
-                                <Icon
-                                  size={14}
-                                  strokeWidth={2}
-                                  className="shrink-0 mt-0.5"
-                                  style={{ color }}
-                                />
-                                <p className="text-sm font-semibold text-[var(--text-primary)] leading-snug">
-                                  {item.headline}
-                                </p>
-                              </div>
-                              <span
-                                className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full"
-                                style={{
-                                  background: `${color}20`,
-                                  color,
-                                }}
-                              >
-                                {Number(item.impact_delta ?? 0) > 0 ? "+" : ""}
-                                {Number(item.impact_delta ?? 0).toFixed(1)}%
-                              </span>
+                            <div className="flex items-start gap-2 min-w-0 mb-2">
+                              <Icon
+                                size={14}
+                                strokeWidth={2}
+                                className="shrink-0 mt-0.5"
+                                style={{ color }}
+                              />
+                              <p className="text-sm font-semibold text-[var(--text-primary)] leading-snug">
+                                {item.headline}
+                              </p>
                             </div>
                             <p className="text-xs text-[var(--text-secondary)] leading-relaxed pl-6">
                               {item.snippet}
@@ -868,13 +881,16 @@ export default function WorkspaceClient({
                               <span
                                 className="text-[10px] font-medium px-2 py-0.5 rounded"
                                 style={{
-                                  background: "rgba(0,0,0,0.05)",
-                                  color: "var(--text-muted)",
+                                  background: `${accent}15`,
+                                  color: accent,
                                 }}
                               >
                                 {item.source}
                               </span>
-                              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">
+                              <span
+                                className="text-[10px] font-bold uppercase tracking-wide"
+                                style={{ color }}
+                              >
                                 {item.impact_type}
                               </span>
                             </div>
@@ -1090,17 +1106,17 @@ export default function WorkspaceClient({
                       <div
                         className="rounded-xl p-4"
                         style={{
-                          background: "rgba(220,38,38,0.05)",
-                          borderLeft: "3px solid #dc2626",
-                          border: "1px solid rgba(220,38,38,0.15)",
+                          background: `${accent}08`,
+                          borderLeft: `3px solid ${accent}`,
+                          border: `1px solid ${accent}25`,
                           borderLeftWidth: "3px",
                         }}
                       >
                         <div className="flex items-center gap-1.5 mb-3">
-                          <ShieldAlert size={14} style={{ color: "#dc2626" }} />
+                          <ShieldAlert size={14} style={{ color: accent }} />
                           <span
                             className="text-[11px] font-semibold uppercase tracking-wide"
-                            style={{ color: "#dc2626" }}
+                            style={{ color: accent }}
                           >
                             {sectionALabel}
                           </span>
@@ -1126,17 +1142,20 @@ export default function WorkspaceClient({
                       <div
                         className="rounded-xl p-4"
                         style={{
-                          background: "rgba(22,163,74,0.05)",
-                          border: "1px solid rgba(22,163,74,0.15)",
+                          background: `${accent}04`,
+                          border: `1px solid ${accent}15`,
                           borderLeftWidth: "3px",
-                          borderLeftColor: "#16a34a",
+                          borderLeftColor: `${accent}90`,
                         }}
                       >
                         <div className="flex items-center gap-1.5 mb-3">
-                          <TrendingUp size={14} style={{ color: "#16a34a" }} />
+                          <TrendingUp
+                            size={14}
+                            style={{ color: `${accent}cc` }}
+                          />
                           <span
                             className="text-[11px] font-semibold uppercase tracking-wide"
-                            style={{ color: "#16a34a" }}
+                            style={{ color: `${accent}cc` }}
                           >
                             {sectionBLabel}
                           </span>

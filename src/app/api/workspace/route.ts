@@ -61,36 +61,87 @@ async function handleWhyFeed(body: {
     rowCount: number;
     deltaPct: number;
   }[];
+  risks?: {
+    category: string;
+    severity: string;
+    message: string;
+    filename: string;
+    value_pct?: number;
+  }[];
+  opportunities?: {
+    category: string;
+    impact: string;
+    message: string;
+    filename: string;
+    value_pct?: number;
+  }[];
   mrr: number;
   churn: number;
   persona: string;
 }) {
-  const { movers, mrr, churn, persona } = body;
+  const { movers, risks = [], opportunities = [], mrr, churn, persona } = body;
 
-  if (!movers || movers.length === 0) {
+  const hasSignal =
+    (movers && movers.length > 0) ||
+    risks.length > 0 ||
+    opportunities.length > 0;
+
+  if (!hasSignal) {
     return NextResponse.json({ feed: [] });
   }
 
   const system = `You are InsightForge's Strategic Intelligence Engine.
-Persona: ${persona}. You explain WHY the company's numbers are moving, based on real dataset-level activity — not external news.
+Persona: ${persona}. You explain WHAT'S HAPPENING in the company's data and WHY it matters — trend movement, risks, and opportunities alike — based on real dataset-level activity.
 Respond ONLY with a JSON array of objects: [{headline, snippet, impact_type, impact_delta, source}]
-- headline: short label naming the dataset and its movement (e.g. "Sales dataset revenue up 20%")
-- snippet: 1 sentence explaining the business impact, be specific, use the real numbers given.
+- headline: short label naming the dataset/signal (e.g. "Sales dataset revenue up 20%", "Low stock risk detected")
+- snippet: 1 sentence explaining the business impact, specific, use real numbers/messages given.
 - impact_type: one of "revenue" | "opportunity" | "risk"
-- impact_delta: the dataset's actual deltaPct value, unmodified
-- source: the dataset's filename
-No markdown, no extra text. Only include datasets with a non-zero deltaPct.`;
+- impact_delta: use the numeric value_pct field from the matching risk/opportunity item when present; for revenue movers use their deltaPct value, unmodified; otherwise 0
+- source: the dataset filename
+No markdown, no extra text. Use whatever real signals are given — revenue movement, risks, or opportunities. If revenue movement is flat/unavailable, lead with risks/opportunities instead. Always return at least 1 item if any signal exists.`;
 
   const user = `Current total MRR: $${mrr.toLocaleString()}. Churn: ${churn}%.
-Dataset movement this period: ${JSON.stringify(movers.slice(0, 6))}
-Explain what's driving the numbers, dataset by dataset.`;
-
-  const raw = await groq(system, user, 800);
+Dataset revenue movement: ${JSON.stringify(movers.slice(0, 6))}
+Detected risks: ${JSON.stringify(risks.slice(0, 6))}
+Detected opportunities: ${JSON.stringify(opportunities.slice(0, 6))}
+For each risk/opportunity item, copy its value_pct field directly into impact_delta — do not output 0 if value_pct is present.
+Explain what's driving the numbers, what's working, what's not — dataset by dataset.`;
 
   try {
+    const raw = await groq(system, user, 800);
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-    return NextResponse.json({ feed: parsed });
-  } catch {
+
+    // Don't trust the model to copy numbers correctly — match each feed item
+    // back to its source signal and inject the real value_pct ourselves.
+    const enriched = (Array.isArray(parsed) ? parsed : []).map((item: any) => {
+      if (item.impact_type === "revenue") {
+        const match = movers.find((m) => m.filename === item.source);
+        return { ...item, impact_delta: match ? match.deltaPct : 0 };
+      }
+      if (item.impact_type === "risk") {
+        const match =
+          risks.find(
+            (r) =>
+              r.filename === item.source &&
+              item.headline?.toLowerCase().includes(r.category.toLowerCase()),
+          ) || risks.find((r) => r.filename === item.source);
+        return { ...item, impact_delta: match?.value_pct ?? 0 };
+      }
+      if (item.impact_type === "opportunity") {
+        const match =
+          opportunities.find(
+            (o) =>
+              o.filename === item.source &&
+              item.headline?.toLowerCase().includes(o.category.toLowerCase()),
+          ) || opportunities.find((o) => o.filename === item.source);
+        return { ...item, impact_delta: match?.value_pct ?? 0 };
+      }
+      return item;
+    });
+
+    return NextResponse.json({ feed: enriched });
+  } catch (error) {
+    console.error("WHY_FEED_ERROR:", error);
     return NextResponse.json({ feed: [] });
   }
 }

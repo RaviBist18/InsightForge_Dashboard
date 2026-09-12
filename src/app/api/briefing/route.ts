@@ -51,12 +51,11 @@ export async function POST(req: Request) {
       temperature: 0.3,
       top_p: 0.8,
       max_completion_tokens: 400,
-      response_format: { type: "json_object" },
     });
     const raw = completion.choices[0]?.message?.content;
     let parsed;
     try {
-      parsed = raw ? JSON.parse(raw) : null;
+      parsed = raw ? JSON.parse(raw.replace(/```json|```/g, "").trim()) : null;
     } catch {
       parsed = null;
     }

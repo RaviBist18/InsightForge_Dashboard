@@ -1292,7 +1292,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
             daily["idx"] = range(len(daily))
             model = LinearRegression().fit(
                 daily[["idx"]].values,
-                daily[revenue_col.__class__ and daily.columns[1]].values,
+                daily[daily.columns[1]].values,
             )
             slope = float(model.coef_[0])
             if slope < 0:
@@ -1301,6 +1301,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                         "category": "Revenue",
                         "severity": "high" if slope < -50 else "medium",
                         "message": f"Revenue is trending downward (~{round(slope,2)}/day). Investigate cause before it compounds.",
+                        "value_pct": round(slope, 2),
                     }
                 )
 
@@ -1323,6 +1324,7 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                         "category": "Sales",
                         "severity": "high" if slope < -20 else "medium",
                         "message": f"Sales volume is declining (~{round(slope,2)}/day trend).",
+                        "value_pct": round(slope, 2),
                     }
                 )
 
@@ -1337,11 +1339,15 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
         latest = latest.groupby(product_col).last()
         low_products = latest[latest[inventory_col] < LOW_STOCK_THRESHOLD]
         for prod, row in low_products.iterrows():
+            pct_of_threshold = round(
+                float(row[inventory_col]) / LOW_STOCK_THRESHOLD * 100, 1
+            )
             risks.append(
                 {
                     "category": "Inventory",
                     "severity": "high" if row[inventory_col] < 5 else "medium",
                     "message": f"{prod} is low on stock ({int(row[inventory_col])} units remaining).",
+                    "value_pct": pct_of_threshold,
                 }
             )
 
@@ -1357,11 +1363,18 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
             max_r = max(recency.max(), 1)
             high_risk_count = int((recency / max_r > 0.66).sum())
             if high_risk_count > 0:
+                total_customers = temp[customer_col].nunique()
+                churn_risk_pct = (
+                    round(high_risk_count / total_customers * 100, 1)
+                    if total_customers
+                    else 0.0
+                )
                 risks.append(
                     {
                         "category": "Customer",
                         "severity": "medium",
-                        "message": f"{high_risk_count} customer(s) at high risk of churn based on order recency.",
+                        "message": f"{high_risk_count} of {total_customers} customer(s) at high risk of churn based on order recency.",
+                        "value_pct": churn_risk_pct,
                     }
                 )
 
@@ -1377,11 +1390,15 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                 worst, worst_val = by_product.index[0], float(by_product.iloc[0])
                 avg_val = float(by_product.mean())
                 if avg_val > 0 and worst_val < avg_val * 0.5:
+                    underperf_pct = (
+                        round((1 - worst_val / avg_val) * 100, 1) if avg_val else 0.0
+                    )
                     risks.append(
                         {
                             "category": "Revenue",
                             "severity": "medium",
                             "message": f"{worst} is underperforming — revenue (${round(worst_val,2)}) is less than half the average across products (${round(avg_val,2)}).",
+                            "value_pct": underperf_pct,
                         }
                     )
         if (
@@ -1394,11 +1411,17 @@ async def get_risk_prediction(dataset_id: str, authorization: str = Header(None)
                 df[cost_col].sum()
             )
             if total_cost > total_rev:
+                loss_pct = (
+                    round((total_cost - total_rev) / total_rev * 100, 1)
+                    if total_rev
+                    else 0.0
+                )
                 risks.append(
                     {
                         "category": "Revenue",
                         "severity": "high",
                         "message": f"Total costs (${round(total_cost,2)}) exceed total revenue (${round(total_rev,2)}) — operating at a loss.",
+                        "value_pct": loss_pct,
                     }
                 )
 
@@ -1474,6 +1497,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         "category": "Revenue",
                         "impact": "high" if slope > 50 else "medium",
                         "message": f"Revenue is trending upward (~{round(slope,2)}/day). Consider scaling marketing spend to accelerate growth.",
+                        "value_pct": round(slope, 2),
                     }
                 )
 
@@ -1496,6 +1520,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         "category": "Sales",
                         "impact": "high" if slope > 20 else "medium",
                         "message": f"Sales volume is growing (~{round(slope,2)}/day trend). Demand is rising.",
+                        "value_pct": round(slope, 2),
                     }
                 )
 
@@ -1525,6 +1550,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                             "category": "Product",
                             "impact": "high" if slope > 10 else "medium",
                             "message": f"{prod} shows rising demand (~{round(slope,2)}/day). Consider increasing production/stock.",
+                            "value_pct": round(slope, 2),
                         }
                     )
 
@@ -1547,6 +1573,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         "category": "Customer",
                         "impact": "high" if growth_pct > 30 else "medium",
                         "message": f"Customer base grew {growth_pct}% in the latest period ({second_unique} vs {first_unique} unique customers). Consider expanding marketing reach.",
+                        "value_pct": growth_pct,
                     }
                 )
 
@@ -1571,6 +1598,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                         "category": "Product",
                         "impact": "high" if share > 40 else "medium",
                         "message": f"{top} is your top revenue driver (${round(top_val,2)}, {share}% of total). Consider doubling down on marketing or stock for it.",
+                        "value_pct": share,
                     }
                 )
         if (
@@ -1593,6 +1621,7 @@ async def get_opportunity_detection(dataset_id: str, authorization: str = Header
                             "category": "Customer",
                             "impact": "medium",
                             "message": f"Top 3 customers account for {top3_share}% of revenue. Consider a loyalty program to deepen these relationships.",
+                            "value_pct": top3_share,
                         }
                     )
 
